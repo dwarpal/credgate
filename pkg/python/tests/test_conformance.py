@@ -108,3 +108,16 @@ def test_hard_negative(case):
 def test_known_false_positive_still_present(case):
     types = {s.type for s in credgate.detect_pii(case["text"])}
     assert case["type"] in types, "fixed? move this case to `negatives` in the spec"
+
+
+EVALUATE_CASES = conformance("evaluate.yaml")["cases"]
+
+
+@pytest.mark.parametrize("case", EVALUATE_CASES, ids=[c["id"] for c in EVALUATE_CASES])
+def test_evaluate(case):
+    report = credgate.evaluate(
+        case["documents"],
+        min_confidence=case.get("min_confidence", 0),
+        match=case.get("match", "exact"),
+    )
+    assert report.to_records() == case["expect"]

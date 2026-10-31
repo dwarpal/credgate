@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Documentation: using credgate with local LLMs (Ollama, vLLM and other
+  OpenAI-compatible servers), with runnable examples in `examples/`.
 - New `redact()`: replaces every detected identifier with a placeholder
   naming its type (`[PAN]`, `[PERSON_NAME]`); irreversible.
 - New `preview()`: shows the redacted text with each identifier (value
@@ -13,6 +15,13 @@
   a number in ABHA's 2-4-4-4 layout is no longer taken for a card.
 - Redaction placeholders such as `[ABHA_ADDRESS]` are not re-detected, so
   redacting twice gives the same text.
+- New `evaluate()` / `cg_evaluate()`: precision, recall and F1 per type
+  against labelled JSON Lines documents (exact or overlap matching), so you
+  can measure credgate on your own labelled data.
+- Detection fixes found by the new benchmark: names no longer run into the
+  next sentence ("Smt. X Y. She ..."); labelled addresses end at their PIN
+  code; an address ending in a PIN code outranks the PIN inside it; order,
+  tracking and reference words lower mobile matches.
 - Much larger test suite: shared hard-negative cases (30 non-PII texts) and
   documented known false positives in the spec; generated-text invariants,
   checksum mutation, Unicode fuzzing and pathological-input tests.

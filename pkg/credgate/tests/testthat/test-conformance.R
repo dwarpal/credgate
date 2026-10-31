@@ -108,3 +108,21 @@ for (case in negatives$known_false_positives) {
     )
   })
 }
+
+for (case in conformance("evaluate.yaml")$cases) {
+  test_that(paste("evaluate:", case$id), {
+    got <- cg_evaluate(case$documents,
+      min_confidence = case$min_confidence %||% 0,
+      match = case$match %||% "exact"
+    )
+    got <- as.data.frame(unclass(got))
+    expect_equal(nrow(got), length(case$expect))
+    for (i in seq_along(case$expect)) {
+      e <- case$expect[[i]]
+      for (field in names(e)) {
+        want <- e[[field]] %||% NA_real_
+        expect_equal(got[[field]][i], want, info = paste(case$id, "row", i, field))
+      }
+    }
+  })
+}

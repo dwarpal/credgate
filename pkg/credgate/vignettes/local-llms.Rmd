@@ -1,0 +1,152 @@
+---
+title: "Using credgate with local LLMs (Ollama, vLLM)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using credgate with local LLMs (Ollama, vLLM)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+credgate removes personal data from text *before* it reaches a language
+model. This vignette shows the workflow with models served locally by
+[Ollama](https://ollama.com) or [vLLM](https://docs.vllm.ai), using
+[ellmer](https://ellmer.tidyverse.org). All data is synthetic.
+
+## Why redact when the model is local?
+
+"Local" does not by itself make a workflow compliant:
+
+- a vLLM server is often **shared** by several teams;
+- prompts end up in **server logs** and request traces;
+- a **RAG index** keeps every chunk it is given, PII included;
+- **fine-tuning sets** built from chat logs carry PII forward;
+- model **answers** copy PII into reports and tickets;
+- the DPDP Act's **data minimisation** and purpose limitation apply wherever
+  the model runs.
+
+## 1. Preview, then redact
+
+Always look at what will be sent first:
+
+```{r}
+library(credgate)
+
+note <- paste(
+  "Customer name: Priya Nair. Called about her home-loan EMI. PAN ABCPN1234K,",
+  "mobile +91 98765 43210, UPI priya.n@oksbi. She wants the EMI date moved",
+  "to the 10th because her salary is credited late."
+)
+preview(note, min_confidence = 0.5)
+```
+
+`redact()` returns the text that is safe to send; identifiers become
+placeholders naming their type:
+
+```{r}
+safe <- redact(note, min_confidence = 0.5)
+safe
+```
+
+`min_confidence = 0.5` leaves low-confidence matches alone (for example a
+12-digit order number that happens to pass the Aadhaar checksum, scored 0.42
+because of the word "order"). Use `0` to redact every match.
+
+> **Check the preview.** Names are found next to an honorific, a relation or
+> a field label (`Shri`, `S/o`, `Name:`, `नाम:`). A name in running text
+> without such a cue - "Customer Priya Nair called" - is **not** detected
+> yet, and would reach the model.
+
+## 2. Ollama
+
+```{r, eval = FALSE}
+library(ellmer)
+
+chat <- chat_ollama(model = "gemma3:1b")
+chat$chat(paste("Summarise this call note in one sentence:", safe, sep = "\n"))
+```
+
+The model only ever sees `[PERSON_NAME]`, `[PAN]`, `[MOBILE_IN]` and
+`[UPI_ID]`.
+
+## 3. vLLM (or any OpenAI-compatible server)
+
+vLLM serves the OpenAI-compatible API. ellmer's `chat_vllm()` talks to it;
+set `VLLM_API_KEY` if your server checks keys (local servers usually do not,
+but ellmer requires a value).
+
+```{r, eval = FALSE}
+if (!nzchar(Sys.getenv("VLLM_API_KEY"))) Sys.setenv(VLLM_API_KEY = "unused")
+
+tickets <- c(
+  "Shri Ramesh Kumar (Aadhaar 5422 2937 1182) reports a failed UPI payment to ramesh@okaxis.",
+  "Account 50100987654321, IFSC HDFC0004567: customer asks to update email to priya.nair@example.org."
+)
+chat <- chat_vllm(
+  base_url = "http://localhost:8000/v1",
+  model = "meta-llama/Llama-3.1-8B-Instruct",
+  system_prompt = "Classify the ticket as PAYMENTS, PROFILE or GENERAL. Answer with one word."
+)
+for (ticket in tickets) {
+  print(chat$clone()$chat(redact(ticket, min_confidence = 0.5)))
+}
+```
+
+The same code works with Ollama's OpenAI-compatible endpoint
+(`base_url = "http://localhost:11434/v1"`), LM Studio, a llama.cpp server or
+an internal gateway.
+
+## 4. Data frames: find the PII, send only what is needed
+
+```{r}
+complaints <- data.frame(
+  cust_pan = c("ABCPE1234F", "AAACR5055K", "XYZPQ9876R"),
+  mobile = c(9876543210, 8826781145, 9123456780),
+  complaint = c(
+    "EMI debited twice from A/c 50100123456789; please refund.",
+    "Shri Mohan Lal wants the statement sent to mohan.lal@example.com.",
+    "App crashes when opening the cards tab."
+  )
+)
+scan_pii(complaints)
+```
+
+Only the complaint text is needed to categorise complaints, so send only
+that column, redacted:
+
+```{r}
+prompts <- paste("Categorise this complaint:", redact(complaints$complaint, min_confidence = 0.5))
+prompts
+```
+
+## 5. Measure it on your own data
+
+If you have labelled examples of your documents, `cg_evaluate()` reports
+precision, recall and F1 per type, so you can decide on a threshold with
+evidence:
+
+```{r}
+docs <- list(
+  list(text = "PAN: ABCPE1234F", spans = list(list(start = 5, end = 15, type = "pan"))),
+  list(text = "order no 878245671885", spans = list())
+)
+cg_evaluate(docs, min_confidence = 0.5)
+```
+
+## Limits and what comes next
+
+- Redaction is **irreversible**: the model's answer cannot mention the real
+  values. Reversible tokenisation (`[PAN_1]` restored in the answer) is next
+  on the roadmap.
+- You call `redact()` yourself. A planned **proxy mode** - a local
+  OpenAI-compatible server in front of Ollama or vLLM - will redact,
+  restore and audit automatically, so tools you cannot change (Open WebUI,
+  Continue, Positron, Jupyter AI) are covered by pointing their base URL at
+  it.
+
+Runnable versions of these examples, in R, Python and the shell, are in the
+[`examples/`](https://github.com/dwarpal/credgate/tree/main/examples)
+folder of the repository.

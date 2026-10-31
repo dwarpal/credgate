@@ -17,8 +17,8 @@
           name = "credgate";
           version = "0.1.0.9000";
           src = ./pkg/credgate;
-          propagatedBuildInputs = with pkgs.rPackages; [ cli rlang stringi yaml ];
-          nativeBuildInputs = with pkgs.rPackages; [ cli rlang stringi yaml ];
+          propagatedBuildInputs = with pkgs.rPackages; [ cli jsonlite rlang stringi yaml ];
+          nativeBuildInputs = with pkgs.rPackages; [ cli jsonlite rlang stringi yaml ];
           meta = {
             description = "Governance layer for LLM requests with Indian PII detection";
             homepage = "https://github.com/dwarpal/credgate";
@@ -101,14 +101,19 @@
             touch $out
           '';
 
-          # Lint and formatting of the Python package (config in pyproject.toml).
+          # Lint and formatting of the Python package, examples and benchmark
+          # scripts (config in pkg/python/pyproject.toml).
           ruff = pkgs.runCommand "credgate-ruff" { nativeBuildInputs = [ pkgs.ruff ]; } ''
             cp -r ${./pkg/python} python
-            chmod -R u+w python
-            cd python
+            cp -r ${./examples} examples
+            cp -r ${./benchmark} benchmark
+            chmod -R u+w python examples benchmark
             export RUFF_CACHE_DIR=$TMPDIR/ruff-cache
-            ruff check .
-            ruff format --check .
+            (cd python && ruff check . && ruff format --check .)
+            for dir in examples benchmark; do
+              ruff check --config python/pyproject.toml $dir
+              ruff format --check --config python/pyproject.toml $dir
+            done
             touch $out
           '';
         });
@@ -119,7 +124,7 @@
             (pkgs.rWrapper.override {
               packages = with pkgs.rPackages; [
                 cli rlang stringi yaml jsonlite
-                testthat withr roxygen2 rcmdcheck pkgload
+                testthat withr roxygen2 rcmdcheck pkgload knitr rmarkdown
               ];
             })
             (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ps.pytest ps.hatchling ps.build ]))

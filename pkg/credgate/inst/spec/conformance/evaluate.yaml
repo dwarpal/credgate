@@ -1,0 +1,84 @@
+# Evaluation conformance cases (see README.md, "Evaluation"). Every CredGate
+# implementation must produce exactly these rows, in order. Rates are
+# rounded to 4 decimal places; null means missing (NA / None).
+#
+# All values are synthetic.
+
+spec_version: 1
+
+cases:
+
+  - id: perfect-detection
+    documents:
+      - {id: d1, text: 'PAN: ABCPE1234F', spans: [{start: 5, end: 15, type: pan}]}
+      - {id: d2, text: 'nothing here', spans: []}
+    expect:
+      - {type: pan, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+      - {type: overall, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+
+  - id: false-positive-and-miss
+    # The order number is detected as a low-confidence Aadhaar (a false
+    # positive); the voter ID has no context and is missed.
+    documents:
+      - {id: d1, text: 'order no 878245671885', spans: []}
+      - {id: d2, text: 'ABC1234567', spans: [{start: 0, end: 10, type: voter_epic}]}
+    expect:
+      - {type: aadhaar, tp: 0, fp: 1, fn: 0, precision: 0.0, recall: null, f1: null}
+      - {type: voter_epic, tp: 0, fp: 0, fn: 1, precision: null, recall: 0.0, f1: null}
+      - {type: overall, tp: 0, fp: 1, fn: 1, precision: 0.0, recall: 0.0, f1: null}
+
+  - id: min-confidence-removes-false-positive
+    min_confidence: 0.5
+    documents:
+      - {id: d1, text: 'order no 878245671885', spans: []}
+      - {id: d2, text: 'Aadhaar 542229371182', spans: [{start: 8, end: 20, type: aadhaar}]}
+    expect:
+      - {type: aadhaar, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+      - {type: overall, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+
+  - id: exact-versus-overlap
+    # Gold marks the address without the PIN code; detection includes it.
+    documents:
+      - id: d1
+        text: 'R/o House No 12, Laxmi Nagar, Pune 411038'
+        spans: [{start: 4, end: 34, type: address}]
+    expect:
+      - {type: address, tp: 0, fp: 1, fn: 1, precision: 0.0, recall: 0.0, f1: null}
+      - {type: overall, tp: 0, fp: 1, fn: 1, precision: 0.0, recall: 0.0, f1: null}
+
+  - id: exact-versus-overlap-with-overlap-matching
+    match: overlap
+    documents:
+      - id: d1
+        text: 'R/o House No 12, Laxmi Nagar, Pune 411038'
+        spans: [{start: 4, end: 34, type: address}]
+    expect:
+      - {type: address, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+      - {type: overall, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+
+  - id: wrong-type-is-fp-and-fn
+    # Gold says bank account; a 10-digit number without context is read as a
+    # mobile number.
+    documents:
+      - {id: d1, text: '9876543210', spans: [{start: 0, end: 10, type: bank_account}]}
+    expect:
+      - {type: bank_account, tp: 0, fp: 0, fn: 1, precision: null, recall: 0.0, f1: null}
+      - {type: mobile_in, tp: 0, fp: 1, fn: 0, precision: 0.0, recall: null, f1: null}
+      - {type: overall, tp: 0, fp: 1, fn: 1, precision: 0.0, recall: 0.0, f1: null}
+
+  - id: mixed-counts
+    documents:
+      - id: d1
+        text: 'Name: Priya Nair; PAN: ABCPN1234K; Mobile: 9876543210'
+        spans:
+          - {start: 6, end: 16, type: person_name}
+          - {start: 23, end: 33, type: pan}
+          - {start: 43, end: 53, type: mobile_in}
+      - id: d2
+        text: 'Ms Word file, ref 5422293711820'
+        spans: []
+    expect:
+      - {type: mobile_in, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+      - {type: pan, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+      - {type: person_name, tp: 1, fp: 1, fn: 0, precision: 0.5, recall: 1.0, f1: 0.6667}
+      - {type: overall, tp: 3, fp: 1, fn: 0, precision: 0.75, recall: 1.0, f1: 0.8571}

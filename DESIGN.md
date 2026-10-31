@@ -249,7 +249,7 @@ as one chain; maturity throughout.
 
 | # | Area | Today | To do |
 |---|---|---|---|
-| 1 | Accuracy benchmarking | Conformance cases check expected matches (correctness), not accuracy | Labelled synthetic corpus; per-type precision, recall, F1; published report. Compare with Microsoft Presidio (MIT, has Indian recognisers); verify that other named tools exist, run locally and allow published benchmarks before comparing |
+| 1 | Accuracy benchmarking | `evaluate()` in both packages; synthetic labelled corpus (dev/test); per-type report in `benchmark/README.md` (test F1 0.947 at 0.5); compared with Presidio (F1 0.949 vs 0.666 India-configured on common types) | Labelled synthetic corpus; per-type precision, recall, F1; published report. Compare with Microsoft Presidio (MIT, has Indian recognisers); verify that other named tools exist, run locally and allow published benchmarks before comparing |
 | 2 | False positives | Checksums, negative context, context-required types, confidence scores | Hard-negative sets (order/invoice/transaction IDs, amounts, product codes); measure, then tighten (bare 12-digit Aadhaar, bare 10-digit mobile, capitalised words after honorifics) |
 | 3 | Multilingual | Devanagari keywords/digits, digits in 11 scripts, names after Hindi honorifics/labels | Keywords for more Indic languages, Hinglish and transliterated cues, optional statistical name detector via the detector hook |
 | 4 | Reversible masking | `redact()` and `preview()` (irreversible placeholders) | Tokenise/restore with a session vault, encrypted persistence, key management, access control on restore, streaming restore |

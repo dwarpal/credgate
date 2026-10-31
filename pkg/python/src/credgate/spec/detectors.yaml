@@ -66,10 +66,12 @@ fragments:
   # Labels, relations and postpositions (possessives such as का/की/के).
   name_stop_indic: '(?!(?:पता|मोबाइल|फोन|पिता|माता|पति|पत्नी|पुत्र|पुत्री|आयु|उम्र|निवासी|ग्राम|जन्म|और|का|की|के|को|ने|से|है|में)(?![\p{L}\p{M}]))'
   indic_word: '[\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gujarati}\p{Script=Gurmukhi}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Oriya}]+'
-  # Capitalised Latin word ("Ramesh", "RAMESH", "R." when another word follows).
-  latin_cap_word: '\p{Lu}[\p{L}'']*(?:\.(?=\s\p{L}))?'
+  # Capitalised Latin word ("Ramesh", "RAMESH"), or an initial with a full
+  # stop when another word follows ("R. K. Sharma"). A full word never takes
+  # the full stop, so a name does not run into the next sentence.
+  latin_cap_word: '\p{Lu}(?:\.(?=\s\p{L})|[\p{L}'']*)'
   # Any-case Latin word; used only after an explicit label or relation.
-  latin_any_word: '\p{L}[\p{L}'']*(?:\.(?=\s\p{L}))?'
+  latin_any_word: '\p{L}(?:\.(?=\s\p{L})|[\p{L}'']*)'
   latin_name_cap: '{{name_stop_latin}}{{latin_cap_word}}(?:[ ]{{name_stop_latin}}{{latin_cap_word}}){0,3}'
   latin_name_any: '{{name_stop_latin}}{{latin_any_word}}(?:[ ]{{name_stop_latin}}{{latin_any_word}}){0,3}'
   indic_name: '{{name_stop_indic}}{{indic_word}}(?:[ ]{{name_stop_indic}}{{indic_word}}){0,2}'
@@ -86,7 +88,8 @@ fragments:
   address_keyword_indic: '(?:मकान|ग्राम|गांव|गाँव|मोहल्ला)'
   # Ends at a new field (line break, ";" or "|"), the end of text, or the
   # next contact/identifier label.
-  address_terminator: '(?=\s*(?:[\n;|]|$|(?i:\b(?:mobile|phone|mob|email|pan|aadhaar|dob)\b)))'
+  # An address also ends right after its PIN code.
+  address_terminator: '(?:(?<=\b[1-9][0-9]{2}\s?[0-9]{3})(?![0-9])|(?=\s*(?:[\n;|]|$|(?i:\b(?:mobile|phone|mob|email|pan|aadhaar|dob)\b))))'
   # Starts on a real character, not on the label's colon or spacing, and not
   # on "[", so redaction placeholders such as [ABHA_ADDRESS] are not re-read
   # as an address.
@@ -246,7 +249,7 @@ detectors:
       rules:
         - {match: '^(?:\+91|0|91[ -])', value: 0.85}
     context: '\bmob|\bphone|\bcontact|\bcell\b|whats ?app|\btel\b|\bph\b|मोबाइल|फ़ोन|फोन|संपर्क'
-    negative: '{{money_context}}'
+    negative: '{{money_context}}|{{id_negative_context}}'
     canonical: last10_digits
 
   - id: email
@@ -315,5 +318,10 @@ detectors:
       - '(?<value>{{address_keyword_latin}}[^\n;|]{3,160}?{{pin_tail}})'
       - '(?<value>{{address_keyword_indic}}[^\n;|]{3,160}?{{pin_tail}})'
     capture: value
-    base: 0.85
+    # An address that ends in a PIN code is strong evidence (and must win over
+    # the PIN code inside it).
+    base:
+      default: 0.85
+      rules:
+        - {match: '\b[1-9][0-9]{2}\s?[0-9]{3}$', value: 0.97}
     canonical: collapse_upper

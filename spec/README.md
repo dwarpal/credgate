@@ -152,6 +152,38 @@ tokenisation (`[PAN_1]` restored later) builds on the same spans.
 
 Conformance cases are in `conformance/redact.yaml`.
 
+## Evaluation (`evaluate`)
+
+Measures detection against labelled text.
+
+**Labelled data** is JSON Lines, one document per line:
+
+```json
+{"id": "kyc-0001", "text": "PAN: ABCPE1234F", "spans": [{"start": 5, "end": 15, "type": "pan"}]}
+```
+
+`start`/`end` are 0-based, end-exclusive code-point offsets into `text`.
+Every PII span in a document must be labelled (a document with no spans is
+a negative). Optional fields (`category`, `lang`) are carried through.
+
+**Scoring**, for each document, with detection run as usual
+(`min_confidence` filters predictions):
+
+1. A prediction *matches* a gold span of the same type when the offsets are
+   equal (`match = "exact"`, the default) or when the two spans overlap
+   (`match = "overlap"`). Each gold span and each prediction is used at most
+   once: go through predictions in order of `start`, and pair each with the
+   first unused matching gold span in order of `start`.
+2. Matched pairs are true positives; unpaired predictions are false
+   positives; unpaired gold spans are false negatives.
+3. Per type and overall (micro-averaged): `precision = tp / (tp + fp)`,
+   `recall = tp / (tp + fn)`, `f1 = 2pr / (p + r)`; each is reported as
+   missing (NA / None) when its denominator is 0. Rates are rounded to 4
+   decimal places. Rows are the types present in gold or predictions, in
+   alphabetical order, then `overall`.
+
+Conformance cases are in `conformance/evaluate.yaml`.
+
 ## Known limits
 
 Names and addresses are found only next to a cue (honorific, relation, field

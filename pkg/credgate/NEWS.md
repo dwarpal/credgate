@@ -1,5 +1,7 @@
 # credgate (development version)
 
+* New vignette "Using credgate with local LLMs (Ollama, vLLM)", with
+  runnable R, Python and shell examples in the repository's `examples/`.
 * New `scan_pii()` reports, per column of a data frame, which PII types
   occur and in what share of values, using the column name as context
   (a `voter_id` column supports Voter ID matches). Whole numbers are
@@ -13,6 +15,13 @@
   a number in ABHA's 2-4-4-4 layout is no longer taken for a card.
 * Redaction placeholders such as `[ABHA_ADDRESS]` are not re-detected, so
   redacting twice gives the same text.
+* New `cg_evaluate()` and `cg_read_corpus()`: precision, recall and F1 per type
+  against labelled JSON Lines documents (exact or overlap matching), so you
+  can measure credgate on your own labelled data.
+* Detection fixes found by the new benchmark: names no longer run into the
+  next sentence ("Smt. X Y. She ..."); labelled addresses end at their PIN
+  code; an address ending in a PIN code outranks the PIN inside it; order,
+  tracking and reference words lower mobile matches.
 * Much larger test suite: shared hard-negative cases (30 non-PII texts) and
   documented known false positives in the spec; generated-text invariants,
   checksum mutation, Unicode fuzzing and pathological-input tests.

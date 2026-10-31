@@ -128,3 +128,21 @@ def test_scan_with_pandas():
         ("cust_pan", "pan", 1),
         ("mobile", "mobile_in", 1),
     ]
+
+
+def test_evaluate_reads_jsonl_and_validates(tmp_path):
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(
+        '{"id": "a", "text": "PAN: ABCPE1234F", '
+        '"spans": [{"start": 5, "end": 15, "type": "pan"}]}\n'
+        "\n"
+        '{"id": "b", "text": "nothing here", "spans": []}\n',
+        encoding="utf-8",
+    )
+    assert len(credgate.load_corpus(path)) == 2
+    report = credgate.evaluate(path)
+    assert report[-1].type == "overall"
+    assert (report[-1].tp, report[-1].fp, report[-1].fn) == (1, 0, 0)
+    assert "Evaluated 2 document(s)" in str(report)
+    with pytest.raises(ValueError, match="exact"):
+        credgate.evaluate(path, match="fuzzy")
