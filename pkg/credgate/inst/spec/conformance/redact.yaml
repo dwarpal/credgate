@@ -48,6 +48,10 @@ cases:
     context: voter_id
     redacted: '[VOTER_EPIC]'
 
+  - id: placeholders-are-not-redetected
+    text: 'ABHA address: [ABHA_ADDRESS]; Name: [PERSON_NAME]; Address: [ADDRESS]'
+    redacted: 'ABHA address: [ABHA_ADDRESS]; Name: [PERSON_NAME]; Address: [ADDRESS]'
+
   - id: whole-record
     text: 'Name: Priya Nair; Mobile: +91 91234 56789; Email: priya.nair@example.org; A/c 50100987654321 IFSC HDFC0004567; Address: House No 7, Civil Lines, Jaipur 302006'
     redacted: 'Name: [PERSON_NAME]; Mobile: [MOBILE_IN]; Email: [EMAIL]; A/c [BANK_ACCOUNT] IFSC [IFSC]; Address: [ADDRESS]'

@@ -7,6 +7,15 @@
 * New `redact()` replaces every detected identifier with a placeholder
   naming its type (`[PAN]`, `[PERSON_NAME]`); `preview()` shows the redacted
   text with each identifier (value masked), its confidence and reasons.
+* Fewer false positives: digits joined to a decimal point are no longer read
+  as phone numbers (0.9876543210); money words (₹, Rs, crore, balance, ...)
+  lower mobile matches; order, tracking and AWB context lowers card matches;
+  a number in ABHA's 2-4-4-4 layout is no longer taken for a card.
+* Redaction placeholders such as `[ABHA_ADDRESS]` are not re-detected, so
+  redacting twice gives the same text.
+* Much larger test suite: shared hard-negative cases (30 non-PII texts) and
+  documented known false positives in the spec; generated-text invariants,
+  checksum mutation, Unicode fuzzing and pathological-input tests.
 
 # credgate 0.1.0
 

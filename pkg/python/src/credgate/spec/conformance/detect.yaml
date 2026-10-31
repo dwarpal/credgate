@@ -159,6 +159,13 @@ cases:
     expect:
       - {type: bank_account, value: '9876543210', confidence: 0.97}
 
+  - id: csv-fields-stay-separate
+    text: 'ABCPE1234F,9876543210,8826781145'
+    expect:
+      - {type: pan, value: ABCPE1234F}
+      - {type: mobile_in, value: '9876543210'}
+      - {type: mobile_in, value: '8826781145'}
+
   # --- Contact ----------------------------------------------------------------
   - id: mobile-plus91
     text: '+91 98765 43210'
@@ -200,6 +207,10 @@ cases:
     text: '81-3181-3600-6139'
     expect:
       - {type: abha_number, value: 81-3181-3600-6139, confidence: 0.85}
+  - id: abha-layout-beats-luhn-valid-card
+    text: '38-5649-8873-9232'
+    expect:
+      - {type: abha_number, value: 38-5649-8873-9232, confidence: 0.85}
   - id: abha-bare-digits-weak
     text: '12345678901234'
     expect:

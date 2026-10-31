@@ -11,6 +11,8 @@ compliance reviewer can read and approve one set of rules for every language.
 | `detectors.yaml` | Lists, tables, regex fragments and the built-in detectors |
 | `conformance/detect.yaml` | Input texts and the exact matches expected |
 | `conformance/checksums.yaml` | Verhoeff, Luhn and GSTIN test vectors |
+| `conformance/scan.yaml`, `conformance/redact.yaml` | Column scan and redaction cases |
+| `conformance/negatives.yaml` | Hard negatives (no confident match allowed) and documented false positives |
 
 `spec_version` changes only on breaking changes to this schema. Implementations
 refuse a spec version they do not know.

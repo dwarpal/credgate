@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
+
 from credgate.cli import main
 
 
@@ -40,3 +42,43 @@ def test_detectors_and_spec_path(capsys):
     assert "aadhaar" in capsys.readouterr().out
     assert main(["spec-path"]) == 0
     assert capsys.readouterr().out.strip().endswith("spec")
+
+
+def test_detect_options_and_multiple_files(tmp_path, capsys):
+    a = tmp_path / "a.txt"
+    b = tmp_path / "b.txt"
+    a.write_text("order no 878245671885", encoding="utf-8")
+    b.write_text("ABC1234567", encoding="utf-8")
+    assert main(["detect", str(a), str(b)]) == 0
+    assert "aadhaar" in capsys.readouterr().out
+    assert main(["detect", "--min-confidence", "0.5", str(a)]) == 0
+    assert capsys.readouterr().out == ""
+    assert main(["detect", "--context", "voter id", str(b)]) == 0
+    assert "voter_epic" in capsys.readouterr().out
+
+
+def test_scan_delimiter_sample_and_empty(tmp_path, capsys):
+    f = tmp_path / "data.csv"
+    f.write_text("id;pan\n1;ABCPE1234F\n2;none\n3;AAACR5055K\n", encoding="utf-8")
+    assert main(["scan", "--delimiter", ";", "--json", str(f)]) == 0
+    (line,) = capsys.readouterr().out.strip().splitlines()
+    record = json.loads(line)
+    assert (record["column"], record["n_sampled"], record["n_matched"]) == ("pan", 3, 2)
+    assert main(["scan", "--delimiter", ";", "--sample", "1", "--json", str(f)]) == 0
+    assert json.loads(capsys.readouterr().out)["n_sampled"] == 1
+    empty = tmp_path / "empty.csv"
+    empty.write_text("", encoding="utf-8")
+    assert main(["scan", str(empty)]) == 0
+    assert "empty file" in capsys.readouterr().out
+
+
+def test_detectors_lists_every_builtin(capsys):
+    assert main(["detectors"]) == 0
+    assert len(capsys.readouterr().out.strip().splitlines()) == 19
+
+
+def test_version_flag(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--version"])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.startswith("credgate ")

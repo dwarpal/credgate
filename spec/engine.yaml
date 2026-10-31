@@ -21,11 +21,12 @@ normalisation:
   dash: ['U+2010', 'U+2011', 'U+2012', 'U+2013', 'U+2014', 'U+2015', 'U+2212']
 
 # Wrapped around every pattern of a detector with `bounded: true`, so a match
-# never starts or ends inside a longer token (e.g. a 12-digit window of a
-# 16-digit card number).
+# never starts or ends inside a longer token: a 12-digit window of a 16-digit
+# card number, or digits joined to a decimal point (0.9876543210,
+# 9876543210.50). Commas are not included, so CSV fields stay separate.
 boundary:
-  before: '(?<![\p{L}\p{N}])(?<![\p{N}][ -])'
-  after: '(?![\p{L}\p{N}])(?![ -][\p{N}])'
+  before: '(?<![\p{L}\p{N}])(?<![\p{N}][ .-])'
+  after: '(?![\p{L}\p{N}])(?![ .-][\p{N}])'
 
 # Characters removed before checksum validation and by the `strip_upper`
 # canonical form.

@@ -1,0 +1,58 @@
+# Hard negatives: text that is not PII (or not the PII it resembles). Every
+# CredGate implementation must report no match with confidence at or above
+# `max_confidence` (default 0.5) for these. Low-confidence matches are
+# allowed: they are reported so that callers can decide, and
+# `min_confidence` filters them out.
+#
+# `known_false_positives` documents current limits: text that is still
+# detected although it is not PII. Tests assert that each one still occurs,
+# so a fix is noticed and the case moves to `negatives`.
+#
+# All values are synthetic.
+
+spec_version: 1
+
+negatives:
+  # Business identifiers and numbers
+  - {id: invoice-number, text: 'Invoice INV-2026-000123 dated 31/10/2026'}
+  - {id: rupee-amount, text: 'Amount: Rs 1,23,456.78 paid on 2026-10-31'}
+  - {id: iso-timestamp, text: 'Timestamp 2026-10-31T10:21:34Z'}
+  - {id: order-id, text: 'Order ID 202610311234 shipped'}
+  - {id: transaction-reference, text: 'Transaction ref 878245671885 completed'}
+  - {id: batch-number, text: 'Batch no 5422293711820 expired'}
+  - {id: product-code-pan-shaped, text: 'Product code ABCDE1234F in stock'}
+  - {id: courier-awb-luhn-valid, text: 'Tracking AWB 4111111111111111'}
+  - {id: ten-digit-price, text: 'Price ₹ 9876543210 crore'}
+  - {id: ten-digit-balance, text: 'Balance Rs. 9876543210'}
+  - {id: decimal-fraction, text: 'The ratio was 0.9876543210 today'}
+  - {id: decimal-amount, text: 'Paid 9876543210.50 in total'}
+  - {id: indian-grouping, text: 'Total 1,98,765.43210 units'}
+  - {id: population, text: 'Population of India is 1428627663'}
+  # Technical strings
+  - {id: uuid, text: 'UUID 3f2b9c1e-8d4a-4b7e-9c1a-2e5f6a7b8c9d'}
+  - {id: ip-and-port, text: 'Server 192.168.100.200 port 8080'}
+  - {id: version, text: 'Version 2.10.3, build 4567'}
+  - {id: git-hash, text: 'commit 9f06655abde8b1be31631623724a91f9f491a331'}
+  - {id: url-path, text: 'HTTP 404 Not Found at /api/v2/users/1234'}
+  - {id: isbn, text: 'ISBN 978-0-306-40615-7'}
+  - {id: coordinates, text: 'Coordinates 28.613939, 77.209023'}
+  - {id: year-ranges, text: 'Range 1990-2025 and 2026-2030'}
+  # Everyday text, English, Hindi and Hinglish
+  - {id: vitals, text: 'Temperature 36.6 C, BP 120/80'}
+  - {id: room-numbers, text: 'Room 302, Floor 4, Building 7'}
+  - {id: hinglish-sentence, text: 'Mera order 12 tareekh ko aayega'}
+  - {id: hinglish-speech, text: 'Rahul ne kaha ki main kal aaunga'}
+  - {id: honorific-without-name, text: 'Please call the Dr. if needed'}
+  - {id: name-label-lowercase-prose, text: 'Name of the file: report final'}
+  - {id: hindi-sentence, text: 'कल बैठक दस बजे होगी'}
+  - {id: hindi-digits-date, text: 'तारीख ३१/१०/२०२६ है'}
+
+known_false_positives:
+  - id: ms-office-products
+    text: 'Ms Word and Ms Excel documents'
+    type: person_name
+    why: Any capitalised word after an honorific is taken as a name.
+  - id: festival-after-shri
+    text: 'Shri Ram Navami holiday on 6 April'
+    type: person_name
+    why: Same rule; names of festivals and deities follow honorifics.

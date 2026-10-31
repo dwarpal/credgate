@@ -89,3 +89,22 @@ for (case in conformance("redact.yaml")$cases) {
     expect_identical(preview(case$text, context = case$context, min_confidence = case$min_confidence %||% 0)$redacted, case$redacted)
   })
 }
+
+negatives <- conformance("negatives.yaml")
+
+for (case in negatives$negatives) {
+  test_that(paste("hard negative:", case$id), {
+    limit <- case$max_confidence %||% 0.5
+    got <- detect_pii(case$text)
+    confident <- got[got$confidence >= limit, , drop = FALSE]
+    expect_equal(nrow(confident), 0, info = paste(confident$type, confident$value, confident$confidence))
+  })
+}
+
+for (case in negatives$known_false_positives) {
+  test_that(paste("known false positive still present:", case$id), {
+    expect_true(case$type %in% detect_pii(case$text)$type,
+      info = "fixed? move this case to `negatives` in the spec"
+    )
+  })
+}

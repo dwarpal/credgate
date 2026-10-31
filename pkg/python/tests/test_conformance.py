@@ -92,3 +92,19 @@ def test_redact(case):
     kwargs = {"context": case.get("context"), "min_confidence": case.get("min_confidence", 0)}
     assert credgate.redact(case["text"], **kwargs) == case["redacted"]
     assert credgate.preview(case["text"], **kwargs).redacted == [case["redacted"]]
+
+
+NEGATIVES = conformance("negatives.yaml")
+
+
+@pytest.mark.parametrize("case", NEGATIVES["negatives"], ids=lambda c: c["id"])
+def test_hard_negative(case):
+    limit = case.get("max_confidence", 0.5)
+    confident = [s for s in credgate.detect_pii(case["text"]) if s.confidence >= limit]
+    assert confident == [], [(s.type, s.value, s.confidence) for s in confident]
+
+
+@pytest.mark.parametrize("case", NEGATIVES["known_false_positives"], ids=lambda c: c["id"])
+def test_known_false_positive_still_present(case):
+    types = {s.type for s in credgate.detect_pii(case["text"])}
+    assert case["type"] in types, "fixed? move this case to `negatives` in the spec"
