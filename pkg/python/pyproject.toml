@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "credgate"
+version = "0.0.0.dev0"
+description = "Governance layer for LLM requests with Indian PII detection"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [
+  { name = "Bharat Sikka", email = "bharat8sikka@gmail.com" },
+  { name = "Aishwarya Bais", email = "aishwarya.bais00@gmail.com" },
+]
+maintainers = [
+  { name = "Bharat Sikka", email = "bharat8sikka@gmail.com" },
+  { name = "Aishwarya Bais", email = "aishwarya.bais00@gmail.com" },
+]
+keywords = ["pii", "privacy", "llm", "aadhaar", "dpdp", "compliance", "india"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Topic :: Text Processing",
+]
+dependencies = ["regex>=2023.0", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+credgate = "credgate.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/credgate"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # isort
+  "B",        # bugbear
+  "UP",       # pyupgrade
+  "SIM",      # simplify
+  "C4",       # comprehensions
+  "PT",       # pytest style
+  "RUF",      # ruff-specific
+]

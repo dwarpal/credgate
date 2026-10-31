@@ -26,11 +26,34 @@
             platforms = pkgs.lib.platforms.unix;
           };
         };
+
+      # The Python package, written as a nixpkgs python-modules derivation
+      # (pkgs/development/python-modules/credgate). Tests run in checkPhase.
+      credgatePy = python3Packages:
+        python3Packages.buildPythonPackage {
+          pname = "credgate";
+          version = "0.0.0.dev0";
+          pyproject = true;
+          src = ./pkg/python;
+          build-system = [ python3Packages.hatchling ];
+          dependencies = with python3Packages; [ regex pyyaml ];
+          nativeCheckInputs = [ python3Packages.pytestCheckHook ];
+          pythonImportsCheck = [ "credgate" ];
+          meta = {
+            description = "Governance layer for LLM requests with Indian PII detection";
+            license = nixpkgs.lib.licenses.asl20;
+            maintainers = with maintainers; [ bharatsikka aishwaryabais ];
+            mainProgram = "credgate";
+          };
+        };
     in
     {
       packages = forAll (pkgs: rec {
         credgate-r = credgateR pkgs;
-        default = credgate-r;
+        credgate-py = credgatePy pkgs.python3Packages;
+        # The CLI on its own (top-level `credgate` in nixpkgs).
+        credgate = pkgs.python3Packages.toPythonApplication credgate-py;
+        default = credgate;
       });
 
       checks = forAll (pkgs:
@@ -52,10 +75,30 @@
             touch $out
           '';
 
-          # The R package ships a copy of spec/; fail if it is stale.
+          # Python tests run inside the package build, on the oldest and
+          # newest Python in nixpkgs (requires-python is >=3.11).
+          credgate-py = credgatePy pkgs.python3Packages;
+          credgate-py311 = credgatePy pkgs.python311Packages;
+          credgate-py314 = credgatePy pkgs.python314Packages;
+
+          # Both packages ship a copy of spec/ (and Python the licence);
+          # fail if a copy is stale.
           spec-in-sync = pkgs.runCommand "credgate-spec-in-sync" { } ''
-            diff -r ${./spec} ${./pkg/credgate/inst/spec} \
-              || { echo "inst/spec is stale: run tools/sync-spec.sh"; exit 1; }
+            fail() { echo "$1 is stale: run tools/sync-spec.sh"; exit 1; }
+            diff -r ${./spec} ${./pkg/credgate/inst/spec} || fail "R inst/spec"
+            diff -r ${./spec} ${./pkg/python/src/credgate/spec} || fail "Python spec"
+            diff ${./LICENSE} ${./pkg/python/LICENSE} || fail "Python LICENSE"
+            touch $out
+          '';
+
+          # Lint and formatting of the Python package (config in pyproject.toml).
+          ruff = pkgs.runCommand "credgate-ruff" { nativeBuildInputs = [ pkgs.ruff ]; } ''
+            cp -r ${./pkg/python} python
+            chmod -R u+w python
+            cd python
+            export RUFF_CACHE_DIR=$TMPDIR/ruff-cache
+            ruff check .
+            ruff format --check .
             touch $out
           '';
         });
@@ -69,7 +112,8 @@
                 testthat withr roxygen2 rcmdcheck pkgload
               ];
             })
-            (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ]))
+            (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ps.pytest ps.hatchling ps.build ]))
+            pkgs.ruff
             pkgs.qpdf
           ];
           # The maintainers' ~/.Renviron pins R_LIBS_SITE to their bundle;

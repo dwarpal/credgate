@@ -32,8 +32,13 @@ Detector rules, engine parameters and conformance cases live in `spec/` (see
 `detectors-*.R` files below are replaced by `spec/detectors.yaml`, compiled by
 `R/spec.R`. `tools/sync-spec.sh` copies `spec/` into `pkg/credgate/inst/spec`.
 Patterns use the regex subset common to ICU and Python `regex` (verified
-identical on all conformance texts). A Python package and the CLI
-(`credgate scan|preview|audit|proxy`) follow; the proxy is likely Python.
+identical on all conformance texts). The Python package (`pkg/python`,
+`import credgate`, Python >= 3.11, deps `regex` + `PyYAML`) passes the same
+conformance suite; its API is Pythonic (0-based end-exclusive spans,
+`Span` objects with masked `repr`) but finds identical matches. It ships the
+CLI: `credgate detect [--lines] [--json] [--reveal] [--fail]`, `credgate
+detectors`, `credgate spec-path`; `scan`, `preview`, `audit` and `proxy`
+follow with phase 1-2. The proxy is likely Python.
 
 ### Core package (phase 1 is in bold)
 

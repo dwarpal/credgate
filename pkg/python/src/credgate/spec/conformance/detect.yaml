@@ -1,0 +1,314 @@
+# Detection conformance cases. Every CredGate implementation must produce
+# exactly these matches (no more, no fewer) for each case, using the
+# built-in detectors with default settings.
+#
+# Fields per case:
+#   id        unique name
+#   text      input text (one document)
+#   context   optional extra context (e.g. a column name)
+#   expect    the complete list of matches; each has `type` and `value`, and
+#             optionally `confidence`, `canonical`, `span` ([start, end) as
+#             0-based code-point offsets) and `reason` (a substring of the
+#             match's reasons).
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+cases:
+
+  # --- Aadhaar -------------------------------------------------------------
+  - id: aadhaar-with-context
+    text: 'Aadhaar: 542229371182'
+    expect:
+      - {type: aadhaar, value: '542229371182', confidence: 0.97, reason: Verhoeff checksum valid}
+  - id: aadhaar-spaced-uid-context
+    text: 'UID 9481 8614 4308'
+    expect:
+      - {type: aadhaar, value: '9481 8614 4308', canonical: '948186144308', confidence: 0.97}
+  - id: aadhaar-without-context
+    text: '718467284276'
+    expect:
+      - {type: aadhaar, value: '718467284276', confidence: 0.85}
+  - id: aadhaar-bad-checksum
+    text: 'Aadhaar 718467284277'
+    expect: []
+  - id: aadhaar-negative-context
+    text: 'order no 878245671885'
+    expect:
+      - {type: aadhaar, value: '878245671885', confidence: 0.42, reason: "negative context 'order'"}
+  - id: aadhaar-inside-longer-number
+    text: '9718467284276'
+    expect: []
+  - id: aadhaar-devanagari-digits
+    text: 'आधार ७१८४ ६७२८ ४२७६ है'
+    expect:
+      - {type: aadhaar, value: '७१८४ ६७२८ ४२७६', canonical: '718467284276', span: [5, 19], confidence: 0.97}
+  - id: pan-with-zero-width-space
+    text: "PAN ABC​PE1234F"
+    expect:
+      - {type: pan, value: "ABC​PE1234F", canonical: ABCPE1234F, confidence: 0.97}
+  - id: aadhaar-masked
+    text: 'Aadhaar XXXX XXXX 4276'
+    expect:
+      - {type: aadhaar_masked, value: 'XXXX XXXX 4276', confidence: 0.98}
+  - id: aadhaar-vid-with-context
+    text: 'VID: 7828638538075372'
+    expect:
+      - {type: aadhaar_vid, value: '7828638538075372', confidence: 0.98}
+  - id: aadhaar-vid-needs-context
+    text: '7828638538075372'
+    expect: []
+
+  # --- Other government IDs -------------------------------------------------
+  - id: pan-individual
+    text: 'Customer PAN: HUUPA2420A.'
+    expect:
+      - {type: pan, value: HUUPA2420A, confidence: 0.97, reason: 'holder type: individual'}
+  - id: pan-company-lower-case
+    text: 'pan aaacr5055k'
+    expect:
+      - {type: pan, value: aaacr5055k, canonical: AAACR5055K, confidence: 0.97, reason: 'holder type: company'}
+  - id: voter-needs-context
+    text: 'ABC1234567'
+    expect: []
+  - id: voter-with-context
+    text: 'voter id FSO6231132'
+    expect:
+      - {type: voter_epic, value: FSO6231132, confidence: 0.97}
+  - id: voter-hindi-context
+    text: 'मतदाता ABC1234567'
+    expect:
+      - {type: voter_epic, value: ABC1234567, confidence: 0.97}
+  - id: voter-context-argument
+    text: 'JFK5504535'
+    context: voter_id
+    expect:
+      - {type: voter_epic, value: JFK5504535, confidence: 0.97}
+  - id: passport-with-context
+    text: 'Passport: M2870698'
+    expect:
+      - {type: passport, value: M2870698, confidence: 0.97}
+  - id: driving-licence
+    text: 'DL no: OR7020101552421'
+    expect:
+      - {type: driving_licence, value: OR7020101552421, confidence: 0.95}
+  - id: driving-licence-spaced-without-context
+    text: 'MH12 20110012345'
+    expect:
+      - {type: driving_licence, value: 'MH12 20110012345', confidence: 0.75}
+
+  # --- GSTIN and cards ------------------------------------------------------
+  - id: gstin-wins-over-embedded-pan
+    text: 'GSTIN 27AAPFU0939F1ZV'
+    expect:
+      - {type: gstin, value: 27AAPFU0939F1ZV, confidence: 0.99, reason: embeds PAN of firm}
+  - id: gstin-bad-check-character
+    text: '27AAPFU0939F1ZA'
+    expect: []
+  - id: card-not-reported-as-aadhaar
+    text: '4111 1111 1111 1111'
+    expect:
+      - {type: card, value: '4111 1111 1111 1111', confidence: 0.9}
+  - id: card-with-context
+    text: 'card: 4952414341756701'
+    expect:
+      - {type: card, value: '4952414341756701', confidence: 0.98}
+
+  # --- UPI, IFSC, bank accounts -----------------------------------------------
+  - id: upi-known-handle
+    text: 'pay ramesh@okaxis'
+    expect:
+      - {type: upi_id, value: ramesh@okaxis, confidence: 0.95, reason: known UPI handle}
+  - id: upi-unknown-handle
+    text: 'ramesh@somewallet'
+    expect:
+      - {type: upi_id, value: ramesh@somewallet, confidence: 0.6, reason: unknown handle}
+  - id: upi-before-full-stop
+    text: 'Pay to priya.s@ybl.'
+    expect:
+      - {type: upi_id, value: priya.s@ybl, confidence: 0.95}
+  - id: email-not-upi
+    text: 'mail ramesh@example.co.in'
+    expect:
+      - {type: email, value: ramesh@example.co.in, confidence: 0.95}
+  - id: ifsc-upper
+    text: 'HDFC0001234'
+    expect:
+      - {type: ifsc, value: HDFC0001234, confidence: 0.9}
+  - id: ifsc-lower
+    text: 'hdfc0001234'
+    expect:
+      - {type: ifsc, value: hdfc0001234, confidence: 0.6}
+  - id: ifsc-fifth-char-must-be-zero
+    text: 'HDFC1001234'
+    expect: []
+  - id: bank-account-needs-context
+    text: 'ref 123456789012345'
+    expect: []
+  - id: bank-account-with-context
+    text: 'A/c 50100123456789'
+    expect:
+      - {type: bank_account, value: '50100123456789', confidence: 0.97}
+  - id: bank-account-hindi-context
+    text: 'खाता संख्या 123456789'
+    expect:
+      - {type: bank_account, value: '123456789', confidence: 0.97}
+  - id: bank-account-beats-mobile
+    text: 'account 9876543210'
+    expect:
+      - {type: bank_account, value: '9876543210', confidence: 0.97}
+
+  # --- Contact ----------------------------------------------------------------
+  - id: mobile-plus91
+    text: '+91 98765 43210'
+    expect:
+      - {type: mobile_in, value: '+91 98765 43210', canonical: '9876543210', confidence: 0.85}
+  - id: mobile-leading-zero
+    text: '098765-43210'
+    expect:
+      - {type: mobile_in, value: '098765-43210', canonical: '9876543210', confidence: 0.85}
+  - id: mobile-bare
+    text: '9876543210'
+    expect:
+      - {type: mobile_in, value: '9876543210', confidence: 0.65}
+  - id: mobile-91-prefix
+    text: '91-9876543210'
+    expect:
+      - {type: mobile_in, value: '91-9876543210', canonical: '9876543210', confidence: 0.85}
+  - id: mobile-hindi-context
+    text: 'मोबाइल 8826781145'
+    expect:
+      - {type: mobile_in, value: '8826781145', confidence: 0.93}
+  - id: mobile-cannot-start-with-5
+    text: '5876543210'
+    expect: []
+  - id: pincode-needs-context
+    text: 'total 560001'
+    expect: []
+  - id: pincode-spaced
+    text: 'PIN 560 001'
+    expect:
+      - {type: pincode, value: '560 001', confidence: 0.96}
+  - id: pincode-hindi-context
+    text: 'पिन 560001'
+    expect:
+      - {type: pincode, value: '560001', confidence: 0.96}
+
+  # --- Health -------------------------------------------------------------------
+  - id: abha-hyphenated
+    text: '81-3181-3600-6139'
+    expect:
+      - {type: abha_number, value: 81-3181-3600-6139, confidence: 0.85}
+  - id: abha-bare-digits-weak
+    text: '12345678901234'
+    expect:
+      - {type: abha_number, value: '12345678901234', confidence: 0.4}
+  - id: abha-bare-digits-with-context
+    text: 'ABHA 12345678901234'
+    expect:
+      - {type: abha_number, value: '12345678901234', confidence: 0.88}
+  - id: abha-address
+    text: 'id aarav.k21@abdm'
+    expect:
+      - {type: abha_address, value: aarav.k21@abdm, confidence: 0.97}
+  - id: abha-address-sandbox
+    text: 'test user@sbx'
+    expect:
+      - {type: abha_address, value: user@sbx, confidence: 0.97}
+
+  # --- Names ----------------------------------------------------------------------
+  - id: name-after-shri
+    text: 'Shri Ramesh Kumar'
+    expect:
+      - {type: person_name, value: Ramesh Kumar, confidence: 0.8}
+  - id: name-after-smt-with-period
+    text: 'Smt. Kamla Devi'
+    expect:
+      - {type: person_name, value: Kamla Devi}
+  - id: name-late-shri
+    text: 'Late Shri Mohan Lal'
+    expect:
+      - {type: person_name, value: Mohan Lal}
+  - id: name-after-relation
+    text: 'S/o Ganpat Patil'
+    expect:
+      - {type: person_name, value: Ganpat Patil}
+  - id: name-label-lower-case
+    text: 'Name: anil verma'
+    expect:
+      - {type: person_name, value: anil verma, canonical: ANIL VERMA}
+  - id: name-with-initials
+    text: 'Dr. R. K. Sharma'
+    expect:
+      - {type: person_name, value: R. K. Sharma}
+  - id: name-drops-full-stop
+    text: 'Nominee - Sunita Rao.'
+    expect:
+      - {type: person_name, value: Sunita Rao}
+  - id: name-stops-at-next-label
+    text: 'Name: Ramesh Kumar Mobile 9876543210'
+    expect:
+      - {type: person_name, value: Ramesh Kumar}
+      - {type: mobile_in, value: '9876543210', confidence: 0.93}
+  - id: name-and-address-labels
+    text: 'Name: Ramesh Kumar Address: 12 MG Road'
+    expect:
+      - {type: person_name, value: Ramesh Kumar}
+      - {type: address, value: 12 MG Road, confidence: 0.85}
+  - id: name-devanagari-drops-possessive
+    text: 'श्रीमती सुनीता देवी का घर'
+    expect:
+      - {type: person_name, value: सुनीता देवी, canonical: सुनीता देवी}
+  - id: name-devanagari-label
+    text: 'नाम: रमेश कुमार पिता'
+    expect:
+      - {type: person_name, value: रमेश कुमार}
+  - id: capitalised-prose-is-not-a-name
+    text: 'The Report Was Submitted On Time By The Committee'
+    expect: []
+  - id: lone-honorific
+    text: 'Mr'
+    expect: []
+
+  # --- Addresses ------------------------------------------------------------------
+  - id: address-labelled
+    text: 'Address: Flat 4B, Shanti Apartments, Kothrud, Pune 411038; Phone x'
+    expect:
+      - {type: address, value: 'Flat 4B, Shanti Apartments, Kothrud, Pune 411038', canonical: 'FLAT 4B, SHANTI APARTMENTS, KOTHRUD, PUNE 411038'}
+  - id: address-short-label-stops-at-mobile
+    text: 'Addr - 22 MG Road, Bengaluru 560001 Mobile 9876543210'
+    expect:
+      - {type: address, value: '22 MG Road, Bengaluru 560001'}
+      - {type: mobile_in, value: '9876543210', confidence: 0.93}
+  - id: address-house-keyword-to-pin
+    text: 'R/o House No 12, Laxmi Nagar, Pune 411038'
+    expect:
+      - {type: address, value: 'House No 12, Laxmi Nagar, Pune 411038'}
+  - id: address-unlabelled
+    text: 'lives at House No 111, Anna Salai, Pune 334917.'
+    expect:
+      - {type: address, value: 'House No 111, Anna Salai, Pune 334917'}
+  - id: address-hindi
+    text: 'पता: ग्राम रामपुर, जिला सीतापुर 261001'
+    expect:
+      - {type: address, value: 'ग्राम रामपुर, जिला सीतापुर 261001'}
+
+  # --- Whole records ----------------------------------------------------------------
+  - id: mixed-customer-record
+    text: 'Name: Priya Nair; Mobile: +91 91234 56789; Email: priya.nair@example.in; PAN: ABCPN1234K; UPI: priya.n@oksbi; A/c 50100987654321 IFSC HDFC0004567; Address: House No 7, Civil Lines, Jaipur 302006'
+    expect:
+      - {type: person_name, value: Priya Nair}
+      - {type: mobile_in, value: '+91 91234 56789', confidence: 0.97}
+      - {type: email, value: priya.nair@example.in}
+      - {type: pan, value: ABCPN1234K, confidence: 0.97}
+      - {type: upi_id, value: priya.n@oksbi, confidence: 0.99}
+      - {type: bank_account, value: '50100987654321', confidence: 0.97}
+      - {type: ifsc, value: HDFC0004567, confidence: 0.98}
+      - {type: address, value: 'House No 7, Civil Lines, Jaipur 302006'}
+  - id: hindi-record
+    text: 'नाम: पूजा यादव; मोबाइल 9468451273; पता: मकान 185, शिवाजी पार्क, इंदौर 452001'
+    expect:
+      - {type: person_name, value: पूजा यादव}
+      - {type: mobile_in, value: '9468451273', confidence: 0.93}
+      - {type: address, value: 'मकान 185, शिवाजी पार्क, इंदौर 452001'}

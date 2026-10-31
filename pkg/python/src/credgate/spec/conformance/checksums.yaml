@@ -1,0 +1,44 @@
+# Checksum conformance vectors. Inputs may contain spaces or hyphens, which
+# are ignored. Invalid input (non-digits, empty) is never valid and has no
+# check digit (null).
+
+spec_version: 1
+
+verhoeff:
+  check_digit:
+    - {input: '236', output: '3'}
+    - {input: '12345', output: '1'}
+    - {input: '142857', output: '0'}
+    - {input: '54222937118', output: '2'}
+    - {input: '12a', output: null}
+  valid:
+    - {input: '2363', valid: true}
+    - {input: '123451', valid: true}
+    - {input: '1428570', valid: true}
+    - {input: '5422 2937 1182', valid: true}
+    - {input: '2364', valid: false}
+    - {input: '123452', valid: false}
+    - {input: 'abc', valid: false}
+    - {input: '', valid: false}
+
+luhn:
+  valid:
+    - {input: '4111 1111 1111 1111', valid: true}
+    - {input: '4111-1111-1111-1111', valid: true}
+    - {input: '79927398713', valid: true}
+    - {input: '4952414341756701', valid: true}
+    - {input: '4111111111111112', valid: false}
+    - {input: 'abc', valid: false}
+
+gstin:
+  check_char:
+    - {input: '27AAPFU0939F1Z', output: 'V'}
+    - {input: '28EOYCX2417Q8Z', output: '3'}
+    - {input: '27aapfu0939f1z', output: 'V'}
+    - {input: '27AAPFU0939F1', output: null}
+  valid:
+    - {input: '27AAPFU0939F1ZV', valid: true}
+    - {input: '27aapfu0939f1zv', valid: true}
+    - {input: '21AQIFY8291B5Z4', valid: true}
+    - {input: '27AAPFU0939F1ZA', valid: false}
+    - {input: '00AAPFU0939F1ZH', valid: false}
