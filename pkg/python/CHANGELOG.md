@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-31)
 
 - Documentation: using credgate with local LLMs (Ollama, vLLM and other
   OpenAI-compatible servers), with runnable examples in `examples/`.
@@ -15,9 +15,11 @@
   a number in ABHA's 2-4-4-4 layout is no longer taken for a card.
 - Redaction placeholders such as `[ABHA_ADDRESS]` are not re-detected, so
   redacting twice gives the same text.
-- New `evaluate()` / `cg_evaluate()`: precision, recall and F1 per type
+- New `evaluate()` and `load_corpus()`: precision, recall and F1 per type
   against labelled JSON Lines documents (exact or overlap matching), so you
   can measure credgate on your own labelled data.
+- Published accuracy benchmark on a synthetic Indian-context corpus and a
+  comparison with Microsoft Presidio (README, "How it compares").
 - Detection fixes found by the new benchmark: names no longer run into the
   next sentence ("Smt. X Y. She ..."); labelled addresses end at their PIN
   code; an address ending in a PIN code outranks the PIN inside it; order,
