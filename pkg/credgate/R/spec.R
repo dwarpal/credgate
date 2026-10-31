@@ -16,6 +16,8 @@ detector_fields <- c(
 #'
 #' @return The path of the `spec` directory.
 #' @export
+#' @examples
+#' list.files(cg_spec_path())
 cg_spec_path <- function() {
   system.file("spec", package = "credgate", mustWork = TRUE)
 }

@@ -71,3 +71,11 @@ An object of class \code{cg_detector}.
 \description{
 Define a PII detector
 }
+\examples{
+employee_id <- new_detector(
+  id = "employee_id", class = "internal", label = "Employee ID",
+  pattern = bounded("EMP[0-9]{6}"),
+  context = "employee|staff"
+)
+employee_id$label
+}

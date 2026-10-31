@@ -13,3 +13,6 @@ The path of the \code{spec} directory.
 The spec (detectors, engine parameters and conformance cases) is shared
 by every CredGate implementation. See its \code{README.md} for the schema.
 }
+\examples{
+list.files(cg_spec_path())
+}

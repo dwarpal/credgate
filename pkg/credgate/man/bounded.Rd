@@ -17,3 +17,7 @@ The match may not be preceded or followed by a letter or digit, nor by a
 digit joined with a space or hyphen (so a 12-digit window inside a
 16-digit card number is not reported as an Aadhaar number).
 }
+\examples{
+p <- bounded("[0-9]{4}")
+stringi::stri_detect_regex(c("PIN 1234", "card 12345678"), p)
+}

@@ -17,3 +17,10 @@ The detector id, invisibly.
 \description{
 Register a detector
 }
+\examples{
+register_detector(new_detector(
+  id = "employee_id", class = "internal", label = "Employee ID",
+  pattern = bounded("EMP[0-9]{6}")
+))
+detect_pii("Approved by EMP123456")$type
+}

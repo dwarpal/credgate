@@ -41,6 +41,13 @@ the$detectors <- list()
 #' @param ignore_case Match the pattern case-insensitively.
 #' @return An object of class `cg_detector`.
 #' @export
+#' @examples
+#' employee_id <- new_detector(
+#'   id = "employee_id", class = "internal", label = "Employee ID",
+#'   pattern = bounded("EMP[0-9]{6}"),
+#'   context = "employee|staff"
+#' )
+#' employee_id$label
 new_detector <- function(id, class, label, pattern,
                          capture = NULL,
                          validate = NULL,
@@ -83,6 +90,9 @@ canonical_default <- function(x) toupper(strip_separators(x))
 #' @param core An ICU regular expression.
 #' @return A regular expression.
 #' @export
+#' @examples
+#' p <- bounded("[0-9]{4}")
+#' stringi::stri_detect_regex(c("PIN 1234", "card 12345678"), p)
 bounded <- function(core) {
   paste0(the$engine$boundary$before, "(?:", core, ")", the$engine$boundary$after)
 }
@@ -93,6 +103,12 @@ bounded <- function(core) {
 #' @param overwrite Replace an existing detector with the same id.
 #' @return The detector id, invisibly.
 #' @export
+#' @examples
+#' register_detector(new_detector(
+#'   id = "employee_id", class = "internal", label = "Employee ID",
+#'   pattern = bounded("EMP[0-9]{6}")
+#' ))
+#' detect_pii("Approved by EMP123456")$type
 register_detector <- function(detector, overwrite = FALSE) {
   if (!inherits(detector, "cg_detector")) {
     rlang::abort("`detector` must be created with `new_detector()`.")
@@ -108,6 +124,8 @@ register_detector <- function(detector, overwrite = FALSE) {
 #'
 #' @return A data frame with one row per detector.
 #' @export
+#' @examples
+#' cg_detectors()
 cg_detectors <- function() {
   d <- the$detectors
   data.frame(

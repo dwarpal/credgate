@@ -15,7 +15,7 @@
       credgateR = pkgs:
         pkgs.rPackages.buildRPackage {
           name = "credgate";
-          version = "0.0.0.9000";
+          version = "0.1.0";
           src = ./pkg/credgate;
           propagatedBuildInputs = with pkgs.rPackages; [ cli rlang stringi yaml ];
           nativeBuildInputs = with pkgs.rPackages; [ cli rlang stringi yaml ];
@@ -33,7 +33,7 @@
       credgatePy = python3Packages:
         python3Packages.buildPythonPackage {
           pname = "credgate";
-          version = "0.0.0.dev0";
+          version = "0.1.0";
           pyproject = true;
           src = ./pkg/python;
           build-system = [ python3Packages.hatchling ];
@@ -83,13 +83,18 @@
           credgate-py311 = credgatePy pkgs.python311Packages;
           credgate-py314 = credgatePy pkgs.python314Packages;
 
-          # Both packages ship a copy of spec/ (and Python the licence);
+          # Both packages ship copies of spec/ and the licence files;
           # fail if a copy is stale.
           spec-in-sync = pkgs.runCommand "credgate-spec-in-sync" { } ''
             fail() { echo "$1 is stale: run tools/sync-spec.sh"; exit 1; }
             diff -r ${./spec} ${./pkg/credgate/inst/spec} || fail "R inst/spec"
             diff -r ${./spec} ${./pkg/python/src/credgate/spec} || fail "Python spec"
-            diff ${./LICENSE} ${./pkg/python/LICENSE} || fail "Python LICENSE"
+            for f in LICENSE NOTICE AUTHORS; do
+              diff ${./.}/$f ${./pkg/python}/$f || fail "Python $f"
+            done
+            for f in NOTICE AUTHORS; do
+              diff ${./.}/$f ${./pkg/credgate/inst}/$f || fail "R inst/$f"
+            done
             touch $out
           '';
 

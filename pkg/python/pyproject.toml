@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "credgate"
-version = "0.0.0.dev0"
+version = "0.1.0"
 description = "Governance layer for LLM requests with Indian PII detection"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE", "AUTHORS"]
 requires-python = ">=3.11"
 authors = [
   { name = "Bharat Sikka", email = "bharat8sikka@gmail.com" },

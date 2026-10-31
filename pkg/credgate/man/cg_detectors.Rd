@@ -12,3 +12,6 @@ A data frame with one row per detector.
 \description{
 List registered detectors
 }
+\examples{
+cg_detectors()
+}

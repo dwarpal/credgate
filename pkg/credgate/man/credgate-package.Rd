@@ -4,9 +4,9 @@
 \name{credgate-package}
 \alias{credgate}
 \alias{credgate-package}
-\title{credgate: Governance Layer for LLM Requests with Indian PII Detection}
+\title{credgate: Detect Indian Personal Data Before It Reaches Language Models}
 \description{
-Detects personal data before it leaves the machine, with Indian identifiers built in (Aadhaar with Verhoeff checksum, PAN, GSTIN, voter ID, passport, driving licence and more). Provides column-level PII scans of data frames, previews of what would be masked, reversible tokenisation, policy-based routing and a tamper-evident audit log for compliance review.
+Detects personal data in text before it is sent to a large language model, with Indian identifiers built in: Aadhaar (validated with the Verhoeff checksum), Aadhaar Virtual ID, PAN, GSTIN, voter ID, passport and driving licence numbers, UPI IDs, IFSC codes, bank account and payment card numbers, mobile numbers and Ayushman Bharat (ABHA) health IDs, plus rule-based detection of names and addresses in Latin and Indic scripts. Candidates are validated with checksums, scored from surrounding context and matched through Indic digits and invisible characters. The rules come from a language-neutral specification shared with the 'Python' package of the same name.
 }
 \seealso{
 Useful links:
@@ -17,11 +17,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Bharat Sikka \email{bharat8sikka@gmail.com}
+\strong{Maintainer}: Bharat Sikka \email{bharat8sikka@gmail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item Aishwarya Bais \email{aishwarya.bais00@gmail.com}
+  \item Aishwarya Bais \email{aishwarya.bais00@gmail.com} [copyright holder]
 }
 
 }
