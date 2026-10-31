@@ -21,6 +21,7 @@
           nativeBuildInputs = with pkgs.rPackages; [ cli rlang stringi yaml ];
           meta = {
             description = "Governance layer for LLM requests with Indian PII detection";
+            homepage = "https://github.com/dwarpal/credgate";
             license = pkgs.lib.licenses.asl20;
             maintainers = with maintainers; [ bharatsikka aishwaryabais ];
             platforms = pkgs.lib.platforms.unix;
@@ -41,6 +42,7 @@
           pythonImportsCheck = [ "credgate" ];
           meta = {
             description = "Governance layer for LLM requests with Indian PII detection";
+            homepage = "https://github.com/dwarpal/credgate";
             license = nixpkgs.lib.licenses.asl20;
             maintainers = with maintainers; [ bharatsikka aishwaryabais ];
             mainProgram = "credgate";

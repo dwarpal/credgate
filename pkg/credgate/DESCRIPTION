@@ -13,6 +13,8 @@ Description: Detects personal data before it leaves the machine, with
     masked, reversible tokenisation, policy-based routing and a
     tamper-evident audit log for compliance review.
 License: Apache License (>= 2)
+URL: https://github.com/dwarpal/credgate
+BugReports: https://github.com/dwarpal/credgate/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3

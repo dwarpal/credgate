@@ -30,6 +30,10 @@ classifiers = [
 ]
 dependencies = ["regex>=2023.0", "PyYAML>=6.0"]
 
+[project.urls]
+Homepage = "https://github.com/dwarpal/credgate"
+Issues = "https://github.com/dwarpal/credgate/issues"
+
 [project.optional-dependencies]
 test = ["pytest>=7"]
 
