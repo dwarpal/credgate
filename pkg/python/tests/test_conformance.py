@@ -67,3 +67,18 @@ def test_detect(case):
             assert [s.start, s.end] == e["span"]
         if "reason" in e:
             assert e["reason"] in s.reasons
+
+
+SCAN_CASES = conformance("scan.yaml")["cases"]
+
+
+@pytest.mark.parametrize("case", SCAN_CASES, ids=[c["id"] for c in SCAN_CASES])
+def test_scan(case):
+    got = credgate.scan_pii(
+        case["columns"], sample=case.get("sample", 10000), min_rate=case.get("min_rate", 0)
+    )
+    rows = got.to_records()
+    assert len(rows) == len(case["expect"]), rows
+    for row, e in zip(rows, case["expect"], strict=True):
+        for field, value in e.items():
+            assert row[field] == value, (field, row)

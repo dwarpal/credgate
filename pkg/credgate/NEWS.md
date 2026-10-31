@@ -1,3 +1,10 @@
+# credgate (development version)
+
+* New `scan_pii()` reports, per column of a data frame, which PII types
+  occur and in what share of values, using the column name as context
+  (a `voter_id` column supports Voter ID matches). Whole numbers are
+  scanned too; sampling is evenly spaced and reproducible.
+
 # credgate 0.1.0
 
 * First release.

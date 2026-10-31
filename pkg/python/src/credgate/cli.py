@@ -1,8 +1,9 @@
-"""Command-line interface: ``credgate detect``, ``credgate detectors``."""
+"""Command-line interface: ``credgate detect``, ``scan``, ``detectors``, ``spec-path``."""
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from collections.abc import Sequence
@@ -11,6 +12,7 @@ from . import __version__
 from ._spec import spec_path
 from .detect import detect_pii, mask_value
 from .detectors import detectors
+from .scan import scan_pii
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -38,6 +40,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="exit with status 1 if anything is detected (for CI and pre-commit hooks)",
     )
 
+    s = sub.add_parser("scan", help="report which columns of a CSV file contain PII")
+    s.add_argument("file", help="CSV file with a header row")
+    s.add_argument("--sample", type=int, default=10000, help="values checked per column")
+    s.add_argument("--min-rate", type=float, default=0.0, metavar="X")
+    s.add_argument("--json", action="store_true", help="write one JSON object per finding")
+    s.add_argument("--delimiter", default=",", help="field delimiter (default: ,)")
+    s.add_argument(
+        "--fail",
+        action="store_true",
+        help="exit with status 1 if any column contains PII",
+    )
+
     sub.add_parser("detectors", help="list the registered detectors")
     sub.add_parser("spec-path", help="print the path of the shipped detection spec")
 
@@ -49,7 +63,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "spec-path":
         print(spec_path())
         return 0
+    if args.command == "scan":
+        return _scan(args)
     return _detect(args)
+
+
+def _scan(args: argparse.Namespace) -> int:
+    with open(args.file, encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f, delimiter=args.delimiter))
+    if not rows:
+        print(f"{args.file}: empty file")
+        return 0
+    header, body = rows[0], rows[1:]
+    columns = {
+        name: [row[i] if i < len(row) else None for row in body] for i, name in enumerate(header)
+    }
+    report = scan_pii(columns, sample=args.sample, min_rate=args.min_rate)
+    if args.json:
+        for record in report.to_records():
+            print(json.dumps({"source": args.file, **record}, ensure_ascii=False))
+    else:
+        print(report)
+    return 1 if args.fail and report else 0
 
 
 def _detect(args: argparse.Namespace) -> int:

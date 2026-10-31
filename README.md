@@ -11,7 +11,8 @@ fully air-gapped setups.
 It ships as an R package and a Python package (with a CLI) that read the same
 detection rules, so both languages find exactly the same matches.
 
-> **Status: early development (pre-alpha).** PII detection works today.
+> **Status: early development (pre-alpha).** PII detection and column
+> scanning (`scan_pii()`) work today.
 > Redaction/restore, policies, the audit log, proxy mode and the IDE
 > assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
 
@@ -57,11 +58,22 @@ for span in credgate.detect_pii("आधार: ५४२२ २९३७ ११�
 # Span(doc=0, start=29, end=39, type='mobile_in', value='XXXXXX1273', confidence=0.93)
 ```
 
+**Scanning a table** (R `scan_pii(df)`, Python `credgate.scan_pii(df)`)
+reports which columns hold PII without sending anything anywhere:
+
+```text
+Scanned 2 columns; PII found in 2: cust_pan and notes
+   column      type rate matched whole confidence      example
+ cust_pan       pan 100%  3 of 3     3       0.97   XXXXXX234F
+    notes   aadhaar  33%  1 of 3     0       0.97 XXXXXXXX1182
+```
+
 **Command line**
 
 ```sh
 credgate detect notes.txt                      # masked report
 credgate detect --lines --json customers.csv   # one JSON object per match
+credgate scan customers.csv                    # which columns hold PII
 git diff --cached | credgate detect --fail     # non-zero exit if PII is found
 ```
 
@@ -70,10 +82,8 @@ available programmatically (`x$value`, `span.value`) or with `--reveal`.
 
 ## Installation
 
-The packages are not yet on CRAN or PyPI. Until then, install from this
-repository. While the repository is private, these commands need GitHub
-access to `dwarpal/credgate` (for example `gh auth login`, or a
-`GITHUB_PAT` for `remotes`).
+**Python** is on PyPI; the **R** package is under CRAN review, so install it
+from GitHub for now.
 
 **Nix** (recommended; works offline once built):
 
@@ -93,7 +103,7 @@ remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
 **Python** (3.11+)
 
 ```sh
-pip install "git+https://github.com/dwarpal/credgate#subdirectory=pkg/python"
+pip install credgate
 ```
 
 ## Repository layout

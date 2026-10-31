@@ -12,6 +12,9 @@ and the Python package `credgate` find exactly the same matches. Part of the
 
 ## Installation
 
+CRAN submission of 0.1.0 is under review. Until it is accepted, install
+from GitHub (this also gets the development version):
+
 ```r
 # install.packages("remotes")
 remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
@@ -56,6 +59,29 @@ before matching, and positions refer to your original text:
 detect_pii("आधार: ५४२२ २९३७ ११८२")$type
 #> [1] "aadhaar"
 ```
+
+### Scanning data frames
+
+`scan_pii()` reports which columns hold PII and how much, without sending
+anything anywhere. Column names count as context, so a column called
+`voter_id` or `cust_pan` supports those types:
+
+```r
+customers <- data.frame(
+  cust_pan = c("ABCPE1234F", "AAACR5055K", "XYZPQ9876R"),
+  notes = c("Called, Aadhaar 542229371182", "no issues", "mobile 9876543210")
+)
+scan_pii(customers)
+#> Scanned 2 columns; PII found in 2: cust_pan and notes
+#>    column      type rate matched whole confidence      example
+#>  cust_pan       pan 100%  3 of 3     3       0.97   XXXXXX234F
+#>     notes   aadhaar  33%  1 of 3     0       0.97 XXXXXXXX1182
+#>     notes mobile_in  33%  1 of 3     0       0.93   XXXXXX3210
+```
+
+`whole` counts values that are entirely the identifier (an ID column)
+rather than containing it (free text). Large columns are sampled
+(`sample = 10000` values by default).
 
 ### Checksums and test data
 

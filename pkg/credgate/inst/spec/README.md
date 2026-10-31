@@ -103,6 +103,36 @@ Conformance compares `type`, `value`, and when given `confidence`,
 
 Unknown fields are an error, so a typo cannot silently disable a rule.
 
+## Column scan (`scan_pii`)
+
+Reports, per column of a table, which PII types occur and how often. Defaults:
+`sample = 10000`, `min_rate = 0`.
+
+1. **Values.** Strings are used as they are; categorical values as their
+   labels. Numbers that are whole are rendered as integers without exponent
+   or decimals (`9876543210`); other numbers, booleans, dates and missing
+   values are skipped. Each value is trimmed of surrounding whitespace, and
+   empty strings are skipped. A column with no remaining values is skipped.
+2. **Sampling.** With `n` values and `n > sample`, use the values at 0-based
+   positions `floor(i * n / sample)` for `i = 0 .. sample - 1` (evenly spaced,
+   deterministic). Otherwise use all `n`.
+3. **Context.** Each sampled value is one document for detection, with the
+   column name - after replacing `_`, `.` and `-` with spaces - as extra
+   context, so a column named `voter_id` or `cust_pan` supports those types.
+4. **Per type found in the column:**
+   - `n_sampled`: number of sampled values;
+   - `n_matched`: values with at least one match of the type;
+   - `n_full`: values where a match of the type covers the whole value;
+   - `rate`: `n_matched / n_sampled`, rounded to 4 decimal places;
+   - `mean_confidence`: mean confidence of each matched value's first match
+     of the type, rounded to 2 decimal places;
+   - `example`: the first matched value's first match, masked.
+5. Keep types with `rate >= min_rate`. Order by column (table order), then
+   `rate` descending, then `type`.
+
+Conformance cases are in `conformance/scan.yaml`; each lists the complete
+expected result.
+
 ## Known limits
 
 Names and addresses are found only next to a cue (honorific, relation, field

@@ -9,7 +9,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("credgate")
 except PackageNotFoundError:  # running from a source checkout
-    __version__ = "0.1.0"
+    __version__ = "0.2.0.dev0"
 
 from ._spec import spec_path
 from .checksums import (
@@ -23,11 +23,14 @@ from .checksums import (
 from .detect import Span, detect_pii, mask_value
 from .detectors import Detector, bounded, detectors, register_detector, reset_detectors
 from .normalise import Normalised, normalise
+from .scan import ColumnFinding, ScanReport, scan_pii
 from .synth import synth_indian_pii
 
 __all__ = [
+    "ColumnFinding",
     "Detector",
     "Normalised",
+    "ScanReport",
     "Span",
     "bounded",
     "detect_pii",
@@ -40,6 +43,7 @@ __all__ = [
     "normalise",
     "register_detector",
     "reset_detectors",
+    "scan_pii",
     "spec_path",
     "synth_indian_pii",
     "verhoeff_check_digit",

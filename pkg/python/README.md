@@ -15,8 +15,10 @@ and the R package `credgate` find exactly the same matches. Part of the
 Python 3.11 or later; depends only on `regex` and `PyYAML`.
 
 ```sh
-pip install "git+https://github.com/dwarpal/credgate#subdirectory=pkg/python"
+pip install credgate
 ```
+
+The development version: `pip install "git+https://github.com/dwarpal/credgate#subdirectory=pkg/python"`.
 
 With Nix: `nix build github:dwarpal/credgate#credgate`.
 
@@ -40,6 +42,22 @@ spans[1].reasons  # "matched PAN pattern; context 'PAN'; holder type: individual
 objects with the document index, 0-based end-exclusive positions, type, data
 class, value, canonical form, confidence and reasons. `span.to_dict()` gives
 a JSON-ready dict with the value masked (`reveal=True` to include it).
+
+Scan a table (a pandas DataFrame, or a dict of column -> values) to see
+which columns hold PII; column names count as context:
+
+```python
+report = credgate.scan_pii({
+    "cust_pan": ["ABCPE1234F", "AAACR5055K", "XYZPQ9876R"],
+    "notes": ["Called, Aadhaar 542229371182", "no issues", "mobile 9876543210"],
+})
+print(report)
+# Scanned 2 column(s); PII found in 2: cust_pan, notes
+#   cust_pan  pan              100% of 3 (3 whole value)  confidence 0.97  e.g. XXXXXX234F
+#   notes     aadhaar           33% of 3 (0 whole value)  confidence 0.97  e.g. XXXXXXXX1182
+#   notes     mobile_in         33% of 3 (0 whole value)  confidence 0.93  e.g. XXXXXX3210
+pandas.DataFrame(report.to_records())  # as a table
+```
 
 Context makes generic patterns trustworthy; pass a column name or similar:
 
@@ -66,6 +84,7 @@ credgate.register_detector(credgate.Detector(
 credgate detect notes.txt                      # masked report
 credgate detect --lines --json customers.csv   # one JSON object per match
 git diff --cached | credgate detect --fail     # non-zero exit if PII is found
+credgate scan customers.csv                    # which columns hold PII
 credgate detectors                             # list detectors
 ```
 

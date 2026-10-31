@@ -1,0 +1,67 @@
+# Column-scan conformance cases (see README.md, "Column scan"). Every
+# CredGate implementation must produce exactly the expected rows, in order.
+#
+# Fields per case:
+#   id        unique name
+#   columns   the table: column name -> list of values (null = missing);
+#             all columns of a case have the same length
+#   sample    optional; default 10000
+#   min_rate  optional; default 0
+#   expect    the complete, ordered result rows
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+cases:
+
+  - id: identifier-column
+    columns:
+      cust_pan: ['ABCPE1234F', 'aaacr5055k', '  XYZPQ9876R ', null, '']
+    expect:
+      - {column: cust_pan, type: pan, n_sampled: 3, n_matched: 3, n_full: 3,
+         rate: 1.0, mean_confidence: 0.97, example: XXXXXX234F}
+
+  - id: free-text-column
+    columns:
+      notes: ['Called customer, Aadhaar 542229371182', 'no PII here',
+              'mobile +91 98765 43210', 'nothing']
+    expect:
+      - {column: notes, type: aadhaar, n_sampled: 4, n_matched: 1, n_full: 0,
+         rate: 0.25, mean_confidence: 0.97, example: XXXXXXXX1182}
+      - {column: notes, type: mobile_in, n_sampled: 4, n_matched: 1, n_full: 0,
+         rate: 0.25, mean_confidence: 0.97, example: '+XX XXXXX X3210'}
+
+  - id: column-name-is-context
+    columns:
+      voter_id: ['FSO6231132', 'JFK5504535']
+      code: ['FSO6231132', 'JFK5504535']
+    expect:
+      - {column: voter_id, type: voter_epic, n_sampled: 2, n_matched: 2,
+         n_full: 2, rate: 1.0, mean_confidence: 0.97, example: XXXXXX1132}
+
+  - id: evenly-spaced-sample
+    sample: 2
+    columns:
+      id: ['ABCPE1234F', 'x', 'y', 'z', 'ABCPE1234F']
+    expect:
+      - {column: id, type: pan, n_sampled: 2, n_matched: 1, n_full: 1,
+         rate: 0.5, mean_confidence: 0.85, example: XXXXXX234F}
+
+  - id: min-rate-filters-types
+    min_rate: 0.3
+    columns:
+      notes: ['Called customer, Aadhaar 542229371182', 'no PII here',
+              'mobile +91 98765 43210', 'nothing']
+    expect: []
+
+  - id: ordering-by-column-then-rate
+    columns:
+      contact: ['priya.n@oksbi', 'priya.nair@example.org',
+                'rahul@ybl', 'ok']
+      empty: [null, '', '   ', null]
+    expect:
+      - {column: contact, type: upi_id, n_sampled: 4, n_matched: 2, n_full: 2,
+         rate: 0.5, mean_confidence: 0.95, example: XXXXX.X@Xksbi}
+      - {column: contact, type: email, n_sampled: 4, n_matched: 1, n_full: 1,
+         rate: 0.25, mean_confidence: 0.95, example: XXXXX.XXXX@XXXXXXX.org}

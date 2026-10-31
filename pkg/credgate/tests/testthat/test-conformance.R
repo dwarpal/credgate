@@ -65,3 +65,19 @@ for (case in conformance("detect.yaml")$cases) {
     }
   })
 }
+
+for (case in conformance("scan.yaml")$cases) {
+  test_that(paste("scan:", case$id), {
+    as_column <- function(v) vapply(v, function(x) if (is.null(x)) NA_character_ else x, "")
+    data <- as.data.frame(lapply(case$columns, as_column), check.names = FALSE)
+    got <- scan_pii(data, sample = case$sample %||% 10000L, min_rate = case$min_rate %||% 0)
+    got <- as.data.frame(unclass(got))
+    expect_equal(nrow(got), length(case$expect))
+    for (i in seq_along(case$expect)) {
+      e <- case$expect[[i]]
+      for (field in names(e)) {
+        expect_equal(got[[field]][i], e[[field]], info = paste("row", i, field))
+      }
+    }
+  })
+}

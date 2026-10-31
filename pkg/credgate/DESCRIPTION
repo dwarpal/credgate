@@ -1,6 +1,6 @@
 Package: credgate
 Title: Detect Indian Personal Data Before It Reaches Language Models
-Version: 0.1.0
+Version: 0.1.0.9000
 Authors@R:
     c(person("Bharat", "Sikka", role = c("aut", "cre", "cph"),
              email = "bharat8sikka@gmail.com"),
