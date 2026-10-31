@@ -1,0 +1,219 @@
+#' Detect PII in text
+#'
+#' Runs every registered detector over normalised text, validates candidates
+#' (checksums, code tables), scores them from nearby context and resolves
+#' overlapping matches (the more confident, then the longer, span wins - so
+#' a GSTIN is reported once, not also as the PAN inside it).
+#'
+#' @param text A character vector.
+#' @param detectors Detector ids to run; `NULL` runs all registered
+#'   detectors (see [cg_detectors()]).
+#' @param context Optional extra context per element of `text` (recycled),
+#'   treated as if it appeared next to every match. `scan_pii()` (planned) passes column
+#'   names here, so a column called `voter_id` supports Voter ID matches.
+#' @param min_confidence Drop matches scoring below this value.
+#' @param window Number of characters either side of a match searched for
+#'   context keywords; `NULL` uses the spec's `context_window`.
+#' @return A data frame of class `cg_spans` with one row per match:
+#'   `doc` (index into `text`), `start`, `end` (character positions in the
+#'   original text), `type`, `class`, `value`, `canonical`, `confidence` and
+#'   `reasons`. Printing masks the values.
+#' @export
+#' @examples
+#' detect_pii("Customer PAN ABCPE1234F, GSTIN 27AAPFU0939F1ZV")
+detect_pii <- function(text, detectors = NULL, context = NULL,
+                       min_confidence = 0, window = NULL) {
+  if (!is.character(text)) {
+    rlang::abort("`text` must be a character vector.")
+  }
+  if (!is.null(context)) {
+    context <- rep_len(as.character(context), length(text))
+    context[is.na(context)] <- ""
+  }
+  window <- window %||% the$engine$scoring$context_window
+  norm <- cg_normalise(text)
+  ntext <- vapply(norm, `[[`, character(1), "text")
+
+  found <- lapply(get_detectors(detectors), run_detector,
+    text = text, norm = norm, ntext = ntext, context = context,
+    window = window
+  )
+  spans <- do.call(rbind, c(list(empty_spans()), found))
+  spans <- resolve_overlaps(spans)
+  spans <- spans[spans$confidence >= min_confidence, , drop = FALSE]
+  spans <- spans[order(spans$doc, spans$start), , drop = FALSE]
+  rownames(spans) <- NULL
+  structure(spans, class = c("cg_spans", "data.frame"))
+}
+
+run_detector <- function(det, text, norm, ntext, context, window) {
+  locs <- lapply(det$pattern, function(pattern) {
+    loc <- stringi::stri_locate_all_regex(
+      ntext, pattern,
+      omit_no_match = TRUE,
+      capture_groups = !is.null(det$capture),
+      opts_regex = stringi::stri_opts_regex(case_insensitive = det$ignore_case)
+    )
+    if (!is.null(det$capture)) {
+      loc <- lapply(loc, function(m) attr(m, "capture_groups")[[det$capture]])
+    }
+    loc
+  })
+  loc <- Reduce(function(a, b) Map(rbind, a, b), locs)
+  counts <- vapply(loc, nrow, integer(1))
+  if (sum(counts) == 0) {
+    return(NULL)
+  }
+  doc <- rep(seq_along(ntext), counts)
+  m <- do.call(rbind, loc)
+  s <- m[, 1]
+  e <- m[, 2]
+  matched <- stringi::stri_sub(ntext[doc], s, e)
+
+  ok <- det$validate(matched)
+  doc <- doc[ok]
+  s <- s[ok]
+  e <- e[ok]
+  matched <- matched[ok]
+  if (length(doc) == 0) {
+    return(NULL)
+  }
+
+  n <- nchar(ntext[doc])
+  around <- paste(
+    stringi::stri_sub(ntext[doc], pmax(1L, s - window), s - 1L),
+    stringi::stri_sub(ntext[doc], e + 1L, pmin(n, e + window)),
+    if (is.null(context)) "" else context[doc]
+  )
+  ctx_hit <- find_keyword(around, det$context)
+  neg_hit <- find_keyword(around, det$negative)
+
+  if (det$context_required) {
+    keep <- !is.na(ctx_hit)
+    doc <- doc[keep]
+    s <- s[keep]
+    e <- e[keep]
+    matched <- matched[keep]
+    ctx_hit <- ctx_hit[keep]
+    neg_hit <- neg_hit[keep]
+    if (length(doc) == 0) {
+      return(NULL)
+    }
+  }
+
+  scoring <- the$engine$scoring
+  score <- if (is.function(det$base)) det$base(matched) else rep(det$base, length(doc))
+  score[!is.na(ctx_hit)] <- score[!is.na(ctx_hit)] +
+    (1 - score[!is.na(ctx_hit)]) * scoring$context_boost
+  score[!is.na(neg_hit)] <- score[!is.na(neg_hit)] * scoring$negative_factor
+
+  reasons <- paste0("matched ", det$label, " pattern")
+  if (!is.null(det$checks)) {
+    reasons <- paste0(reasons, "; ", det$checks)
+  }
+  reasons <- paste0(
+    reasons,
+    ifelse(is.na(ctx_hit), "", paste0("; context '", ctx_hit, "'")),
+    ifelse(is.na(neg_hit), "", paste0("; negative context '", neg_hit, "'"))
+  )
+  if (!is.null(det$describe)) {
+    reasons <- paste0(reasons, "; ", det$describe(matched))
+  }
+
+  orig <- map_spans(norm, doc, s, e)
+  data.frame(
+    doc = doc,
+    start = orig$start,
+    end = orig$end,
+    type = det$id,
+    class = det$class,
+    value = stringi::stri_sub(text[doc], orig$start, orig$end),
+    canonical = det$canonical(matched),
+    confidence = round(score, scoring$digits),
+    reasons = reasons
+  )
+}
+
+find_keyword <- function(x, pattern) {
+  if (is.null(pattern)) {
+    return(rep(NA_character_, length(x)))
+  }
+  stringi::stri_extract_first_regex(
+    x, pattern,
+    opts_regex = stringi::stri_opts_regex(case_insensitive = TRUE)
+  )
+}
+
+map_spans <- function(norm, doc, s, e) {
+  start <- s
+  end <- e
+  for (i in which(!vapply(norm[doc], function(n) is.null(n$map), logical(1)))) {
+    mapped <- map_span(norm[[doc[i]]]$map, s[i], e[i])
+    start[i] <- mapped$start
+    end[i] <- mapped$end
+  }
+  list(start = start, end = end)
+}
+
+empty_spans <- function() {
+  data.frame(
+    doc = integer(), start = integer(), end = integer(),
+    type = character(), class = character(), value = character(),
+    canonical = character(), confidence = numeric(), reasons = character()
+  )
+}
+
+resolve_overlaps <- function(spans) {
+  if (nrow(spans) < 2) {
+    return(spans)
+  }
+  # Group spans into clusters of mutually overlapping spans (per document);
+  # most clusters have one span and are kept as is.
+  spans <- spans[order(spans$doc, spans$start), , drop = FALSE]
+  n <- nrow(spans)
+  running_end <- stats::ave(spans$end, spans$doc, FUN = cummax)
+  new_doc <- c(TRUE, spans$doc[-1] != spans$doc[-n])
+  cluster <- cumsum(new_doc | spans$start > c(-Inf, running_end[-n]))
+  size <- tabulate(cluster)
+  keep <- size[cluster] == 1
+
+  # Within a cluster, the more confident, then the longer, span wins.
+  for (rows in split(seq_len(n), cluster)[size > 1]) {
+    rows <- rows[order(-spans$confidence[rows], -(spans$end[rows] - spans$start[rows]))]
+    taken_start <- integer()
+    taken_end <- integer()
+    for (r in rows) {
+      if (!any(spans$start[r] <= taken_end & spans$end[r] >= taken_start)) {
+        keep[r] <- TRUE
+        taken_start <- c(taken_start, spans$start[r])
+        taken_end <- c(taken_end, spans$end[r])
+      }
+    }
+  }
+  spans[keep, , drop = FALSE]
+}
+
+#' @export
+print.cg_spans <- function(x, ..., reveal = FALSE) {
+  if (nrow(x) == 0) {
+    cli::cli_text("No PII detected.")
+    return(invisible(x))
+  }
+  shown <- as.data.frame(unclass(x))[c("doc", "start", "end", "type", "value", "confidence")]
+  if (!reveal) {
+    shown$value <- mask_value(shown$value)
+  }
+  cli::cli_text("{nrow(x)} PII match{?es} (values masked; use {.code x$value} to see them):")
+  print(shown, row.names = FALSE)
+  invisible(x)
+}
+
+# Replace letters and digits with "X", keeping the last 4 characters (2 for
+# short values) - the same convention as UIDAI's masked Aadhaar.
+mask_value <- function(x) {
+  n <- nchar(x)
+  keep <- ifelse(n >= 8, 4L, 2L)
+  prefix <- stringi::stri_sub(x, 1L, n - keep)
+  prefix <- stringi::stri_replace_all_regex(prefix, "[\\p{L}\\p{N}]", "X")
+  paste0(prefix, stringi::stri_sub(x, n - keep + 1L, n))
+}

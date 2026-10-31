@@ -1,0 +1,7 @@
+.Rproj.user/
+.Rhistory
+.RData
+*.Rcheck/
+credgate_*.tar.gz
+result
+.DS_Store

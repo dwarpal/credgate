@@ -1,0 +1,308 @@
+# CredGate built-in PII detectors.
+#
+# Shared by every CredGate implementation (R, Python). The schema and engine
+# semantics are defined in spec/README.md; engine parameters are in
+# spec/engine.yaml. Write regular expressions in single-quoted strings
+# (backslashes are literal; a single quote is written '').
+#
+# `{{name}}` inside a pattern, context, negative or rule `match` is replaced
+# by the fragment `name`, or by the list `name` joined with "|".
+
+spec_version: 1
+
+lists:
+  # Two-letter state/UT codes used in driving licence and vehicle numbers.
+  india_state_codes: ['AN', 'AP', 'AR', 'AS', 'BR', 'CG', 'CH', 'DD', 'DL', 'DN',
+                      'GA', 'GJ', 'HP', 'HR', 'JH', 'JK', 'KA', 'KL', 'LA', 'LD',
+                      'MH', 'ML', 'MN', 'MP', 'MZ', 'NL', 'OD', 'OR', 'PB', 'PY',
+                      'RJ', 'SK', 'TG', 'TN', 'TR', 'TS', 'UA', 'UK', 'UP', 'WB']
+  # GST state codes: 01-38 (38 = Ladakh), 96 foreign, 97 other territory,
+  # 99 centre jurisdiction. Used by the `gstin` validator.
+  gst_state_codes: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
+                    '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',
+                    '21', '22', '23', '24', '25', '26', '27', '28', '29', '30',
+                    '31', '32', '33', '34', '35', '36', '37', '38', '96', '97',
+                    '99']
+  # UPI handles of common PSP apps and banks.
+  upi_handles: ['ybl', 'ibl', 'axl', 'apl', 'yapl', 'upi', 'paytm', 'pthdfc',
+                'ptaxis', 'ptsbi', 'ptyes', 'okaxis', 'okhdfcbank', 'okicici',
+                'oksbi', 'axisbank', 'axisb', 'icici', 'sbi', 'hdfcbank', 'kotak',
+                'idfcbank', 'idfcfirst', 'pnb', 'boi', 'barodampay', 'unionbank',
+                'cnrb', 'indus', 'federal', 'fbl', 'kbl', 'rbl', 'ratn', 'yesbank',
+                'yesbankltd', 'aubank', 'dbs', 'citi', 'hsbc', 'sc', 'ikwik',
+                'freecharge', 'airtel', 'jio', 'waaxis', 'wahdfcbank', 'wasbi',
+                'waicici', 'abfspay', 'naviaxis', 'superyes', 'jupiteraxis', 'slc',
+                'timecosmos', 'pingpay', 'dhani', 'mahb', 'allbank', 'andb',
+                'centralbank', 'cmsidfc', 'dlb', 'equitas', 'ezeepay', 'idbi',
+                'iob', 'kvb', 'kvbank', 'lvb', 'obc', 'psb', 'uco', 'united',
+                'vijb', 'uboi', 'utbi', 'aubankltd', 'postbank', 'ippb']
+
+tables:
+  # Fourth character of a PAN (sixth of a GSTIN).
+  pan_holder_types:
+    'P': individual
+    'C': company
+    'H': HUF
+    'F': firm
+    'A': association of persons
+    'T': trust
+    'B': body of individuals
+    'L': local authority
+    'J': artificial juridical person
+    'G': government
+
+fragments:
+  aadhaar_context: 'aadhaa?r|\badhar\b|\buid(?:ai)?\b|आधार'
+  id_negative_context: '\border\b|\binvoice\b|\btxn\b|\btransaction\b|\bref(erence)?\b|\bticket\b|\btracking\b|\bawb\b|\butr\b'
+
+  # Card network prefixes and lengths, checked on the digits only.
+  card_iin: '^(?:4[0-9]{12}(?:[0-9]{3}){0,2}|5[1-5][0-9]{14}|2(?:2[2-9][1-9]|2[3-9][0-9]|[3-6][0-9]{2}|7[01][0-9]|720)[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11,16}|35[0-9]{14,17}|6[0-9]{15,18}|8[12][0-9]{14}|50[0-9]{14,17})$'
+
+  # --- Names -------------------------------------------------------------
+  # Words that end a name: field labels, relation markers, honorifics.
+  name_stop_latin: '(?!(?i:address|addr|mobile|phone|mob|pan|aadhaar|aadhar|dob|age|gender|sex|email|pin|father|mother|son|daughter|wife|husband|and|account|a/c|the|of|is|was|in|at|on|for|to|with|no|name|resident|r/o|s/o|d/o|w/o|c/o|shri|shree|sri|smt|sh|kumari|km|mr|mrs|ms|miss|dr|late|sushri)(?![\p{L}]))'
+  # Labels, relations and postpositions (possessives such as का/की/के).
+  name_stop_indic: '(?!(?:पता|मोबाइल|फोन|पिता|माता|पति|पत्नी|पुत्र|पुत्री|आयु|उम्र|निवासी|ग्राम|जन्म|और|का|की|के|को|ने|से|है|में)(?![\p{L}\p{M}]))'
+  indic_word: '[\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gujarati}\p{Script=Gurmukhi}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Oriya}]+'
+  # Capitalised Latin word ("Ramesh", "RAMESH", "R." when another word follows).
+  latin_cap_word: '\p{Lu}[\p{L}'']*(?:\.(?=\s\p{L}))?'
+  # Any-case Latin word; used only after an explicit label or relation.
+  latin_any_word: '\p{L}[\p{L}'']*(?:\.(?=\s\p{L}))?'
+  latin_name_cap: '{{name_stop_latin}}{{latin_cap_word}}(?:[ ]{{name_stop_latin}}{{latin_cap_word}}){0,3}'
+  latin_name_any: '{{name_stop_latin}}{{latin_any_word}}(?:[ ]{{name_stop_latin}}{{latin_any_word}}){0,3}'
+  indic_name: '{{name_stop_indic}}{{indic_word}}(?:[ ]{{name_stop_indic}}{{indic_word}}){0,2}'
+  honorific_latin: '(?i:\b(?:shri|shree|sri|smt|kumari|km|mr|mrs|ms|miss|dr|late|sh|sushri))\.?\s{1,2}'
+  honorific_indic: '(?:श्री|श्रीमती|कुमारी|सुश्री|स्व\.|स्वर्गीय|डॉ\.?|श्रीमान)\s{1,2}'
+  relation_latin: '(?i:\b(?:[sdwch]/o|son of|daughter of|wife of|husband of|care of|father''?s? name|mother''?s? name|spouse''?s? name|guardian)\b)\.?\s{0,2}[:-]?\s{0,2}'
+  label_latin: '(?i:\b(?:name|naam|customer name|applicant name|full name|nominee|borrower|co-borrower|insured|policy ?holder|patient(?: name)?|account holder|beneficiary))\s{0,2}[:-]\s{0,3}'
+  label_indic: '(?:नाम|पिता का नाम|पति का नाम|माता का नाम)\s{0,2}[:-]\s{0,3}'
+
+  # --- Addresses ---------------------------------------------------------
+  address_label_latin: '(?i:\b(?:address|addr|residential address|permanent address|correspondence address|r/o|resident of)\b)\.?\s{0,2}[:-]?\s{0,3}'
+  address_label_indic: '(?:पता|निवासी)\s{0,2}[:-]?\s{0,3}'
+  address_keyword_latin: '(?i:\b(?:house|h\.?\s?no|flat|plot|door no|shop no|room no|qtr|quarter no|bldg|building|vill(?:age)?|gram)\b)'
+  address_keyword_indic: '(?:मकान|ग्राम|गांव|गाँव|मोहल्ला)'
+  # Ends at a new field (line break, ";" or "|"), the end of text, or the
+  # next contact/identifier label.
+  address_terminator: '(?=\s*(?:[\n;|]|$|(?i:\b(?:mobile|phone|mob|email|pan|aadhaar|dob)\b)))'
+  # Starts on a real character, not on the label's colon or spacing.
+  address_body: '[^\s:;|-][^\n;|]{5,159}?'
+  pin_tail: '\b[1-9][0-9]{2}\s?[0-9]{3}\b'
+
+detectors:
+
+  # --- Government identifiers --------------------------------------------
+
+  - id: aadhaar
+    class: identity_strong
+    label: Aadhaar number
+    patterns: ['[2-9][0-9]{3}[ -]?[0-9]{4}[ -]?[0-9]{4}']
+    bounded: true
+    validate: [verhoeff]
+    checks: Verhoeff checksum valid
+    base: 0.85
+    context: '{{aadhaar_context}}'
+    negative: '{{id_negative_context}}'
+
+  - id: aadhaar_masked
+    class: quasi
+    label: Masked Aadhaar number
+    patterns: ['[Xx*]{4}[ -]?[Xx*]{4}[ -]?[0-9]{4}']
+    bounded: true
+    base: 0.9
+    context: '{{aadhaar_context}}'
+
+  - id: aadhaar_vid
+    class: identity_strong
+    label: Aadhaar Virtual ID
+    patterns: ['[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}']
+    bounded: true
+    validate: [verhoeff]
+    checks: Verhoeff checksum valid
+    base: 0.9
+    context: '\bvid\b|virtual\s*id'
+    context_required: true
+
+  - id: pan
+    class: identity_strong
+    label: PAN
+    patterns: ['[A-Z]{3}[ABCFGHLJPT][A-Z][0-9]{4}[A-Z]']
+    bounded: true
+    ignore_case: true
+    base: 0.85
+    context: '\bpan\b|permanent\s+account|पैन'
+    describe: {position: 4, table: pan_holder_types, template: 'holder type: {}'}
+
+  - id: voter_epic
+    class: identity_strong
+    label: Voter ID (EPIC)
+    patterns: ['[A-Z]{3}[0-9]{7}']
+    bounded: true
+    ignore_case: true
+    base: 0.85
+    context: '\bvoter|\bepic\b|election|electoral|मतदाता'
+    context_required: true
+
+  - id: passport
+    class: identity_strong
+    label: Indian passport number
+    patterns: ['[A-PR-WY][1-9][0-9] ?[0-9]{4}[1-9]']
+    bounded: true
+    ignore_case: true
+    base: 0.85
+    context: 'passport|पासपोर्ट'
+    context_required: true
+
+  - id: driving_licence
+    class: identity_strong
+    label: Driving licence number
+    patterns: ['(?:{{india_state_codes}})[ -]?[0-9]{2}[ -]?(?:19|20)[0-9]{2}[ -]?[0-9]{7}']
+    bounded: true
+    ignore_case: true
+    base: 0.75
+    context: 'driving|licen[cs]e|\bdl\b|ड्राइविंग'
+
+  # --- Financial ---------------------------------------------------------
+
+  - id: gstin
+    class: financial
+    label: GSTIN
+    patterns: ['[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]']
+    bounded: true
+    ignore_case: true
+    validate: [gstin]
+    checks: GSTIN state code and check character valid
+    base: 0.97
+    context: '\bgst|जीएसटी'
+    describe: {position: 6, table: pan_holder_types, template: 'embeds PAN of {}'}
+
+  - id: card
+    class: financial
+    label: Payment card number
+    patterns: ['[0-9](?:[ -]?[0-9]){12,18}']
+    bounded: true
+    validate: [luhn, {match_stripped: '{{card_iin}}'}]
+    checks: Luhn checksum and card network prefix valid
+    base: 0.9
+    context: 'card|credit|debit|visa|master|rupay|amex|कार्ड'
+
+  - id: upi_id
+    class: financial
+    label: UPI ID
+    # No domain dot after the handle, so email addresses are not matched.
+    patterns: ['(?<![\p{L}\p{N}._-])[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9]{1,63}(?![\p{L}\p{N}@])(?!\.[A-Za-z])']
+    base:
+      default: 0.6
+      rules:
+        - {match: '(?i)@(?:{{upi_handles}})$', value: 0.95}
+    context: '\bupi\b|\bvpa\b|gpay|phonepe|paytm|bhim'
+    describe:
+      default: unknown handle
+      rules:
+        - {match: '(?i)@(?:{{upi_handles}})$', text: known UPI handle}
+    canonical: lower
+
+  - id: ifsc
+    class: quasi
+    label: IFSC code
+    patterns: ['[A-Z]{4}0[A-Z0-9]{6}']
+    bounded: true
+    ignore_case: true
+    base:
+      default: 0.6
+      rules:
+        - {match: '^[^a-z]*$', value: 0.9}
+    context: '\bifsc|\bbranch\b|\bbank\b'
+
+  - id: bank_account
+    class: financial
+    label: Bank account number
+    patterns: ['[0-9]{9,18}']
+    bounded: true
+    base: 0.85
+    context: '\ba/?c\b|\bacct|\baccount|\bsavings\b|\bcurrent a|\bbank\b|खाता|बैंक'
+    context_required: true
+
+  # --- Contact -----------------------------------------------------------
+
+  - id: mobile_in
+    class: contact
+    label: Indian mobile number
+    patterns: ['(?:\+91[ -]?|91[ -]|0)?[6-9][0-9](?:[ -]?[0-9]){8}']
+    bounded: true
+    # A number written with +91 or a leading 0 is far more likely a phone.
+    base:
+      default: 0.65
+      rules:
+        - {match: '^(?:\+91|0|91[ -])', value: 0.85}
+    context: '\bmob|\bphone|\bcontact|\bcell\b|whats ?app|\btel\b|\bph\b|मोबाइल|फ़ोन|फोन|संपर्क'
+    canonical: last10_digits
+
+  - id: email
+    class: contact
+    label: Email address
+    patterns: ['(?<![\p{L}\p{N}._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![\p{L}\p{N}])']
+    base: 0.95
+    canonical: lower
+
+  - id: pincode
+    class: quasi
+    label: PIN code
+    patterns: ['[1-9][0-9]{2} ?[0-9]{3}']
+    bounded: true
+    base: 0.8
+    context: '\bpin\b|pin ?code|postal|\bzip\b|पिन'
+    context_required: true
+
+  # --- Health (Ayushman Bharat Digital Mission) ---------------------------
+
+  - id: abha_number
+    class: health
+    label: ABHA number
+    patterns: ['[0-9]{2}[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}']
+    bounded: true
+    # The official 2-4-4-4 hyphenated layout is distinctive; 14 bare digits
+    # are not (CKYC numbers have the same length).
+    base:
+      default: 0.4
+      rules:
+        - {match: '^[0-9]{2}-[0-9]{4}-[0-9]{4}-[0-9]{4}$', value: 0.85}
+    context: '\babha\b|health ?id|ayushman|\babdm\b|\bndhm\b|आभा'
+
+  - id: abha_address
+    class: health
+    label: ABHA address
+    patterns: ['(?<![\p{L}\p{N}._])[A-Za-z0-9][A-Za-z0-9._]{2,31}@(?:abdm|sbx)(?![\p{L}\p{N}])']
+    ignore_case: true
+    base: 0.97
+    canonical: lower
+
+  # --- Names and addresses (rule-based) ------------------------------------
+  # These fire only where the text signals a name or address: an honorific,
+  # a relation (S/o, D/o), a field label, or a house/village keyword followed
+  # by a PIN code. Names in running text without such a cue are not found.
+
+  - id: person_name
+    class: personal
+    label: Person name
+    patterns:
+      - '{{honorific_latin}}(?<value>{{latin_name_cap}})'
+      - '{{relation_latin}}(?<value>{{latin_name_any}})'
+      - '{{label_latin}}(?<value>{{latin_name_any}})'
+      - '{{honorific_indic}}(?<value>{{indic_name}})'
+      - '{{label_indic}}(?<value>{{indic_name}})'
+    capture: value
+    base: 0.8
+    canonical: collapse_upper
+
+  - id: address
+    class: personal
+    label: Postal address
+    patterns:
+      - '{{address_label_latin}}(?<value>{{address_body}}){{address_terminator}}'
+      - '{{address_label_indic}}(?<value>{{address_body}}){{address_terminator}}'
+      - '(?<value>{{address_keyword_latin}}[^\n;|]{3,160}?{{pin_tail}})'
+      - '(?<value>{{address_keyword_indic}}[^\n;|]{3,160}?{{pin_tail}})'
+    capture: value
+    base: 0.85
+    canonical: collapse_upper
