@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-10-31)
+
+- Documentation only: the README (shown on PyPI) lists where Microsoft
+  Presidio does better than credgate, states that the benchmark corpus is
+  synthetic and included in the repository, and that the comparison is
+  independent. No code changes.
+
 ## 0.3.0 (2026-10-31)
 
 - Documentation: using credgate with local LLMs (Ollama, vLLM and other
