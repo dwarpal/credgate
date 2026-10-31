@@ -231,6 +231,28 @@ Local R packages come from the user's Nix overlay (`bundles/hash-bundle-sikka/r-
 
 ## 5. Positioning (to verify in detail during phases 3–5)
 
+**Decided 2026-10-31.** Detection on its own is easy to copy (Presidio,
+Macie, Google DLP, anyone's regexes), so it is the engine, not the product.
+The product is: *use LLMs on regulated Indian data, and be able to prove
+you did it safely.* What sets credgate apart:
+
+- **Proof, not only protection:** reversible tokenisation, a proxy in
+  front of local or hosted models, policies and a hash-chained audit log a
+  DPO can show a regulator under DPDP.
+- **Rules as a feature:** deterministic, explainable decisions
+  ("Verhoeff checksum passed, near 'Aadhaar'"), identical in R and Python,
+  offline and fast. Auditors can read why something was flagged.
+- **Where data scientists work:** data frames, notebooks, RStudio,
+  Positron and VS Code, not only engineering pipelines.
+- **India in depth:** Indic scripts, Hinglish, official reference lists
+  (PIN codes, IFSC, UPI handles) and matching against a customer master,
+  rather than India as one more region.
+
+Two gaps to close: accuracy evidence is synthetic only (get a small
+real-world evaluation set annotated with a partner, never committed), and
+the direction is not yet validated with users (talk to 4-5 data science or
+compliance people at banks, NBFCs and insurers).
+
 | Tool | What it is | How we differ |
 |---|---|---|
 | ellmer | LLM client library | We add policy/PII/audit before egress, native Ollama ctx/think, and runtime context; optional wrapper over ellmer chats |
@@ -242,10 +264,20 @@ Local R packages come from the user's Nix overlay (`bundles/hash-bundle-sikka/r-
 
 ## 6. Improvement roadmap (agreed 2026-10-31)
 
-Status as of py-v0.2.0 / CRAN 0.1.0 (under review). Order of work: the
-evaluation harness first, because it measures items 1-3 and becomes the
-regression suite; then cheap security wins; then masking, policy and audit
-as one chain; maturity throughout.
+Status as of py-v0.3.1 / CRAN 0.1.0 (under review). The evaluation
+harness (item 1) is done. **Reordered 2026-10-31** (see section 5):
+accuracy is already ahead of the alternatives on our benchmark, so after a
+few quick accuracy fixes the next work is the product chain - tokenise and
+restore (4), then proxy mode with policy (5) and audit (6) - with security
+and maturity throughout. Further accuracy work (2, 3) follows, using
+deterministic methods only: official reference lists (PIN code directory,
+IFSC master, UPI handles, state and RTO codes, a names list checked for
+regional coverage), propagating a confirmed name through its document,
+cross-field checks (GSTIN contains the PAN), salted-hash matching against a
+customer master, learned linear scoring weights stored in the spec in place
+of hand-tuned constants, and later grammars for addresses and k-anonymity
+risk for tables. Neural NER only as an optional, clearly labelled extra
+layer.
 
 | # | Area | Today | To do |
 |---|---|---|---|
