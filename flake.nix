@@ -117,6 +117,7 @@
             (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ps.pytest ps.hatchling ps.build ]))
             pkgs.ruff
             pkgs.qpdf
+            pkgs.pandoc # lets R CMD check validate README.md
           ];
           # The maintainers' ~/.Renviron pins R_LIBS_SITE to their bundle;
           # ignore it so this shell's packages are used.
