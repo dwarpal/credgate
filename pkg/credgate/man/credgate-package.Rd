@@ -8,8 +8,21 @@
 \description{
 Detects personal data before it leaves the machine, with Indian identifiers built in (Aadhaar with Verhoeff checksum, PAN, GSTIN, voter ID, passport, driving licence and more). Provides column-level PII scans of data frames, previews of what would be masked, reversible tokenisation, policy-based routing and a tamper-evident audit log for compliance review.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/dwarpal/credgate}
+  \item Report bugs at \url{https://github.com/dwarpal/credgate/issues}
+}
+
+}
 \author{
-\strong{Maintainer}: CredGate authors \email{maintainer@example.org}
+\strong{Maintainer}: Bharat Sikka \email{bharat8sikka@gmail.com}
+
+Authors:
+\itemize{
+  \item Aishwarya Bais \email{aishwarya.bais00@gmail.com}
+}
 
 }
 \keyword{internal}

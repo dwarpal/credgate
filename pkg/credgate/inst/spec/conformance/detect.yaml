@@ -129,9 +129,9 @@ cases:
     expect:
       - {type: upi_id, value: priya.s@ybl, confidence: 0.95}
   - id: email-not-upi
-    text: 'mail ramesh@example.co.in'
+    text: 'mail ramesh@mail.example.com'
     expect:
-      - {type: email, value: ramesh@example.co.in, confidence: 0.95}
+      - {type: email, value: ramesh@mail.example.com, confidence: 0.95}
   - id: ifsc-upper
     text: 'HDFC0001234'
     expect:
@@ -296,11 +296,11 @@ cases:
 
   # --- Whole records ----------------------------------------------------------------
   - id: mixed-customer-record
-    text: 'Name: Priya Nair; Mobile: +91 91234 56789; Email: priya.nair@example.in; PAN: ABCPN1234K; UPI: priya.n@oksbi; A/c 50100987654321 IFSC HDFC0004567; Address: House No 7, Civil Lines, Jaipur 302006'
+    text: 'Name: Priya Nair; Mobile: +91 91234 56789; Email: priya.nair@example.org; PAN: ABCPN1234K; UPI: priya.n@oksbi; A/c 50100987654321 IFSC HDFC0004567; Address: House No 7, Civil Lines, Jaipur 302006'
     expect:
       - {type: person_name, value: Priya Nair}
       - {type: mobile_in, value: '+91 91234 56789', confidence: 0.97}
-      - {type: email, value: priya.nair@example.in}
+      - {type: email, value: priya.nair@example.org}
       - {type: pan, value: ABCPN1234K, confidence: 0.97}
       - {type: upi_id, value: priya.n@oksbi, confidence: 0.99}
       - {type: bank_account, value: '50100987654321', confidence: 0.97}

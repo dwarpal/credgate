@@ -12,7 +12,7 @@ synth_indian_pii(n = 10, seed = NULL)
 \item{seed}{Optional random seed; the global RNG state is restored
 afterwards.
 Names are random combinations of common Indian first names and surnames;
-email addresses use the reserved \code{example.com}/\code{example.in} domains.}
+email addresses use the reserved \code{example.com}/\code{example.org} domains.}
 }
 \value{
 A data frame with columns \code{name}, \code{name_hi} (Devanagari),

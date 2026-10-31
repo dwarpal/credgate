@@ -10,7 +10,7 @@
 #' @param seed Optional random seed; the global RNG state is restored
 #'   afterwards.
 #' Names are random combinations of common Indian first names and surnames;
-#' email addresses use the reserved `example.com`/`example.in` domains.
+#' email addresses use the reserved `example.com`/`example.org` domains.
 #'
 #' @return A data frame with columns `name`, `name_hi` (Devanagari),
 #'   `aadhaar`, `aadhaar_vid`, `pan`, `gstin`, `card`, `voter_epic`,
@@ -45,7 +45,7 @@ synth_indian_pii <- function(n = 10, seed = NULL) {
     mobile = paste0(sample(6:9, n, replace = TRUE), rand_digits(n, 9)),
     email = paste0(
       tolower(first), ".", tolower(last), sample(10:99, n, replace = TRUE),
-      "@", sample(c("example.com", "example.in"), n, replace = TRUE)
+      "@", sample(c("example.com", "example.org"), n, replace = TRUE)
     ),
     upi_id = paste0(
       tolower(first), sample(10:99, n, replace = TRUE), "@",

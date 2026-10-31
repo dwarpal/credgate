@@ -9,4 +9,4 @@ for dest in "$root/pkg/credgate/inst/spec" "$root/pkg/python/src/credgate/spec";
   cp -R "$root/spec/." "$dest/"
   echo "spec synced to $dest"
 done
-cp "$root/LICENSE" "$root/pkg/python/LICENSE"
+install -m 644 "$root/LICENSE" "$root/pkg/python/LICENSE"

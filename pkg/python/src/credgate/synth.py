@@ -24,7 +24,7 @@ LOCALITIES = (
     "Shivaji Park", "Anna Salai", "Civil Lines",
 )  # fmt: skip
 CITIES = ("Pune", "Delhi", "Chennai", "Kolkata", "Lucknow", "Jaipur", "Bengaluru", "Indore")
-EMAIL_DOMAINS = ("example.com", "example.in")  # reserved for documentation
+EMAIL_DOMAINS = ("example.com", "example.org")  # reserved for documentation (RFC 2606)
 UPI_HANDLES = ("okaxis", "ybl", "oksbi", "paytm", "ibl")
 UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -37,7 +37,7 @@ def synth_indian_pii(n: int = 10, seed: int | None = None) -> list[dict[str, str
     with a valid checksum can still coincide with a real one by chance, so
     treat generated data as test data and never as anonymised data. Names
     combine common Indian first names and surnames; email addresses use the
-    reserved ``example.com``/``example.in`` domains.
+    reserved ``example.com``/``example.org`` domains.
 
     Uses its own random generator; the global ``random`` state is untouched.
     """
