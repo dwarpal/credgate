@@ -1,4 +1,5 @@
-"""Command-line interface: ``credgate detect``, ``scan``, ``detectors``, ``spec-path``."""
+"""Command-line interface: ``credgate detect``, ``redact``, ``preview``, ``scan``,
+``detectors``, ``spec-path``."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from . import __version__
 from ._spec import spec_path
 from .detect import detect_pii, mask_value
 from .detectors import detectors
+from .redact import preview, redact
 from .scan import scan_pii
 
 
@@ -40,6 +42,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="exit with status 1 if anything is detected (for CI and pre-commit hooks)",
     )
 
+    for name, text in (
+        ("redact", "write the input with PII replaced by placeholders such as [PAN]"),
+        ("preview", "show what would be redacted and why (values masked)"),
+    ):
+        r = sub.add_parser(name, help=text)
+        r.add_argument("files", nargs="*", help="files to read (default: standard input)")
+        r.add_argument("--min-confidence", type=float, default=0.0, metavar="X")
+        r.add_argument("--context", default=None, help="extra context applied to every match")
+
     s = sub.add_parser("scan", help="report which columns of a CSV file contain PII")
     s.add_argument("file", help="CSV file with a header row")
     s.add_argument("--sample", type=int, default=10000, help="values checked per column")
@@ -65,7 +76,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "scan":
         return _scan(args)
+    if args.command in ("redact", "preview"):
+        return _redact(args)
     return _detect(args)
+
+
+def _read(source: str) -> str:
+    if source == "-":
+        return sys.stdin.read()
+    with open(source, encoding="utf-8") as f:
+        return f.read()
+
+
+def _redact(args: argparse.Namespace) -> int:
+    for source in args.files or ["-"]:
+        content = _read(source)
+        if args.command == "redact":
+            sys.stdout.write(
+                redact(content, context=args.context, min_confidence=args.min_confidence)
+            )
+        else:
+            print(preview(content, context=args.context, min_confidence=args.min_confidence))
+    return 0
 
 
 def _scan(args: argparse.Namespace) -> int:

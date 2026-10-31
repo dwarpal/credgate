@@ -1,0 +1,53 @@
+# Redaction conformance cases (see README.md, "Redaction"). Every CredGate
+# implementation must produce exactly `redacted` from `text`.
+#
+# Fields per case:
+#   id              unique name
+#   text            input text
+#   min_confidence  optional; default 0
+#   context         optional extra context
+#   redacted        the expected output
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+cases:
+
+  - id: name-and-pan
+    text: 'Name: Priya Nair; PAN: ABCPN1234K'
+    redacted: 'Name: [PERSON_NAME]; PAN: [PAN]'
+
+  - id: several-types-keep-punctuation
+    text: 'UPI priya.n@oksbi, mobile +91 98765 43210.'
+    redacted: 'UPI [UPI_ID], mobile [MOBILE_IN].'
+
+  - id: devanagari-digits-and-surrounding-text
+    text: 'आधार ७१८४ ६७२८ ४२७६ है'
+    redacted: 'आधार [AADHAAR] है'
+
+  - id: invisible-character-inside-identifier
+    text: "PAN ABC​PE1234F ok"
+    redacted: 'PAN [PAN] ok'
+
+  - id: nothing-to-redact
+    text: 'The meeting is at 10:30 in room 4.'
+    redacted: 'The meeting is at 10:30 in room 4.'
+
+  - id: low-confidence-kept-by-default
+    text: 'order no 878245671885'
+    redacted: 'order no [AADHAAR]'
+
+  - id: min-confidence-skips-low-scores
+    text: 'order no 878245671885'
+    min_confidence: 0.5
+    redacted: 'order no 878245671885'
+
+  - id: context-argument
+    text: 'FSO6231132'
+    context: voter_id
+    redacted: '[VOTER_EPIC]'
+
+  - id: whole-record
+    text: 'Name: Priya Nair; Mobile: +91 91234 56789; Email: priya.nair@example.org; A/c 50100987654321 IFSC HDFC0004567; Address: House No 7, Civil Lines, Jaipur 302006'
+    redacted: 'Name: [PERSON_NAME]; Mobile: [MOBILE_IN]; Email: [EMAIL]; A/c [BANK_ACCOUNT] IFSC [IFSC]; Address: [ADDRESS]'

@@ -11,8 +11,9 @@ fully air-gapped setups.
 It ships as an R package and a Python package (with a CLI) that read the same
 detection rules, so both languages find exactly the same matches.
 
-> **Status: early development (pre-alpha).** PII detection and column
-> scanning (`scan_pii()`) work today.
+> **Status: early development (pre-alpha).** PII detection, column
+> scanning (`scan_pii()`) and irreversible redaction (`redact()`,
+> `preview()`) work today.
 > Redaction/restore, policies, the audit log, proxy mode and the IDE
 > assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
 
@@ -74,6 +75,8 @@ Scanned 2 columns; PII found in 2: cust_pan and notes
 credgate detect notes.txt                      # masked report
 credgate detect --lines --json customers.csv   # one JSON object per match
 credgate scan customers.csv                    # which columns hold PII
+credgate redact notes.txt > notes.redacted.txt  # replace PII with [PAN] etc.
+credgate preview notes.txt                     # what would be redacted, and why
 git diff --cached | credgate detect --fail     # non-zero exit if PII is found
 ```
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- New `redact()`: replaces every detected identifier with a placeholder
+  naming its type (`[PAN]`, `[PERSON_NAME]`); irreversible.
+- New `preview()`: shows the redacted text with each identifier (value
+  masked), its confidence and reasons, without sending anything.
+- New `credgate redact` and `credgate preview` commands.
+
 ## 0.2.0 (2026-10-31)
 
 - New `scan_pii()`: reports, per column of a table (a pandas DataFrame or a

@@ -82,3 +82,13 @@ def test_scan(case):
     for row, e in zip(rows, case["expect"], strict=True):
         for field, value in e.items():
             assert row[field] == value, (field, row)
+
+
+REDACT_CASES = conformance("redact.yaml")["cases"]
+
+
+@pytest.mark.parametrize("case", REDACT_CASES, ids=[c["id"] for c in REDACT_CASES])
+def test_redact(case):
+    kwargs = {"context": case.get("context"), "min_confidence": case.get("min_confidence", 0)}
+    assert credgate.redact(case["text"], **kwargs) == case["redacted"]
+    assert credgate.preview(case["text"], **kwargs).redacted == [case["redacted"]]

@@ -240,7 +240,25 @@ Local R packages come from the user's Nix overlay (`bundles/hash-bundle-sikka/r-
 | gptstudio, chattr | earlier chat add-ins | No policy layer, limited providers/tools, no audit |
 | Posit Assistant | commercial (subscription or BYOK) | Closed, no Indian PII or DPDP mapping, no air-gapped local-only governance. Proxy mode can *govern it* too (BYOK base URL) |
 
-## 6. Open questions for you
+## 6. Improvement roadmap (agreed 2026-10-31)
+
+Status as of py-v0.2.0 / CRAN 0.1.0 (under review). Order of work: the
+evaluation harness first, because it measures items 1-3 and becomes the
+regression suite; then cheap security wins; then masking, policy and audit
+as one chain; maturity throughout.
+
+| # | Area | Today | To do |
+|---|---|---|---|
+| 1 | Accuracy benchmarking | Conformance cases check expected matches (correctness), not accuracy | Labelled synthetic corpus; per-type precision, recall, F1; published report. Compare with Microsoft Presidio (MIT, has Indian recognisers); verify that other named tools exist, run locally and allow published benchmarks before comparing |
+| 2 | False positives | Checksums, negative context, context-required types, confidence scores | Hard-negative sets (order/invoice/transaction IDs, amounts, product codes); measure, then tighten (bare 12-digit Aadhaar, bare 10-digit mobile, capitalised words after honorifics) |
+| 3 | Multilingual | Devanagari keywords/digits, digits in 11 scripts, names after Hindi honorifics/labels | Keywords for more Indic languages, Hinglish and transliterated cues, optional statistical name detector via the detector hook |
+| 4 | Reversible masking | `redact()` and `preview()` (irreversible placeholders) | Tokenise/restore with a session vault, encrypted persistence, key management, access control on restore, streaming restore |
+| 5 | Policy engine | Designed (section 3) | Presets, data classes, endpoint-specific rules; allow / redact / mask / tokenise / block |
+| 6 | Audit and compliance | Designed (section 3) | Hash-chained records of detections and decisions, no raw PII, DPDP-oriented reports (HTML/CSV) |
+| 7 | Security | Masked output by default, no PII in logs, SHA-pinned CI actions, C-locale tests | Threat model; property-based fuzzing (Unicode, invisible characters, long inputs, regex blow-up); adversarial cases |
+| 8 | Project maturity | Tagged releases, CI on Linux and macOS, Nix sandbox tests | API stability and compatibility policy; integration and corpus-driven regression tests; 1.0 after items 4-6 |
+
+## 7. Open questions for you
 1. Package names: `dwarpal` + `sahayak`, or the `credgate` family? What is the proxy project called, and should the policy YAML and audit schema be *shared* with it (one format for both)?
 2. Should phase 1 include `surrogate` mode, or ship with `redact`/`tokenise` only?
 3. Minimum R version: I suggest R ≥ 4.3 for S7 and native pipe. Do your target bank environments run older R?

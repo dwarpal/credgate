@@ -60,6 +60,25 @@ detect_pii("आधार: ५४२२ २९३७ ११८२")$type
 #> [1] "aadhaar"
 ```
 
+### Redacting and previewing
+
+`redact()` replaces each identifier with a placeholder naming its type;
+`preview()` shows what would be redacted and why, before anything is sent:
+
+```r
+redact("Name: Priya Nair; PAN: ABCPN1234K")
+#> [1] "Name: [PERSON_NAME]; PAN: [PAN]"
+
+preview("Name: Priya Nair; PAN: ABCPN1234K; order no 878245671885")
+#> 3 items would be redacted:
+#>   Name: [PERSON_NAME]; PAN: [PAN]; order no [AADHAAR]
+```
+
+followed by a table of each placeholder, the masked value, its confidence
+and the reasons (here the order number scores only 0.42 because of the
+word "order"; use `min_confidence` to leave such matches alone). Both are
+new after 0.1.0: install the GitHub version to use them.
+
 ### Scanning data frames
 
 `scan_pii()` reports which columns hold PII and how much, without sending

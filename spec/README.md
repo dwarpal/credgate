@@ -133,6 +133,23 @@ Reports, per column of a table, which PII types occur and how often. Defaults:
 Conformance cases are in `conformance/scan.yaml`; each lists the complete
 expected result.
 
+## Redaction (`redact`, `preview`)
+
+Irreversible masking of a text before it is shared:
+
+1. Detect with the given options (`min_confidence`, default 0; detectors;
+   context).
+2. Replace every reported span, in the original text, by `[` + the
+   upper-cased type + `]` - for example `[PAN]`, `[PERSON_NAME]`. Spans never
+   overlap (overlaps are resolved during detection), so replacements are
+   independent; everything outside the spans is kept exactly.
+
+`preview` shows the redacted text together with the spans that caused each
+replacement (values masked), without sending anything. Reversible
+tokenisation (`[PAN_1]` restored later) builds on the same spans.
+
+Conformance cases are in `conformance/redact.yaml`.
+
 ## Known limits
 
 Names and addresses are found only next to a cue (honorific, relation, field

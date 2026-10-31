@@ -4,6 +4,9 @@
   occur and in what share of values, using the column name as context
   (a `voter_id` column supports Voter ID matches). Whole numbers are
   scanned too; sampling is evenly spaced and reproducible.
+* New `redact()` replaces every detected identifier with a placeholder
+  naming its type (`[PAN]`, `[PERSON_NAME]`); `preview()` shows the redacted
+  text with each identifier (value masked), its confidence and reasons.
 
 # credgate 0.1.0
 

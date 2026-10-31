@@ -81,3 +81,11 @@ for (case in conformance("scan.yaml")$cases) {
     }
   })
 }
+
+for (case in conformance("redact.yaml")$cases) {
+  test_that(paste("redact:", case$id), {
+    got <- redact(case$text, context = case$context, min_confidence = case$min_confidence %||% 0)
+    expect_identical(got, case$redacted)
+    expect_identical(preview(case$text, context = case$context, min_confidence = case$min_confidence %||% 0)$redacted, case$redacted)
+  })
+}

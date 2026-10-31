@@ -43,6 +43,21 @@ objects with the document index, 0-based end-exclusive positions, type, data
 class, value, canonical form, confidence and reasons. `span.to_dict()` gives
 a JSON-ready dict with the value masked (`reveal=True` to include it).
 
+Redact identifiers, or preview what would be redacted and why:
+
+```python
+credgate.redact("Name: Priya Nair; PAN: ABCPN1234K")
+# 'Name: [PERSON_NAME]; PAN: [PAN]'
+
+print(credgate.preview("Name: Priya Nair; PAN: ABCPN1234K; order no 878245671885"))
+# 3 items would be redacted:
+#   Name: [PERSON_NAME]; PAN: [PAN]; order no [AADHAAR]
+#
+#   [PERSON_NAME]  XXXXX Nair    0.80  matched Person name pattern
+#   [PAN]          XXXXXX234K    0.97  matched PAN pattern; context 'PAN'; ...
+#   [AADHAAR]      XXXXXXXX1885  0.42  ...; negative context 'order'
+```
+
 Scan a table (a pandas DataFrame, or a dict of column -> values) to see
 which columns hold PII; column names count as context:
 
@@ -84,6 +99,8 @@ credgate.register_detector(credgate.Detector(
 credgate detect notes.txt                      # masked report
 credgate detect --lines --json customers.csv   # one JSON object per match
 git diff --cached | credgate detect --fail     # non-zero exit if PII is found
+credgate redact notes.txt > notes.redacted.txt  # replace PII with [PAN] etc.
+credgate preview notes.txt                     # what would be redacted, and why
 credgate scan customers.csv                    # which columns hold PII
 credgate detectors                             # list detectors
 ```
