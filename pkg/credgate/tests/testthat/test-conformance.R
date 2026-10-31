@@ -2,7 +2,7 @@
 # CredGate implementation must pass.
 
 conformance <- function(file) {
-  yaml::read_yaml(file.path(cg_spec_path(), "conformance", file))
+  credgate:::read_yaml_utf8(file.path(cg_spec_path(), "conformance", file))
 }
 
 test_that("the shipped spec is in sync with the repository spec", {

@@ -23,7 +23,7 @@ cg_spec_path <- function() {
 }
 
 read_spec_file <- function(dir, file) {
-  x <- yaml::read_yaml(file.path(dir, file))
+  x <- read_yaml_utf8(file.path(dir, file))
   if (!identical(as.integer(x$spec_version), spec_version_supported)) {
     rlang::abort(paste0(
       "Unsupported spec_version ", x$spec_version, " in ", file,
@@ -31,6 +31,16 @@ read_spec_file <- function(dir, file) {
     ))
   }
   x
+}
+
+# Spec files are UTF-8 (they contain Indic keywords). Read the bytes and mark
+# them UTF-8 instead of going through a connection, which re-encodes from
+# the session locale and breaks under C/POSIX locales common on servers.
+read_yaml_utf8 <- function(path) {
+  bytes <- readBin(path, "raw", file.size(path))
+  text <- rawToChar(bytes)
+  Encoding(text) <- "UTF-8"
+  yaml::yaml.load(text)
 }
 
 load_spec <- function(dir = cg_spec_path()) {

@@ -77,7 +77,8 @@ test_that("negative context lowers confidence", {
 
 test_that("Devanagari digits are detected and positions refer to the original", {
   a <- credgate:::synth_aadhaar(1)
-  dev <- chartr("0123456789", "०१२३४५६७८९", a)
+  # Built from code points: chartr() mangles multi-byte text in a C locale.
+  dev <- intToUtf8(0x0966 + utf8ToInt(a) - utf8ToInt("0"))
   text <- paste0("आधार ", dev, " है")
   spans <- detect_pii(text)
   expect_equal(spans$type, "aadhaar")

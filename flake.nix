@@ -69,6 +69,9 @@
           # build sandbox: no network, read-only HOME, no IDE.
           credgate-r-tests = pkgs.runCommand "credgate-r-tests" {
             nativeBuildInputs = [ rTest ];
+            # Servers and Linux builders often run R under the C locale;
+            # test there on every platform so encoding bugs show up early.
+            LC_ALL = "C";
           } ''
             cp -r ${./pkg/credgate/tests} tests
             chmod -R u+w tests
