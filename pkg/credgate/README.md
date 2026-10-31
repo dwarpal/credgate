@@ -63,7 +63,8 @@ detect_pii("आधार: ५४२२ २९३७ ११८२")$type
 ### Scanning data frames
 
 `scan_pii()` reports which columns hold PII and how much, without sending
-anything anywhere. Column names count as context, so a column called
+anything anywhere. (New after 0.1.0: until the next CRAN release, install
+the GitHub version to use it.) Column names count as context, so a column called
 `voter_id` or `cust_pan` supports those types:
 
 ```r

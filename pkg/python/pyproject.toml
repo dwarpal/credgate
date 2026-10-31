@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "credgate"
-version = "0.2.0.dev0"
+version = "0.2.0"
 description = "Governance layer for LLM requests with Indian PII detection"
 readme = "README.md"
 license = "Apache-2.0"
@@ -33,6 +33,7 @@ dependencies = ["regex>=2023.0", "PyYAML>=6.0"]
 [project.urls]
 Homepage = "https://github.com/dwarpal/credgate"
 Issues = "https://github.com/dwarpal/credgate/issues"
+Changelog = "https://github.com/dwarpal/credgate/blob/main/pkg/python/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
