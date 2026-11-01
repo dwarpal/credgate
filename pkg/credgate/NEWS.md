@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* Policies: a YAML policy (the same file in R and Python) decides, per
+  destination tier (local, internal, frontier), whether each identifier is
+  allowed, redacted or tokenised, or the whole request is blocked; rules can
+  require combinations (card + CVV + expiry). Loading is strict - unknown
+  fields, tiers, actions or types are errors - and each decision names the
+  policy revision and the rule behind every action. `cg_policy()`,
+  `policy_decide()`, `policy_apply()`.
 * New detectors: card verification codes (`card_cvv`, a new data class
   `sensitive_auth` that is always masked in full and must never be stored),
   card expiry dates (`card_expiry`), CKYC numbers (`ckyc`, only with a cue such

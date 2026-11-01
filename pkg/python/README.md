@@ -281,6 +281,24 @@ credgate detectors                             # list detectors
 
 Values are masked unless you pass `--reveal`.
 
+## Policies
+
+A policy decides, per destination, what happens to each identifier: allow,
+redact, tokenise, or block the whole request. The same YAML file works in R:
+
+```python
+policy = credgate.Policy.load("bank-default.yaml")
+decision = policy.apply(["Card 4111 1111 1111 1111 exp 12/27", "CVV 123"], "claude")
+decision.allowed       # False
+decision.blocked_by    # ('card-with-cvv-and-expiry',)
+```
+
+`policy.decide()` reports the decision without rewriting; `apply()` also
+rewrites allowed requests (pass `vault=` when the policy tokenises). Loading
+checks everything: an unknown field, tier, action or type raises
+`PolicyError`. An example policy is in the repository's
+`examples/policies/bank-default.yaml`.
+
 ## Masked output
 
 Wherever credgate *shows* a detected value (printed matches, `preview()`,

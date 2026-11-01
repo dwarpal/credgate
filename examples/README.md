@@ -16,6 +16,14 @@ data is synthetic.
 | [`r/scan_then_redact.R`](r/scan_then_redact.R) | Find PII columns in a data frame, build prompts from redacted text only |
 | [`shell/redact_pipeline.sh`](shell/redact_pipeline.sh) | `credgate preview` / `credgate redact` piped into `ollama run` |
 
+### Policies
+
+[`policies/bank-default.yaml`](policies/bank-default.yaml) is an example
+policy for a bank's credit environment: in-house models may see customer
+data, frontier models may not, a card with its CVV and expiry is blocked for
+frontier models, and CVVs never leave. Load it with
+`credgate.Policy.load()` (Python) or `cg_policy()` (R).
+
 ### Large data (Parquet, Polars, DuckDB, Arrow)
 
 Create the synthetic input first: `python examples/python/make_synthetic_calls.py`

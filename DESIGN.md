@@ -295,9 +295,11 @@ are built in dependency order, so nothing is built twice or retrofitted
 3. **New detectors** (done): card verification code (data class
    `sensitive_auth`, never stored) and expiry, CKYC, ration card, NREGA job
    card numbers; in the benchmark corpus (version 2).
-4. **Policy engine** in the spec: destinations (local, internal, frontier),
-   rules on combinations (card + CVV + expiry -> block), fail closed,
-   versioned. Same YAML in R and Python.
+4. **Policy engine** in the spec (done): destinations with tiers (local,
+   internal, frontier), first-matching rules on types, classes and
+   combinations (`all_of`: card + CVV + expiry -> block), strict loading,
+   revisions. Same YAML in R and Python; example in
+   examples/policies/bank-default.yaml.
 5. **Audit log** in the spec: keyed hashes only, hash chain, policy version
    per record, retention default 5 years (minimum 1), on-premises.
 6. **Discovery at scale**: Spark (PySpark, sparklyr), BigQuery, a

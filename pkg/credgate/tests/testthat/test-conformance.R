@@ -191,3 +191,38 @@ for (f in vault_spec$files) {
     }
   })
 }
+
+policy_spec <- conformance("policy.yaml")
+policy_of <- function(p) if (is.character(p)) policy_spec$policies[[p]] else p
+for (case in policy_spec$cases) {
+  test_that(paste("policy:", case$id), {
+    policy <- cg_policy(policy_of(case$policy))
+    d <- policy_apply(policy, unlist(case$texts), case$destination, vault = cg_vault())
+    expect_identical(d$allowed, case$allowed)
+    got <- lapply(seq_len(nrow(d$matches)), function(i) {
+      c(d$matches$type[i], d$matches$action[i], d$matches$rule[i])
+    })
+    expect_identical(got, lapply(case$matches, unlist))
+    expect_identical(d$blocked_by, as.character(unlist(case$blocked_by)))
+    if (isTRUE(case$allowed)) {
+      expect_identical(d$text, unlist(case$output))
+    } else {
+      expect_null(d$text)
+    }
+  })
+}
+for (case in policy_spec$invalid) {
+  test_that(paste("invalid policy:", case$id), {
+    err <- tryCatch(cg_policy(case$policy), credgate_policy_error = function(e) e)
+    expect_s3_class(err, "credgate_policy_error")
+    expect_match(conditionMessage(err), case$error, ignore.case = TRUE, fixed = FALSE)
+  })
+}
+test_that("policy: unknown destination is an error", {
+  u <- policy_spec$unknown_destination
+  expect_error(
+    policy_decide(cg_policy(policy_of(u$policy)), "PAN ABCPE1234F", u$destination),
+    "Unknown destination", class = "credgate_policy_error"
+  )
+})
+

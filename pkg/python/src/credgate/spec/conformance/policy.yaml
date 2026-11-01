@@ -1,0 +1,165 @@
+# Policy conformance cases (see README.md, "Policies"). Each case gives a
+# policy and requests to it; implementations must report exactly the
+# decision and output below.
+#
+# Fields per request:
+#   texts        the texts of one request
+#   destination  the destination name
+#   allowed      whether the request may be sent
+#   blocked_by   rule ids that blocked it (blocked requests only)
+#   matches      every match, in order, as [type, action, rule]
+#   output       the texts after applying the policy (allowed requests)
+# Cases under `invalid` must fail to load, with an error mentioning `error`.
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+policies:
+
+  bank-default:
+    policy: credgate-policy
+    version: 1
+    id: bank-default
+    revision: 3
+    destinations:
+      ollama-local: {tier: local}
+      vllm-gpu: {tier: internal}
+      claude: {tier: frontier}
+    min_confidence: 0.5
+    rules:
+      - id: card-with-cvv-and-expiry
+        when: {tiers: [frontier], all_of: [card, card_cvv, card_expiry]}
+        action: block
+      - id: no-personal-data-to-frontier
+        when: {tiers: [frontier], classes: [identity_strong, financial, sensitive_auth, health, personal, contact]}
+        action: redact
+      - id: cvv-never-stored
+        when: {types: [card_cvv]}
+        action: redact
+      - id: in-house-models
+        when: {tiers: [local, internal]}
+        action: allow
+    default_action: redact
+
+cases:
+
+  - id: local-model-sees-everything-but-cvv
+    policy: bank-default
+    texts: ['Card 4111 1111 1111 1111 exp 12/27 CVV 123, PAN ABCPE1234F']
+    destination: ollama-local
+    allowed: true
+    matches:
+      - [card, allow, in-house-models]
+      - [card_expiry, allow, in-house-models]
+      - [card_cvv, redact, cvv-never-stored]
+      - [pan, allow, in-house-models]
+    output: ['Card 4111 1111 1111 1111 exp 12/27 CVV [CARD_CVV], PAN ABCPE1234F']
+
+  - id: card-cvv-and-expiry-blocked-for-frontier
+    policy: bank-default
+    texts: ['Card 4111 1111 1111 1111 exp 12/27', 'and CVV 123 - please summarise']
+    destination: claude
+    allowed: false
+    blocked_by: [card-with-cvv-and-expiry]
+    matches:
+      - [card, block, card-with-cvv-and-expiry]
+      - [card_expiry, block, card-with-cvv-and-expiry]
+      - [card_cvv, block, card-with-cvv-and-expiry]
+
+  - id: card-alone-to-frontier-is-redacted
+    policy: bank-default
+    texts: ['Refund to card 4111 1111 1111 1111 for Shri Ramesh Kumar']
+    destination: claude
+    allowed: true
+    matches:
+      - [card, redact, no-personal-data-to-frontier]
+      - [person_name, redact, no-personal-data-to-frontier]
+    output: ['Refund to card [CARD] for Shri [PERSON_NAME]']
+
+  - id: below-min-confidence-is-ignored
+    policy: bank-default
+    texts: ['order no 878245671885 shipped']
+    destination: claude
+    allowed: true
+    matches: []
+    output: ['order no 878245671885 shipped']
+
+  - id: no-pii-goes-through
+    policy: bank-default
+    texts: ['Summarise branch timings for Saturday']
+    destination: claude
+    allowed: true
+    matches: []
+    output: ['Summarise branch timings for Saturday']
+
+  - id: default-action-when-no-rule-matches
+    policy:
+      policy: credgate-policy
+      version: 1
+      id: minimal
+      revision: 1
+      destinations: {anywhere: {tier: internal}}
+      rules:
+        - {id: names-allowed, when: {types: [person_name]}, action: allow}
+      default_action: redact
+    texts: ['Name: Priya Nair; PAN ABCPE1234F']
+    destination: anywhere
+    allowed: true
+    matches:
+      - [person_name, allow, names-allowed]
+      - [pan, redact, default]
+    output: ['Name: Priya Nair; PAN [PAN]']
+
+  - id: tokenise-action
+    policy:
+      policy: credgate-policy
+      version: 1
+      id: tokenising
+      revision: 1
+      destinations: {model: {tier: frontier}}
+      rules:
+        - {id: tokenise-ids, when: {classes: [identity_strong]}, action: tokenise}
+      default_action: redact
+    texts: ['PAN ABCPE1234F and pan abcpe1234f, mobile 9876543210']
+    destination: model
+    allowed: true
+    matches:
+      - [pan, tokenise, tokenise-ids]
+      - [pan, tokenise, tokenise-ids]
+      - [mobile_in, redact, default]
+    output: ['PAN [PAN_1] and pan [PAN_1], mobile [MOBILE_IN]']
+
+invalid:
+  - id: unknown-tier
+    error: tier
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: cloud}}, rules: [], default_action: redact}
+  - id: unknown-action
+    error: action
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: local}}, rules: [{id: r, when: {}, action: maybe}], default_action: redact}
+  - id: unknown-type
+    error: pann
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: local}}, rules: [{id: r, when: {types: [pann]}, action: block}], default_action: redact}
+  - id: unknown-field
+    error: wehn
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: local}}, rules: [{id: r, wehn: {}, action: block}], default_action: redact}
+  - id: duplicate-rule-id
+    error: duplicate
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: local}},
+             rules: [{id: r, when: {}, action: block}, {id: r, when: {}, action: allow}], default_action: redact}
+  - id: bad-revision
+    error: revision
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 0,
+             destinations: {m: {tier: local}}, rules: [], default_action: redact}
+  - id: not-a-policy
+    error: credgate-policy
+    policy: {version: 1, id: x, revision: 1, destinations: {m: {tier: local}}, rules: [], default_action: redact}
+
+unknown_destination:
+  policy: bank-default
+  destination: openai

@@ -286,6 +286,25 @@ redact_query(con, "SELECT id, notes FROM loan_notes", "loan_notes_safe")
 `vignette("large-data")` and the
 [large-data guide](https://github.com/dwarpal/credgate/blob/main/docs/large-data.md).
 
+## Policies
+
+A policy decides, per destination, what happens to each identifier: allow,
+redact, tokenise, or block the whole request. The same YAML file works in
+Python:
+
+```r
+policy <- cg_policy("bank-default.yaml")
+d <- policy_apply(policy, c("Card 4111 1111 1111 1111 exp 12/27", "CVV 123"), "claude")
+d$allowed      # FALSE
+d$blocked_by   # "card-with-cvv-and-expiry"
+```
+
+`policy_decide()` reports the decision without rewriting; `policy_apply()`
+also rewrites allowed requests (pass `vault =` when the policy tokenises).
+Loading checks everything: an unknown field, tier, action or type is an
+error. An example policy is in the repository's
+`examples/policies/bank-default.yaml`.
+
 ## Masked output
 
 Wherever credgate *shows* a detected value (printed matches, `preview()`,

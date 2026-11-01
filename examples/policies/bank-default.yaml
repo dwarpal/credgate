@@ -1,0 +1,54 @@
+# Example policy for a bank's credit environment. Adapt it to your own rules;
+# InfoSec and compliance own the real one. The same file works in R and Python:
+#   Python: credgate.Policy.load("bank-default.yaml")
+#   R:      cg_policy("bank-default.yaml")
+#
+# Rules are tried in order; the first that matches an identifier decides
+# what happens to it. Any `block` stops the whole request.
+
+policy: credgate-policy
+version: 1
+id: bank-default
+revision: 1
+description: >
+  Models inside the organisation may see customer data; frontier models may
+  not. Card verification codes never leave the machine.
+
+# Where requests go, and how far they leave the organisation.
+destinations:
+  ollama-local: {tier: local, description: Ollama on the analyst's machine}
+  vllm-gpu: {tier: internal, description: shared vLLM server in the data centre}
+  claude: {tier: frontier, description: "external provider; limited, approved use only"}
+  gemini: {tier: frontier}
+  copilot: {tier: frontier}
+
+# Matches below this confidence are ignored (for example an order number that
+# passes the Aadhaar checksum by chance scores 0.42).
+min_confidence: 0.5
+
+rules:
+  # PCI: a card number with its CVV and expiry must never reach a frontier
+  # model - block the request rather than send any of it.
+  - id: card-with-cvv-and-expiry
+    when: {tiers: [frontier], all_of: [card, card_cvv, card_expiry]}
+    action: block
+
+  # Card verification codes are never needed by a model, wherever it runs.
+  - id: cvv-never-leaves
+    when: {types: [card_cvv]}
+    action: redact
+
+  # Frontier models get no personal or card data at all.
+  - id: no-personal-data-to-frontier
+    when:
+      tiers: [frontier]
+      classes: [identity_strong, financial, health, contact, personal, quasi]
+    action: redact
+
+  # Models on the analyst's machine or in the data centre may see the rest.
+  - id: in-house-models
+    when: {tiers: [local, internal]}
+    action: allow
+
+# Anything not covered above is redacted.
+default_action: redact

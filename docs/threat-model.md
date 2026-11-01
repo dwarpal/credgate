@@ -38,7 +38,7 @@ payment data localisation (payment data stored only in India), PCI DSS
 | **Token vaults** (token → real value) | memory; `.cgvault` files | whoever holds a vault and its passphrase can re-identify |
 | **Token key** (planned keyed tokens) | supplied by the organisation | with the key, tokens can be checked against guessed values |
 | **Vault passphrases** | the user; `CREDGATE_VAULT_PASSPHRASE` | unlock saved vaults |
-| **Policies** (planned) | YAML files, edited through a Shiny app | decide what may go where |
+| **Policies** | YAML files (a Shiny editor is planned) | decide what may go where |
 | **Audit log** (planned) | on-premises files or database | the evidence for regulators; must be complete and unaltered |
 | **Model credentials** | environment variables | access to paid or internal models |
 | **credgate itself** | packages, images, source | a compromised release could leak everything |
