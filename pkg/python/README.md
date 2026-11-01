@@ -205,6 +205,47 @@ credgate.register_detector(credgate.Detector(
 ))
 ```
 
+## Large data: pandas, Polars, Arrow, DuckDB, Parquet
+
+`redact()`, `tokenise()` and `detect_pii()` accept a pandas or Polars Series
+or an Arrow array and return the same type (a Series keeps its index and
+name; missing values stay missing). For tables, install the extra you need:
+`pip install 'credgate[polars]'`, `'credgate[arrow]'` or `'credgate[duckdb]'`.
+
+```python
+import polars as pl
+import credgate.polars  # adds the .credgate namespace
+
+df.with_columns(pl.col("notes").credgate.redact(min_confidence=0.5))
+df.filter(pl.col("notes").credgate.has_pii())
+```
+
+```python
+import duckdb, credgate.duckdb
+
+con = duckdb.connect()
+credgate.duckdb.register(con, min_confidence=0.5)   # adds cg_redact() and cg_has_pii()
+con.sql("COPY (SELECT id, cg_redact(notes) AS notes FROM 'calls.parquet') TO 'safe.parquet'")
+```
+
+```python
+import credgate.arrow
+credgate.arrow.redact_parquet("calls.parquet", "safe.parquet", columns=["notes"])
+```
+
+```sh
+credgate redact --parquet calls.parquet --column notes -o safe.parquet
+credgate scan calls.parquet
+```
+
+Parquet files, DuckDB queries and Polars lazy frames are processed in
+batches, so the data may be larger than memory. `scan_pii()` also accepts
+Polars frames (eager or lazy), Arrow tables and datasets, and DuckDB
+relations; it reads one column at a time and samples exactly as it does in
+memory, so the report is the same at any size. Numbered tokens are not
+offered inside Polars and DuckDB, which process batches in parallel and in
+no fixed order; tokenise a Series or Arrow array instead.
+
 ## Command line
 
 ```sh

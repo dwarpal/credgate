@@ -191,3 +191,26 @@ def test_base_without_context_is_validated():
         credgate.Detector(**args, base_without_context=0.3, context="x", context_required=True)
     with pytest.raises(ValueError, match=r"\(0, 1\]"):
         credgate.Detector(**args, base_without_context=0, context="x")
+
+
+def test_first_detection_on_many_threads_sees_every_detector():
+    # DuckDB and Polars call credgate from several threads at once; the
+    # first call builds the detector registry, which other threads must
+    # never see half-built.
+    import threading
+
+    for _ in range(5):
+        credgate.reset_detectors()
+        start = threading.Barrier(16)
+        results = []
+
+        def work(start=start, results=results):
+            start.wait()
+            results.append([s.type for s in detect_pii("PAN ABCPE1234F, mobile 9876543210")])
+
+        threads = [threading.Thread(target=work) for _ in range(16)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert results == [["pan", "mobile_in"]] * 16

@@ -14,6 +14,7 @@ from typing import Any
 
 import regex
 
+from ._frames import texts
 from .detect import Span, detect_pii, mask_value
 
 _NAME = r"[A-Za-z]+(?:_[A-Za-z]+)*_[0-9]+"
@@ -257,12 +258,12 @@ class Vault:
 
 
 def tokenise(
-    text: str | Sequence[str | None],
+    text: str | Sequence[str | None] | Any,
     vault: Vault,
     detectors: Sequence[str] | None = None,
     context: str | Sequence[str | None] | None = None,
     min_confidence: float = 0.0,
-) -> str | list[str | None]:
+) -> Any:
     """Replace every detected identifier with a numbered token such as ``[PAN_1]``.
 
     The vault records which value each token stands for, so
@@ -270,22 +271,19 @@ def tokenise(
     identifier gets the same token however it is written, across documents
     and across calls with the same vault.
 
-    Returns a string for a string input, otherwise a list of the same length
-    (``None`` stays ``None``).
+    ``text`` can be a string, a sequence of strings, a pandas or Polars
+    Series, or an Arrow array; the result has the same type. Missing values
+    stay as they are.
     """
     if not isinstance(vault, Vault):
         raise TypeError("`vault` must be a credgate.Vault.")
-    single = isinstance(text, str)
-    items = [text] if single else list(text)
-    docs = ["" if t is None else t for t in items]
+    docs, _, wrap = texts(text)
     spans = detect_pii(docs, detectors, context, min_confidence)
     tokens = [vault._token_for(s) for s in spans]  # in document, then position order
     out = list(docs)
     for s, token in sorted(zip(spans, tokens, strict=True), key=lambda p: (p[0].doc, -p[0].start)):
         out[s.doc] = out[s.doc][: s.start] + token + out[s.doc][s.end :]
-    if single:
-        return out[0]
-    return [None if orig is None else t for orig, t in zip(items, out, strict=True)]
+    return wrap(out)
 
 
 def restore(text: str, vault: Vault, strict: bool = False) -> str:

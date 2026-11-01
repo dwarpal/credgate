@@ -44,7 +44,7 @@ def test_report_prints_masked_examples():
 
 
 def test_invalid_input():
-    with pytest.raises(TypeError, match="DataFrame or a mapping"):
+    with pytest.raises(TypeError, match="or a mapping of column"):
         credgate.scan_pii(["not", "a", "table"])
     with pytest.raises(ValueError, match="positive whole number"):
         credgate.scan_pii({"x": ["a"]}, sample=0)

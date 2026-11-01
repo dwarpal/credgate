@@ -148,6 +148,16 @@ git diff --cached | credgate detect --fail     # non-zero exit if PII is found
 Values are masked whenever results are printed; the real values are only
 available programmatically (`x$value`, `span.value`) or with `--reveal`.
 
+## Large data
+
+In Python, credgate works directly on pandas and Polars Series, Arrow
+arrays and tables, DuckDB (`SELECT cg_redact(notes) FROM 'calls.parquet'`)
+and Parquet files larger than memory (`credgate redact --parquet ...`);
+`scan_pii()` reads big tables one column at a time and gives the same report
+as in memory. See the [Python README](pkg/python/README.md#large-data-pandas-polars-arrow-duckdb-parquet).
+Throughput is measured in [benchmark/README.md](benchmark/README.md#throughput).
+R support for Arrow and DuckDB is planned.
+
 ## Installation
 
 **Python** is on PyPI; the **R** package is under CRAN review, so install it
