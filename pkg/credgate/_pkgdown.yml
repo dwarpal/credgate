@@ -22,18 +22,10 @@ navbar:
 
 home:
   title: credgate for R
-  # Our own links instead of pkgdown's, which look up CRAN over the network
-  # (the site is built without network access).
+  # Our own sidebar: pkgdown's looks up CRAN over the network, and the
+  # site is built without network access.
   sidebar:
-    structure: [resources, license, community, citation, authors, dev]
-    components:
-      resources:
-        title: Links
-        text: |
-          [Documentation for both languages](https://dwarpal.github.io/credgate/)<br>
-          [Source on GitHub](https://github.com/dwarpal/credgate)<br>
-          [Report a bug](https://github.com/dwarpal/credgate/issues)<br>
-          [R-universe](https://dwarpal.r-universe.dev/credgate)
+    html: pkgdown/sidebar.html
 
 reference:
   - title: Detect and scan

@@ -136,8 +136,7 @@
 
             export DOCS_R=$out/r R_USER_CACHE_DIR=$TMPDIR/cache
             cp -rL ${pkgdownAssets} $R_USER_CACHE_DIR && chmod -R u+w $R_USER_CACHE_DIR
-            Rscript -e 'pkgdown::build_site("pkg/credgate", override = list(destination = Sys.getenv("DOCS_R")),
-                                            install = FALSE, new_process = FALSE, preview = FALSE)'
+            Rscript ${./tools/build-pkgdown.R} pkg/credgate $DOCS_R
           '';
 
           r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
