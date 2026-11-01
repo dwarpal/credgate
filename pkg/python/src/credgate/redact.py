@@ -62,11 +62,12 @@ class Preview:
             lines.append(f"  {prefix}{self.redacted[d].rstrip()}")
         lines.append("")
         width = max(len(placeholder(s.type)) for s in self.spans)
-        value_width = max(len(mask_value(s.value)) for s in self.spans)
-        for s in self.spans:
+        masked = [mask_value(s.value, s.data_class) for s in self.spans]
+        value_width = max(len(m) for m in masked)
+        for s, m in zip(self.spans, masked, strict=True):
             doc = f"[{s.doc}] " if len(self.text) > 1 else ""
             lines.append(
-                f"  {doc}{placeholder(s.type):<{width}}  {mask_value(s.value):<{value_width}}"
+                f"  {doc}{placeholder(s.type):<{width}}  {m:<{value_width}}"
                 f"  {s.confidence:.2f}  {s.reasons}"
             )
         return "\n".join(lines)

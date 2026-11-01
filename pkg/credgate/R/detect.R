@@ -201,7 +201,7 @@ print.cg_spans <- function(x, ..., reveal = FALSE) {
   }
   shown <- as.data.frame(unclass(x))[c("doc", "start", "end", "type", "value", "confidence")]
   if (!reveal) {
-    shown$value <- mask_value(shown$value)
+    shown$value <- mask_value(shown$value, x$class)
   }
   cli::cli_text("{nrow(x)} PII match{?es} (values masked; use {.code x$value} to see them):")
   print(shown, row.names = FALSE)
@@ -209,10 +209,31 @@ print.cg_spans <- function(x, ..., reveal = FALSE) {
 }
 
 # Replace letters and digits with "X", keeping the last 4 characters (2 for
-# short values) - the same convention as UIDAI's masked Aadhaar.
-mask_value <- function(x) {
+# short values) - the same convention as UIDAI's masked Aadhaar. Values of the
+# "personal" class (names, addresses) keep nothing: their end identifies a
+# person, unlike the last digits of an ID number.
+# The option `credgate.mask` (or the environment variable `CREDGATE_MASK`)
+# set to "full" keeps nothing for any value; see ?credgate-package.
+full_mask_classes <- "personal"
+mask_modes <- c("partial", "full")
+
+current_mask <- function() {
+  mode <- getOption("credgate.mask")
+  if (is.null(mode)) {
+    mode <- Sys.getenv("CREDGATE_MASK", "partial")
+    if (!nzchar(mode)) mode <- "partial"
+  }
+  if (!rlang::is_string(mode) || !mode %in% mask_modes) {
+    rlang::abort('The credgate mask mode (option `credgate.mask` or CREDGATE_MASK) must be "partial" or "full".')
+  }
+  mode
+}
+
+mask_value <- function(x, class = NULL, mode = current_mask()) {
   n <- nchar(x)
   keep <- ifelse(n >= 8, 4L, 2L)
+  if (!is.null(class)) keep[class %in% full_mask_classes] <- 0L
+  if (identical(mode, "full")) keep[] <- 0L
   prefix <- stringi::stri_sub(x, 1L, n - keep)
   prefix <- stringi::stri_replace_all_regex(prefix, "[\\p{L}\\p{N}]", "X")
   paste0(prefix, stringi::stri_sub(x, n - keep + 1L, n))

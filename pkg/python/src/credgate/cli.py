@@ -138,7 +138,7 @@ def _detect(args: argparse.Namespace) -> int:
                 print(json.dumps(record, ensure_ascii=False))
             else:
                 where = f"{source}:{location}" if location else source
-                value = s.value if args.reveal else mask_value(s.value)
+                value = s.value if args.reveal else mask_value(s.value, s.data_class)
                 print(f"{where}\t{s.start}-{s.end}\t{s.type}\t{s.confidence:.2f}\t{value}")
     return 1 if args.fail and found else 0
 

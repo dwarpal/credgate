@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -35,7 +36,7 @@ class Span:
     def __repr__(self) -> str:
         return (
             f"Span(doc={self.doc}, start={self.start}, end={self.end}, type={self.type!r}, "
-            f"value={mask_value(self.value)!r}, confidence={self.confidence})"
+            f"value={mask_value(self.value, self.data_class)!r}, confidence={self.confidence})"
         )
 
     def to_dict(self, reveal: bool = False) -> dict[str, Any]:
@@ -43,7 +44,7 @@ class Span:
         d = asdict(self)
         d["class"] = d.pop("data_class")
         if not reveal:
-            d["value"] = mask_value(self.value)
+            d["value"] = mask_value(self.value, self.data_class)
             del d["canonical"]
         return d
 
@@ -194,10 +195,47 @@ def _resolve_overlaps(spans: list[Span]) -> list[Span]:
 _ALNUM = regex.compile(r"[\p{L}\p{N}]")
 
 
-def mask_value(x: str) -> str:
+# Classes whose values are masked in full: the end of a name or an address
+# identifies a person, unlike the last digits of an ID number.
+FULL_MASK_CLASSES = frozenset({"personal"})
+MASK_MODES = ("partial", "full")
+_mask_mode: str | None = None
+
+
+def set_mask(mode: str | None) -> None:
+    """Choose how values are masked wherever credgate shows them (printed
+    spans, previews, column-scan examples, the command line).
+
+    Args:
+        mode: ``"partial"`` (default) keeps the last 4 characters of
+            identifiers, as in UIDAI's masked Aadhaar; ``"full"`` keeps
+            nothing, for policies that allow no part of a value to be shown.
+            ``None`` falls back to the ``CREDGATE_MASK`` environment
+            variable, then to ``"partial"``.
+    """
+    global _mask_mode
+    if mode is not None and mode not in MASK_MODES:
+        raise ValueError(f"`mode` must be one of {', '.join(MASK_MODES)}, or None.")
+    _mask_mode = mode
+
+
+def _current_mask() -> str:
+    mode = _mask_mode or os.environ.get("CREDGATE_MASK") or "partial"
+    if mode not in MASK_MODES:
+        raise ValueError(f"CREDGATE_MASK must be one of {', '.join(MASK_MODES)}, not {mode!r}.")
+    return mode
+
+
+def mask_value(x: str, data_class: str | None = None, mode: str | None = None) -> str:
     """Replace letters and digits with ``X``, keeping the last 4 characters
     (2 for values shorter than 8) - the same convention as UIDAI's masked
-    Aadhaar."""
+    Aadhaar. Values of the ``personal`` class (names, addresses) keep
+    nothing, and neither does any value when the mask mode is ``"full"``
+    (see :func:`set_mask`)."""
+    if mode is not None and mode not in MASK_MODES:
+        raise ValueError(f"`mode` must be one of {', '.join(MASK_MODES)}, or None.")
+    if (mode or _current_mask()) == "full" or data_class in FULL_MASK_CLASSES:
+        return _ALNUM.sub("X", x)
     keep = 4 if len(x) >= 8 else 2
     cut = max(0, len(x) - keep)
     return _ALNUM.sub("X", x[:cut]) + x[cut:]

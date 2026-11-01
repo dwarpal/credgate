@@ -151,5 +151,5 @@ def _summarise(column: str, spans: list[Span], values: list[str]) -> ColumnFindi
         n_full=len(full),
         rate=round(len(firsts) / n_sampled, 4),
         mean_confidence=round(sum(s.confidence for s in firsts) / len(firsts), 2),
-        example=mask_value(firsts[0].value),
+        example=mask_value(firsts[0].value, firsts[0].data_class),
     )

@@ -39,3 +39,12 @@ def test_cli_redact_and_preview(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "PAN [PAN]" in out
     assert "ABCPE1234F" not in out
+
+
+def test_cli_masks_in_full_with_environment(monkeypatch, capsys):
+    monkeypatch.setenv("CREDGATE_MASK", "full")
+    monkeypatch.setattr("sys.stdin", io.StringIO("PAN ABCPE1234F\n"))
+    assert main(["detect"]) == 0
+    out = capsys.readouterr().out
+    assert "XXXXXXXXXX" in out
+    assert "234F" not in out

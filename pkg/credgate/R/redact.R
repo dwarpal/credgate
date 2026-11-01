@@ -73,7 +73,7 @@ print.cg_preview <- function(x, ...) {
   shown <- data.frame(
     doc = spans$doc,
     placeholder = placeholder(spans$type),
-    value = mask_value(spans$value),
+    value = mask_value(spans$value, spans$class),
     confidence = spans$confidence,
     reasons = spans$reasons
   )

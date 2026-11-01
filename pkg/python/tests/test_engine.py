@@ -98,6 +98,56 @@ def test_mask_value_short_values():
     assert credgate.mask_value("1") == "1"
 
 
+def test_names_and_addresses_are_masked_in_full():
+    assert credgate.mask_value("Mohan Lal", "personal") == "XXXXX XXX"
+    spans = detect_pii("Shri Mohan Lal, House No 7, Civil Lines, Jaipur 302006")
+    for s in spans:
+        assert s.data_class == "personal"
+        assert not any(ch.isalnum() and ch != "X" for ch in s.to_dict()["value"])
+    assert "Lal" not in str(credgate.preview("Shri Mohan Lal, PAN ABCPE1234F"))
+    report = credgate.scan_pii({"remarks": ["Shri Mohan Lal called"]})
+    assert report[0].example == "XXXXX XXX"
+
+
+@pytest.fixture
+def mask_reset(monkeypatch):
+    monkeypatch.delenv("CREDGATE_MASK", raising=False)
+    yield monkeypatch
+    credgate.set_mask(None)
+
+
+def test_full_mask_mode(mask_reset):
+    credgate.set_mask("full")
+    assert credgate.mask_value("ABCPE1234F") == "XXXXXXXXXX"
+    (s,) = detect_pii("PAN ABCPE1234F")
+    assert s.to_dict()["value"] == "XXXXXXXXXX"
+    assert "234F" not in repr(s)
+    assert "234F" not in str(credgate.preview("PAN ABCPE1234F"))
+    assert credgate.scan_pii({"cust_pan": ["ABCPE1234F"]})[0].example == "XXXXXXXXXX"
+    assert s.to_dict(reveal=True)["value"] == "ABCPE1234F"
+    credgate.set_mask("partial")
+    assert credgate.mask_value("ABCPE1234F") == "XXXXXX234F"
+
+
+def test_full_mask_from_environment(mask_reset):
+    mask_reset.setenv("CREDGATE_MASK", "full")
+    assert credgate.mask_value("ABCPE1234F") == "XXXXXXXXXX"
+    credgate.set_mask("partial")  # explicit setting wins
+    assert credgate.mask_value("ABCPE1234F") == "XXXXXX234F"
+    credgate.set_mask(None)
+    mask_reset.setenv("CREDGATE_MASK", "nope")
+    with pytest.raises(ValueError, match="CREDGATE_MASK"):
+        credgate.mask_value("ABCPE1234F")
+
+
+def test_mask_mode_is_validated():
+    with pytest.raises(ValueError, match="partial, full"):
+        credgate.set_mask("last4")
+    with pytest.raises(ValueError, match="partial, full"):
+        credgate.mask_value("x", mode="none")
+    assert credgate.mask_value("ABCPE1234F", mode="full") == "XXXXXXXXXX"
+
+
 def test_user_detectors_can_be_registered():
     try:
         credgate.register_detector(
