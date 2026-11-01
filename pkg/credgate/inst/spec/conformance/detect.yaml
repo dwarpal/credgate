@@ -378,3 +378,27 @@ cases:
     expect:
       - {type: person_name, value: सुनीता}
 
+  # --- Names in mixed scripts ----------------------------------------------
+  - id: latin-honorific-devanagari-name
+    text: 'Smt. सुनीता देवी, mobile 9468451273'
+    expect:
+      - {type: person_name, value: सुनीता देवी, confidence: 0.8}
+      - {type: mobile_in, value: '9468451273', confidence: 0.93}
+  - id: latin-label-devanagari-name-is-not-cut
+    # A vowel sign is a mark, not a letter: the whole name is kept.
+    text: 'Name: सुनीता देवी'
+    expect:
+      - {type: person_name, value: सुनीता देवी}
+  - id: latin-relation-devanagari-name
+    text: 'S/o रामेश्वर प्रसाद'
+    expect:
+      - {type: person_name, value: रामेश्वर प्रसाद}
+  - id: devanagari-honorific-latin-name
+    text: 'श्री Ramesh Kumar'
+    expect:
+      - {type: person_name, value: Ramesh Kumar}
+  - id: devanagari-label-latin-name
+    text: 'नाम: Priya Nair'
+    expect:
+      - {type: person_name, value: Priya Nair}
+
