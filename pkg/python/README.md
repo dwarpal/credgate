@@ -254,7 +254,7 @@ If you use credgate in your work, please cite it, with the version you
 used (`credgate.__version__`):
 
 Sikka B, Bais A (2026). *credgate: Detect Indian Personal Data Before It
-Reaches Language Models.* Python package version 0.3.1.
+Reaches Language Models.* Python package version 0.4.0.
 https://github.com/dwarpal/credgate
 
 ```bibtex
@@ -262,7 +262,7 @@ https://github.com/dwarpal/credgate
   title  = {{credgate}: Detect Indian Personal Data Before It Reaches Language Models},
   author = {Bharat Sikka and Aishwarya Bais},
   year   = {2026},
-  note   = {Python package version 0.3.1},
+  note   = {Python package version 0.4.0},
   url    = {https://github.com/dwarpal/credgate},
 }
 ```

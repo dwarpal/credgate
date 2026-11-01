@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-01)
+
+Reversible tokenisation with encrypted vault files, fuller masking, and
+better accuracy (synthetic benchmark F1 0.947 to 0.983).
 
 - Names in mixed scripts: a Latin honorific, relation or label before a
   Devanagari name ("Smt. सुनीता देवी", "S/o रामेश्वर प्रसाद") and a Devanagari

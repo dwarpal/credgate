@@ -9,8 +9,7 @@ address in it is synthetic. Results are for the held-out `test` split; the
 `dev` split was used to find and fix bugs, so `test` was not tuned against.
 The R and Python packages produce identical numbers.
 
-Measured on 2026-11-01 on the development version after Python 0.3.1
-(R 0.1.0.9000).
+Measured on 2026-11-01 with Python 0.4.0 (R 0.1.0.9000).
 
 ## Summary
 
@@ -165,7 +164,7 @@ is a runnable open-source tool whose licence allows publishing results.
   the like-for-like comparison; *all 17 types* also counts types Presidio has
   no recogniser for (UPI, IFSC, ABHA, driving licence, PIN code).
 
-Versions: credgate development version after 0.3.1; presidio-analyzer 2.2.366, spaCy 3.8.18, en_core_web_lg 3.8.0.
+Versions: credgate 0.4.0; presidio-analyzer 2.2.366, spaCy 3.8.18, en_core_web_lg 3.8.0.
 
 Test split: 700 documents, 1260 labelled spans. Thresholds tuned on dev for best overall F1 on the types both tools cover.
 
