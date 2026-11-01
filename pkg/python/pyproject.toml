@@ -38,6 +38,9 @@ Changelog = "https://github.com/dwarpal/credgate/blob/main/pkg/python/CHANGELOG.
 [project.optional-dependencies]
 test = ["pytest>=7", "PyNaCl>=1.5"]
 vault = ["PyNaCl>=1.5"]
+arrow = ["pyarrow>=14"]
+polars = ["polars>=1.0"]
+duckdb = ["duckdb>=1.1", "pyarrow>=14"]
 
 [project.scripts]
 credgate = "credgate.cli:main"

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Fixed: detection could silently miss identifiers when its first calls
+  ran on several threads at once** (for example inside DuckDB or Polars, or
+  a multi-threaded server): the detector registry was visible while still
+  being built. It is now built completely before use. Single-threaded use
+  was not affected.
+- Large data: `redact()`, `tokenise()` and `detect_pii()` accept pandas and
+  Polars Series and Arrow arrays and return the same type. New
+  `credgate.polars` (`pl.col(...).credgate.redact()` / `.has_pii()`),
+  `credgate.duckdb` (`register(con)` adds `cg_redact()` and `cg_has_pii()`)
+  and `credgate.arrow` (tables, record-batch streams, `redact_parquet()`),
+  with extras `credgate[polars]`, `[arrow]` and `[duckdb]`.
+- `scan_pii()` accepts Polars frames (eager and lazy), Arrow tables and
+  datasets and DuckDB relations, reading one column at a time with the same
+  sampling as in memory.
+- Command line: `credgate redact --parquet IN --column NAME -o OUT` and
+  `credgate scan file.parquet`.
 - Faster: all documents in a call are searched in one pass per pattern,
   and text whose characters each normalise to one character skips the
   position map. Detection is 1.1-1.5x faster depending on text length

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numbers
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -74,7 +74,10 @@ def scan_pii(
     dates are skipped.
 
     Args:
-        data: A pandas DataFrame, or a mapping of column name to values.
+        data: A pandas or Polars DataFrame, a Polars LazyFrame, an Arrow table
+            or dataset, a DuckDB relation, or a mapping of column name to
+            values. Lazy frames, datasets and relations are read one column
+            at a time, so the table may be larger than memory.
         sample: Maximum number of values checked per column.
         min_rate: Report a type only if it occurs in at least this share of
             sampled values.
@@ -84,13 +87,10 @@ def scan_pii(
         raise ValueError("`sample` must be a positive whole number.")
     columns = _columns(data)
     findings: list[ColumnFinding] = []
-    for name, raw in columns:
-        values = _scan_values(raw)
-        n = len(values)
-        if n == 0:
+    for name, chunks in columns:
+        values = _sampled_values(chunks, sample)
+        if not values:
             continue
-        if n > sample:
-            values = [values[i * n // sample] for i in range(sample)]
         context = name.replace("_", " ").replace(".", " ").replace("-", " ")
         spans = detect_pii(values, detectors=detectors, context=context)
         by_type: dict[str, list[Span]] = {}
@@ -103,12 +103,80 @@ def scan_pii(
     return ScanReport(findings, n_columns=len(columns))
 
 
-def _columns(data: Any) -> list[tuple[str, list[Any]]]:
-    if hasattr(data, "columns") and hasattr(data, "__getitem__"):  # pandas-like
-        return [(str(c), list(data[c])) for c in data.columns]
+# A column is a function returning its values in chunks; it is called again
+# for a second pass, so tables larger than memory are read one column and one
+# chunk at a time.
+Chunks = Callable[[], Iterator[list[Any]]]
+
+
+def _columns(data: Any) -> list[tuple[str, Chunks]]:
+    module = type(data).__module__.split(".")[0].lstrip("_")  # DuckDB 1.x: "_duckdb"
+    kind = type(data).__name__
+    if module == "pyarrow" and kind == "Table":
+        return [
+            (c, lambda c=c: (a.to_pylist() for a in data.column(c).chunks))
+            for c in data.column_names
+        ]
+    if module == "pyarrow" and hasattr(data, "to_batches") and hasattr(data, "schema"):  # Dataset
+        return [
+            (c, lambda c=c: (b.column(0).to_pylist() for b in data.to_batches(columns=[c])))
+            for c in data.schema.names
+        ]
+    if module == "polars" and kind == "LazyFrame":
+        return [
+            (c, lambda c=c: iter([data.select(c).collect().to_series().to_list()]))
+            for c in data.collect_schema().names()
+        ]
+    if module == "duckdb" and hasattr(data, "columns") and hasattr(data, "select"):  # relation
+        return [(c, lambda c=c: _duckdb_chunks(data, c)) for c in data.columns]
+    if hasattr(data, "columns") and hasattr(data, "__getitem__"):  # pandas or Polars DataFrame
+        return [(str(c), lambda c=c: iter([list(data[c])])) for c in data.columns]
     if isinstance(data, Mapping):
-        return [(str(k), list(v)) for k, v in data.items()]
-    raise TypeError("`data` must be a pandas DataFrame or a mapping of column -> values.")
+        return [(str(k), lambda v=v: iter([list(v)])) for k, v in data.items()]
+    raise TypeError(
+        "`data` must be a pandas or Polars DataFrame, a Polars LazyFrame, an Arrow table "
+        "or dataset, a DuckDB relation, or a mapping of column -> values."
+    )
+
+
+def _duckdb_chunks(rel: Any, column: str) -> Iterator[list[Any]]:
+    quoted = '"' + column.replace('"', '""') + '"'
+    projected = rel.select(quoted)
+    if hasattr(projected, "to_arrow_reader"):  # DuckDB 1.4+
+        batches = projected.to_arrow_reader(100_000)
+    else:
+        batches = projected.fetch_record_batch(100_000)
+    for batch in batches:
+        yield batch.column(0).to_pylist()
+
+
+def _sampled_values(chunks: Chunks, sample: int) -> list[str]:
+    """The column's usable values, sampled as the spec says: with n > sample
+    values, those at positions floor(i * n / sample)."""
+    first = chunks()
+    head = next(first, None)
+    if head is None:
+        return []
+    rest = next(first, None)
+    if rest is None:  # one chunk, already in memory
+        values = _scan_values(head)
+        n = len(values)
+        return [values[i * n // sample] for i in range(sample)] if n > sample else values
+    # Several chunks: count, then pick the sampled positions in a second pass.
+    n = len(_scan_values(head)) + len(_scan_values(rest)) + sum(len(_scan_values(c)) for c in first)
+    wanted = [i * n // sample for i in range(sample)] if n > sample else list(range(n))
+    out: list[str] = []
+    seen = 0
+    k = 0
+    for chunk in chunks():
+        values = _scan_values(chunk)
+        while k < len(wanted) and wanted[k] < seen + len(values):
+            out.append(values[wanted[k] - seen])
+            k += 1
+        seen += len(values)
+        if k == len(wanted):
+            break
+    return out
 
 
 def _scan_values(raw: Iterable[Any]) -> list[str]:

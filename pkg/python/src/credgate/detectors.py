@@ -8,6 +8,7 @@ users can add their own with :func:`register_detector`.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -113,32 +114,41 @@ def bounded(core: str) -> str:
 
 
 _registry: dict[str, Detector] | None = None
+_registry_lock = threading.Lock()
 
 
 def _detectors() -> dict[str, Detector]:
+    # Built completely before it is published: callers on other threads
+    # (DuckDB and Polars run functions in parallel) must never see a
+    # partly filled registry, which would silently skip detectors.
     global _registry
-    if _registry is None:
-        _registry = {}
-        for d in builtin_detectors():
-            _registry[d.id] = d
-    return _registry
+    registry = _registry
+    if registry is None:
+        with _registry_lock:
+            if _registry is None:
+                _registry = {d.id: d for d in builtin_detectors()}
+            registry = _registry
+    return registry
 
 
 def register_detector(detector: Detector, overwrite: bool = False) -> str:
     """Register a detector; returns its id."""
     if not isinstance(detector, Detector):
         raise TypeError("`detector` must be a Detector.")
+    global _registry
     registry = _detectors()
-    if detector.id in registry and not overwrite:
-        raise ValueError(f"Detector `{detector.id}` is already registered.")
-    registry[detector.id] = detector
+    with _registry_lock:
+        if detector.id in registry and not overwrite:
+            raise ValueError(f"Detector `{detector.id}` is already registered.")
+        _registry = {**registry, detector.id: detector}
     return detector.id
 
 
 def reset_detectors() -> None:
     """Restore the built-in detectors, removing user-registered ones."""
     global _registry
-    _registry = None
+    with _registry_lock:
+        _registry = None
 
 
 def detectors() -> list[dict[str, Any]]:

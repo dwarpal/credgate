@@ -10,6 +10,7 @@ from typing import Any
 
 import regex
 
+from ._frames import texts
 from ._spec import engine
 from .detectors import Detector, get_detectors
 from .normalise import Normalised, normalise
@@ -51,7 +52,7 @@ class Span:
 
 
 def detect_pii(
-    text: str | Sequence[str | None],
+    text: str | Sequence[str | None] | Any,
     detectors: Sequence[str] | None = None,
     context: str | Sequence[str | None] | None = None,
     min_confidence: float = 0.0,
@@ -65,7 +66,9 @@ def detect_pii(
     wins - so a GSTIN is reported once, not also as the PAN inside it).
 
     Args:
-        text: A string, or a sequence of strings (``None`` counts as empty).
+        text: A string, a sequence of strings, a pandas or Polars Series, or
+            an Arrow array; missing values count as empty. Span ``doc`` is
+            the position in this sequence.
         detectors: Detector ids to run; ``None`` runs all registered ones.
         context: Extra context per document (one string for all), treated as
             if it appeared next to every match - e.g. a column name, so a
@@ -77,7 +80,7 @@ def detect_pii(
     Returns:
         Spans ordered by document and position.
     """
-    docs = [text] if isinstance(text, str) else ["" if t is None else t for t in text]
+    docs = texts(text)[0]
     if context is None or isinstance(context, str):
         contexts = [context or ""] * len(docs)
     else:

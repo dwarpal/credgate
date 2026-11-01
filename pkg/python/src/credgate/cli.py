@@ -14,7 +14,7 @@ from ._spec import spec_path
 from .detect import detect_pii, mask_value
 from .detectors import detectors
 from .redact import preview, redact
-from .scan import scan_pii
+from .scan import ScanReport, scan_pii
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -50,9 +50,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         r.add_argument("files", nargs="*", help="files to read (default: standard input)")
         r.add_argument("--min-confidence", type=float, default=0.0, metavar="X")
         r.add_argument("--context", default=None, help="extra context applied to every match")
+        if name == "redact":
+            r.add_argument(
+                "--parquet",
+                metavar="FILE",
+                help="redact a Parquet file (may be larger than memory) into --output",
+            )
+            r.add_argument("-o", "--output", metavar="FILE", help="output Parquet file")
+            r.add_argument(
+                "--column",
+                action="append",
+                metavar="NAME",
+                help="column to redact (repeatable; default: all text columns)",
+            )
+            r.add_argument("--batch-size", type=int, default=10_000, metavar="ROWS")
 
-    s = sub.add_parser("scan", help="report which columns of a CSV file contain PII")
-    s.add_argument("file", help="CSV file with a header row")
+    s = sub.add_parser("scan", help="report which columns of a CSV or Parquet file contain PII")
+    s.add_argument("file", help="CSV file with a header row, or a Parquet file (.parquet)")
     s.add_argument("--sample", type=int, default=10000, help="values checked per column")
     s.add_argument("--min-rate", type=float, default=0.0, metavar="X")
     s.add_argument("--json", action="store_true", help="write one JSON object per finding")
@@ -89,6 +103,22 @@ def _read(source: str) -> str:
 
 
 def _redact(args: argparse.Namespace) -> int:
+    if getattr(args, "parquet", None):
+        if not args.output or args.files:
+            print("credgate: --parquet needs --output and no other input files", file=sys.stderr)
+            return 2
+        from .arrow import redact_parquet
+
+        rows = redact_parquet(
+            args.parquet,
+            args.output,
+            columns=args.column,
+            batch_size=args.batch_size,
+            context=args.context,
+            min_confidence=args.min_confidence,
+        )
+        print(f"{rows} rows written to {args.output}", file=sys.stderr)
+        return 0
     for source in args.files or ["-"]:
         content = _read(source)
         if args.command == "redact":
@@ -101,6 +131,12 @@ def _redact(args: argparse.Namespace) -> int:
 
 
 def _scan(args: argparse.Namespace) -> int:
+    if args.file.endswith(".parquet"):
+        import pyarrow.dataset as ds
+
+        return _report(
+            args, scan_pii(ds.dataset(args.file), sample=args.sample, min_rate=args.min_rate)
+        )
     with open(args.file, encoding="utf-8", newline="") as f:
         rows = list(csv.reader(f, delimiter=args.delimiter))
     if not rows:
@@ -110,7 +146,10 @@ def _scan(args: argparse.Namespace) -> int:
     columns = {
         name: [row[i] if i < len(row) else None for row in body] for i, name in enumerate(header)
     }
-    report = scan_pii(columns, sample=args.sample, min_rate=args.min_rate)
+    return _report(args, scan_pii(columns, sample=args.sample, min_rate=args.min_rate))
+
+
+def _report(args: argparse.Namespace, report: ScanReport) -> int:
     if args.json:
         for record in report.to_records():
             print(json.dumps({"source": args.file, **record}, ensure_ascii=False))

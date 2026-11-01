@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
+from ._frames import texts
 from .detect import Span, detect_pii, mask_value
 
 
@@ -22,25 +24,22 @@ def _apply(docs: list[str], spans: list[Span]) -> list[str]:
 
 
 def redact(
-    text: str | Sequence[str | None],
+    text: str | Sequence[str | None] | Any,
     detectors: Sequence[str] | None = None,
     context: str | Sequence[str | None] | None = None,
     min_confidence: float = 0.0,
-) -> str | list[str | None]:
+) -> Any:
     """Replace every detected identifier with a placeholder naming its type.
 
     For example ``"PAN ABCPE1234F"`` becomes ``"PAN [PAN]"``; everything else
     is kept exactly. Redaction is irreversible.
 
-    Returns a string for a string input, otherwise a list of the same length
-    (``None`` stays ``None``).
+    ``text`` can be a string, a sequence of strings, a pandas or Polars
+    Series, or an Arrow array; the result has the same type (a Series keeps
+    its index and name). Missing values stay as they are.
     """
-    if isinstance(text, str):
-        return _apply([text], detect_pii(text, detectors, context, min_confidence))[0]
-    items = list(text)
-    docs = ["" if t is None else t for t in items]
-    out = _apply(docs, detect_pii(docs, detectors, context, min_confidence))
-    return [None if orig is None else red for orig, red in zip(items, out, strict=True)]
+    docs, _, wrap = texts(text)
+    return wrap(_apply(docs, detect_pii(docs, detectors, context, min_confidence)))
 
 
 @dataclass(frozen=True)
