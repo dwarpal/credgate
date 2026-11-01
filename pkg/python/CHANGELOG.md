@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-02)
 
+Governance and discovery: policies per model endpoint, a tamper-evident
+audit log, keyed tokens, and a PII inventory across data frames, Spark and
+BigQuery. Documentation: https://dwarpal.github.io/credgate/
+
+- Documentation site with the Python API reference, the R package site,
+  guides and the shared specification.
 - Column names count as labels for card verification codes and ration card
   numbers, which are otherwise found only after a label in the text: in a
   scan, a column named `card_cvv`, `cvv` or `cvc2` reports values that are
