@@ -39,6 +39,12 @@ Releases are cut from `main` only, after a `release/…` pull request is merged.
 
 Tags are never moved once a release is published.
 
+## Conduct and security
+
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
+Security issues are reported privately, as described in
+[SECURITY.md](SECURITY.md) - never in a public issue.
+
 ## Rules that apply to every change
 
 - **No real personal data**, anywhere: tests, examples, corpora, issues.

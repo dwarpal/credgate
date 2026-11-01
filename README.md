@@ -377,8 +377,8 @@ Secrets (vault passphrases) come only from arguments, environment variables
 or a prompt, and detected values are masked whenever credgate shows them.
 The [threat model](docs/threat-model.md) sets out what credgate protects,
 against whom, what it trusts and where it does not protect, for InfoSec and
-compliance reviews. Please report security issues privately to the
-maintainers rather than in a public issue.
+compliance reviews. Please report security issues privately, as described
+in [SECURITY.md](SECURITY.md), rather than in a public issue.
 
 ## Known limits
 
