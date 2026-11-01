@@ -38,7 +38,10 @@
           src = ./pkg/python;
           build-system = [ python3Packages.hatchling ];
           dependencies = with python3Packages; [ regex pyyaml ];
-          nativeCheckInputs = [ python3Packages.pytestCheckHook ];
+          # PyNaCl (saved vaults) on 3.12+: in nixpkgs 26.05 its docs need a
+          # Sphinx that no longer supports 3.11. The vault tests skip without it.
+          nativeCheckInputs = [ python3Packages.pytestCheckHook ]
+            ++ nixpkgs.lib.optional (python3Packages.pythonAtLeast "3.12") python3Packages.pynacl;
           pythonImportsCheck = [ "credgate" ];
           meta = {
             description = "Governance layer for LLM requests with Indian PII detection";
@@ -61,7 +64,7 @@
       checks = forAll (pkgs:
         let
           rTest = pkgs.rWrapper.override {
-            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr ]);
+            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr sodium ]);
           };
         in
         {
@@ -124,10 +127,10 @@
             (pkgs.rWrapper.override {
               packages = with pkgs.rPackages; [
                 cli rlang stringi yaml jsonlite
-                testthat withr roxygen2 rcmdcheck pkgload knitr rmarkdown
+                testthat withr roxygen2 rcmdcheck pkgload knitr rmarkdown sodium askpass
               ];
             })
-            (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ps.pytest ps.hatchling ps.build ]))
+            (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ps.pytest ps.pynacl ps.hatchling ps.build ]))
             pkgs.ruff
             pkgs.qpdf
             pkgs.pandoc # lets R CMD check validate README.md

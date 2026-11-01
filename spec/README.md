@@ -231,6 +231,49 @@ token-shaped text that is in the vault.
 
 Conformance cases are in `conformance/tokenise.yaml`.
 
+### Saved vaults (`.cgvault` files)
+
+A vault can be saved to a file and opened later, in either language. The
+file is encrypted with a key derived from a passphrase; without the
+passphrase it reveals nothing about its contents (not even how many
+entries it holds). Both implementations use libsodium (R `sodium`, Python
+`PyNaCl`).
+
+**Layout** (binary):
+
+| Bytes | Content |
+|---|---|
+| 8 | magic `CGVAULT` followed by the format version, `0x01` |
+| 1 | key derivation: `0x01` = `crypto_pwhash_scryptsalsa208sha256` with opslimit 524288 and memlimit 16777216 (libsodium's "interactive" limits) |
+| 32 | salt, random |
+| 24 | nonce, random |
+| rest | `crypto_secretbox` (XSalsa20-Poly1305) of the payload: 16-byte tag, then ciphertext |
+
+The 32-byte key is derived from the passphrase's UTF-8 bytes and the salt.
+Every save draws a new salt and nonce.
+
+**Payload**: UTF-8 JSON
+`{"format": "credgate-vault", "version": 1, "saved_at": "<UTC, ISO 8601>",
+"entries": [{"token", "type", "class", "canonical", "value"}, ...]}`, with
+entries in vault order. Opening rebuilds the vault exactly, so tokenising
+continues the numbering.
+
+**Rules**:
+
+- The passphrase comes from the caller, else the environment variable
+  `CREDGATE_VAULT_PASSPHRASE`, else an interactive prompt; it must have at
+  least 12 characters. It is never stored.
+- A wrong passphrase and a damaged or altered file give the same error
+  (authentication fails); a file without the magic, or with an unknown
+  version or key derivation, is reported as such.
+- Saving writes a temporary file readable only by its owner (mode 0600)
+  and renames it into place; an existing file is replaced only if it is
+  itself a vault file.
+
+Fixtures written by each implementation are in `conformance/vaults/`, listed
+with their passphrase and expected entries in `conformance/vault.yaml`; every
+implementation must open all of them.
+
 ## Evaluation (`evaluate`)
 
 Measures detection against labelled text.

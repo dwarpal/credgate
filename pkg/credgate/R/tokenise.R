@@ -186,3 +186,151 @@ as.data.frame.cg_vault <- function(x, row.names = NULL, optional = FALSE, ..., r
   rownames(out) <- row.names
   out
 }
+
+# Saved vault layout (spec, "Saved vaults").
+vault_magic <- c(charToRaw("CGVAULT"), as.raw(1L))
+vault_kdf_scrypt_interactive <- as.raw(1L)
+vault_header_bytes <- 8L + 1L + 32L + 24L
+vault_min_passphrase <- 12L
+
+#' Save a vault to an encrypted file, and open it again
+#'
+#' `vault_save()` writes the vault to a file encrypted with a passphrase, so
+#' tokens can be restored in a later session - in R or in Python, which read
+#' the same file. `vault_open()` reads it back; tokenising with the opened
+#' vault continues its numbering.
+#'
+#' The passphrase comes from `passphrase`, else the environment variable
+#' `CREDGATE_VAULT_PASSPHRASE`, else a prompt (in an interactive session with
+#' the askpass package). It needs at least 12 characters and is never
+#' stored: without it the file cannot be opened. The file is written readable
+#' only by you; an existing file is replaced only if it is itself a vault
+#' file. Encryption uses libsodium (scrypt key derivation, XSalsa20-Poly1305)
+#' through the sodium package.
+#'
+#' @param vault A vault from [cg_vault()] or `vault_open()`.
+#' @param path File to write or read, conventionally ending in `.cgvault`.
+#' @param passphrase The passphrase, or `NULL` to use
+#'   `CREDGATE_VAULT_PASSPHRASE` or a prompt.
+#' @return `vault_save()` returns `path` invisibly; `vault_open()` returns a
+#'   vault.
+#' @export
+#' @examplesIf requireNamespace("sodium", quietly = TRUE)
+#' vault <- cg_vault()
+#' tokenise("PAN ABCPE1234F", vault)
+#' path <- tempfile(fileext = ".cgvault")
+#' vault_save(vault, path, passphrase = "an example passphrase")
+#'
+#' # later, possibly in another session or in Python:
+#' vault <- vault_open(path, passphrase = "an example passphrase")
+#' restore("Customer [PAN_1] called.", vault)
+vault_save <- function(vault, path, passphrase = NULL) {
+  check_vault(vault)
+  check_sodium()
+  stopifnot(rlang::is_string(path))
+  existed <- file.exists(path)
+  if (existed && !identical(readBin(path, "raw", 7L), vault_magic[1:7])) {
+    rlang::abort(paste0("`", path, "` exists and is not a vault file; not replacing it."),
+      class = "credgate_vault_file"
+    )
+  }
+  passphrase <- vault_passphrase(passphrase, confirm = !existed)
+  entries <- vault$entries
+  payload <- jsonlite::toJSON(
+    list(
+      format = "credgate-vault",
+      version = 1L,
+      saved_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+      entries = entries[c("token", "type", "class", "canonical", "value")]
+    ),
+    auto_unbox = TRUE, dataframe = "rows"
+  )
+  salt <- sodium::random(32L)
+  nonce <- sodium::random(24L)
+  key <- sodium::scrypt(charToRaw(enc2utf8(passphrase)), salt, 32L)
+  sealed <- sodium::data_encrypt(charToRaw(enc2utf8(as.character(payload))), key, nonce)
+  data <- c(vault_magic, vault_kdf_scrypt_interactive, salt, nonce, as.vector(sealed))
+
+  tmp <- tempfile(pattern = paste0(".", basename(path), "."), tmpdir = dirname(path), fileext = ".tmp")
+  old_umask <- Sys.umask("077")
+  on.exit(Sys.umask(old_umask), add = TRUE)
+  on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
+  writeBin(data, tmp)
+  Sys.chmod(tmp, "600")
+  if (!file.rename(tmp, path)) {
+    rlang::abort(paste0("Could not write `", path, "`."), class = "credgate_vault_file")
+  }
+  invisible(path)
+}
+
+#' @rdname vault_save
+#' @export
+vault_open <- function(path, passphrase = NULL) {
+  check_sodium()
+  stopifnot(rlang::is_string(path))
+  data <- readBin(path, "raw", file.size(path))
+  fail <- function(msg) rlang::abort(msg, class = "credgate_vault_file")
+  if (length(data) < vault_header_bytes || !identical(data[1:7], vault_magic[1:7])) {
+    fail("Not a credgate vault file.")
+  }
+  if (data[8] != vault_magic[8]) {
+    fail(paste0("Unsupported vault file version ", as.integer(data[8]), "."))
+  }
+  if (data[9] != vault_kdf_scrypt_interactive) {
+    fail(paste0("Unsupported key derivation ", as.integer(data[9]), "."))
+  }
+  salt <- data[10:41]
+  nonce <- data[42:65]
+  key <- sodium::scrypt(charToRaw(enc2utf8(vault_passphrase(passphrase, confirm = FALSE))), salt, 32L)
+  plain <- tryCatch(
+    sodium::data_decrypt(data[-seq_len(vault_header_bytes)], key, nonce),
+    error = function(e) fail("Wrong passphrase, or the file is damaged or altered.")
+  )
+  json <- rawToChar(plain)
+  Encoding(json) <- "UTF-8"
+  payload <- jsonlite::fromJSON(json, simplifyVector = FALSE)
+  if (!identical(payload$format, "credgate-vault") || !identical(payload$version, 1L)) {
+    fail("Unsupported vault contents.")
+  }
+  vault <- cg_vault()
+  field <- function(name) vapply(payload$entries, function(e) e[[name]], character(1))
+  if (length(payload$entries) > 0) {
+    vault$entries <- data.frame(
+      token = field("token"), type = field("type"), class = field("class"),
+      canonical = field("canonical"), value = field("value")
+    )
+  }
+  vault
+}
+
+vault_passphrase <- function(passphrase, confirm) {
+  if (is.null(passphrase)) {
+    env <- Sys.getenv("CREDGATE_VAULT_PASSPHRASE")
+    passphrase <- if (nzchar(env)) env else NULL
+  }
+  if (is.null(passphrase)) {
+    if (!interactive() || !requireNamespace("askpass", quietly = TRUE)) {
+      rlang::abort(
+        "No passphrase: pass `passphrase` or set CREDGATE_VAULT_PASSPHRASE.",
+        class = "credgate_vault_file"
+      )
+    }
+    passphrase <- askpass::askpass("Vault passphrase: ")
+    if (confirm && !identical(askpass::askpass("Repeat passphrase: "), passphrase)) {
+      rlang::abort("The passphrases do not match.", class = "credgate_vault_file")
+    }
+  }
+  if (!rlang::is_string(passphrase) || nchar(passphrase) < vault_min_passphrase) {
+    rlang::abort(
+      paste0("The passphrase must have at least ", vault_min_passphrase, " characters."),
+      class = "credgate_vault_file"
+    )
+  }
+  passphrase
+}
+
+check_sodium <- function() {
+  if (!requireNamespace("sodium", quietly = TRUE)) {
+    rlang::abort('Saving and opening vaults needs the sodium package: install.packages("sodium")')
+  }
+}

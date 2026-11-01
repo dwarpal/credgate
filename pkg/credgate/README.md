@@ -71,7 +71,7 @@ Presidio is broader and more mature:
   field label or "ji"; credgate does not yet.
 - **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
   add custom operators; credgate redacts, or tokenises with an in-memory
-  vault (no hashing or encryption operators, and no saved vault yet).
+  vault that can be saved encrypted (no hashing or encryption operators).
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
@@ -86,9 +86,14 @@ The comparison is independent and not affiliated with Microsoft.
 ## Installation
 
 CRAN submission of 0.1.0 is under review. Until it is accepted, install
-from GitHub (this also gets the development version):
+the development version from R-universe or GitHub:
 
 ```r
+# Development version, prebuilt for Windows, macOS and Linux (R-universe):
+install.packages("credgate",
+  repos = c("https://dwarpal.r-universe.dev", "https://cloud.r-project.org"))
+
+# or from GitHub (needs build tools on Windows and macOS):
 # install.packages("remotes")
 remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
 ```
@@ -174,8 +179,19 @@ restore("[PERSON_NAME_1] (PAN [pan_1]) will be called on MOBILE_IN_1.", vault)
 The same identifier gets the same token however it is written, so the model
 can still tell customers apart. `restore()` accepts tokens as models tend to
 copy them (other case, spaces, missing brackets); `strict = TRUE` stops on a
-token the vault does not know. The vault lives in memory and prints with
-values masked; saving it (encrypted) is planned.
+token the vault does not know. The vault prints with values masked.
+
+To restore tokens in a later session - or in Python - save the vault to a
+file encrypted with a passphrase (at least 12 characters; from the argument,
+the `CREDGATE_VAULT_PASSPHRASE` environment variable, or a prompt):
+
+```r
+vault_save(vault, "loans.cgvault")      # needs the sodium package
+vault <- vault_open("loans.cgvault")    # later: same tokens, numbering continues
+```
+
+The passphrase is never stored: without it the file cannot be opened. Keep
+`*.cgvault` files out of version control.
 
 ### Scanning data frames
 

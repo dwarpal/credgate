@@ -31,8 +31,10 @@ Imports:
     stringi,
     yaml
 Suggests:
+    askpass,
     knitr,
     rmarkdown,
+    sodium,
     testthat (>= 3.0.0),
     withr
 VignetteBuilder: knitr
