@@ -62,7 +62,9 @@ def main() -> None:
 
     credgate.detect_pii("warm up PAN ABCPE1234F")
     print(f"credgate {credgate.__version__} (Python {sys.version.split()[0]}), one core\n")
-    print("| Input | Values | Mean characters | detect_pii values/s | redact values/s | tokenise values/s | MB/s (detect) |")
+    print(
+        "| Input | Values | Mean characters | detect_pii values/s | redact values/s | tokenise values/s | MB/s (detect) |"
+    )
     print("|---|---:|---:|---:|---:|---:|---:|")
     for name, texts in sets.items():
         chars = sum(len(t) for t in texts)

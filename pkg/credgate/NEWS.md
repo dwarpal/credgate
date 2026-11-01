@@ -1,5 +1,8 @@
 # credgate (development version)
 
+* Faster: context keywords, replacements and new vault entries are handled
+  for all matches at once rather than one by one. Detection is 1.2-1.9x
+  faster, `redact()` up to 3x and `tokenise()` 5-7x; results are unchanged.
 * Names in mixed scripts: a Latin honorific, relation or label before a
   Devanagari name ("Smt. सुनीता देवी", "S/o रामेश्वर प्रसाद") and a Devanagari
   one before a Latin name ("श्री Ramesh Kumar") are found. Fixes "Name:"

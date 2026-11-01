@@ -20,7 +20,8 @@ from ._spec import engine
 class Normalised:
     """Normalised text and, per code point, the index of the original one.
 
-    ``map`` is ``None`` when the text is unchanged.
+    ``map`` is ``None`` when every code point maps to exactly one, so
+    positions are unchanged.
     """
 
     text: str
@@ -37,6 +38,13 @@ def normalise(text: str | None) -> Normalised:
         text = ""
     if text.isascii():
         return Normalised(text, None)
+
+    # Usually every code point maps to exactly one (Devanagari letters stay,
+    # Indic digits become ASCII digits): positions do not move, so translate
+    # in one call and keep no map.
+    table = {cp: _normalise_cached(cp) for cp in {ord(ch) for ch in text if ord(ch) >= 128}}
+    if all(len(rep) == 1 for rep in table.values()):
+        return Normalised(text.translate(table), None)
 
     pieces: list[str] = []
     mapping: list[int] = []
@@ -55,6 +63,16 @@ def normalise(text: str | None) -> Normalised:
     if out == text and len(mapping) == len(text):
         return Normalised(out, None)
     return Normalised(out, tuple(mapping))
+
+
+_CACHE: dict[int, str] = {}
+
+
+def _normalise_cached(cp: int) -> str:
+    rep = _CACHE.get(cp)
+    if rep is None:
+        rep = _CACHE[cp] = _normalise_code_point(cp)
+    return rep
 
 
 def _normalise_code_point(cp: int) -> str:

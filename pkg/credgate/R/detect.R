@@ -156,35 +156,40 @@ nearest_keyword <- function(pattern, before, after, extra) {
     hit = rep(NA_character_, n), side = rep(NA_integer_, n),
     distance = rep(NA_integer_, n)
   )
-  if (is.null(pattern)) {
+  if (is.null(pattern) || n == 0) {
     return(out)
   }
   opts <- stringi::stri_opts_regex(case_insensitive = TRUE)
-  loc_before <- stringi::stri_locate_all_regex(before, pattern, opts_regex = opts)
-  loc_after <- stringi::stri_locate_first_regex(after, pattern, opts_regex = opts)
-  loc_extra <- stringi::stri_locate_first_regex(extra, pattern, opts_regex = opts)
-  for (i in seq_len(n)) {
-    lb <- loc_before[[i]]
-    if (!is.na(lb[1, 1])) {
-      last <- lb[nrow(lb), ]
-      rest <- stringi::stri_sub(before[i], last[2] + 1L)
-      word_end <- last[2] + letters_run(rest, "^[\\p{L}\\p{M}]+")
-      out[i, ] <- list(stringi::stri_sub(before[i], last[1], last[2]), 0L, nchar(before[i]) - word_end)
-    } else if (!is.na(loc_after[i, 1])) {
-      lead <- stringi::stri_sub(after[i], 1L, loc_after[i, 1] - 1L)
-      word_start <- nchar(lead) - letters_run(lead, "[\\p{L}\\p{M}]+$")
-      out[i, ] <- list(stringi::stri_sub(after[i], loc_after[i, 1], loc_after[i, 2]), 1L, word_start)
-    } else if (!is.na(loc_extra[i, 1])) {
-      out[i, ] <- list(stringi::stri_sub(extra[i], loc_extra[i, 1], loc_extra[i, 2]), 2L, 0L)
-    }
-  }
+
+  # Side 2: the caller's extra context (weakest).
+  loc <- stringi::stri_locate_first_regex(extra, pattern, opts_regex = opts)
+  hit <- !is.na(loc[, 1])
+  out$hit[hit] <- stringi::stri_sub(extra[hit], loc[hit, 1], loc[hit, 2])
+  out$side[hit] <- 2L
+  out$distance[hit] <- 0L
+
+  # Side 1: the first keyword after the match, measured from its word start.
+  loc <- stringi::stri_locate_first_regex(after, pattern, opts_regex = opts)
+  hit <- !is.na(loc[, 1])
+  lead <- stringi::stri_sub(after[hit], 1L, loc[hit, 1] - 1L)
+  out$hit[hit] <- stringi::stri_sub(after[hit], loc[hit, 1], loc[hit, 2])
+  out$side[hit] <- 1L
+  out$distance[hit] <- nchar(lead) - letters_run(lead, "[\\p{L}\\p{M}]+$")
+
+  # Side 0: the last keyword before the match, measured from its word end.
+  loc <- stringi::stri_locate_last_regex(before, pattern, opts_regex = opts)
+  hit <- !is.na(loc[, 1])
+  rest <- stringi::stri_sub(before[hit], loc[hit, 2] + 1L)
+  out$hit[hit] <- stringi::stri_sub(before[hit], loc[hit, 1], loc[hit, 2])
+  out$side[hit] <- 0L
+  out$distance[hit] <- nchar(before[hit]) - (loc[hit, 2] + letters_run(rest, "^[\\p{L}\\p{M}]+"))
   out
 }
 
-# Length of the match of `pattern` in `x` (0 if none).
+# Length of the match of `pattern` in each element of `x` (0 if none).
 letters_run <- function(x, pattern) {
   m <- stringi::stri_extract_first_regex(x, pattern)
-  if (is.na(m)) 0L else nchar(m)
+  ifelse(is.na(m), 0L, nchar(m))
 }
 
 map_spans <- function(norm, doc, s, e) {

@@ -8,6 +8,7 @@ import random
 import time
 
 import pytest
+import yaml
 
 import credgate
 from credgate import detect_pii, redact
@@ -165,3 +166,38 @@ def test_pathological_inputs_finish_quickly(text):
     elapsed = time.perf_counter() - t0
     check_span_invariants(text, spans)
     assert elapsed < 20, f"took {elapsed:.1f}s"
+
+
+def conformance(name: str) -> dict:
+    return yaml.safe_load((credgate.spec_path() / "conformance" / name).read_text(encoding="utf-8"))
+
+
+def _all_conformance_texts():
+    texts = [c["text"] for c in conformance("detect.yaml")["cases"]]
+    texts += [c["text"] for c in conformance("redact.yaml")["cases"]]
+    neg = conformance("negatives.yaml")
+    texts += [c["text"] for c in neg["negatives"] + neg["known_false_positives"]]
+    for case in conformance("tokenise.yaml")["cases"]:
+        for step in case["steps"]:
+            texts += step.get("tokenise", [])
+    texts += [" ".join(r.values()) for r in credgate.synth_indian_pii(50, seed=3)]
+    return texts
+
+
+def test_searching_together_equals_searching_one_by_one():
+    # detect_pii searches all documents in one pass (joined by a separator);
+    # the result must equal searching each document on its own.
+    texts = _all_conformance_texts()
+    together = [(s.doc, s.start, s.end, s.type, s.confidence, s.reasons) for s in detect_pii(texts)]
+    alone = [
+        (i, s.start, s.end, s.type, s.confidence, s.reasons)
+        for i, t in enumerate(texts)
+        for s in detect_pii(t)
+    ]
+    assert together == alone
+
+
+def test_documents_with_nul_characters_are_searched_one_by_one():
+    texts = ["PAN ABCPE1234F", "a\x00b mobile 9876543210", "Aadhaar 542229371182"]
+    together = [(s.doc, s.type) for s in detect_pii(texts)]
+    assert together == [(0, "pan"), (1, "mobile_in"), (2, "aadhaar")]
