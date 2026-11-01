@@ -1,5 +1,10 @@
 # credgate (development version)
 
+* BigQuery: `TABLESAMPLE` queries are no longer sent with BigQuery's
+  `maximumBytesBilled`, which BigQuery checks against the whole table and so
+  refused cheap samples of large tables. The dry-run check still applies;
+  measured against real BigQuery, it estimates sampled queries to within
+  about 1 MB.
 * BigQuery: `bq_scan_pii()`, `bq_pii_inventory()` and
   `bq_inventory_dataset()` (every table in a dataset), through bigrquery.
   BigQuery samples the table (`TABLESAMPLE`, billing only the sampled

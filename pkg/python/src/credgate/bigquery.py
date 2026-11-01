@@ -54,7 +54,9 @@ def scan_pii(
             billed) or ``"rand"`` (reads and bills whole columns). Views and
             external tables always use ``"rand"``.
         max_bytes: Refuse any query estimated to process more bytes than
-            this (default 1 GB); also sent to BigQuery as the billing limit.
+            this (default 1 GB). Also sent to BigQuery as the billing limit,
+            except with TABLESAMPLE, where BigQuery would check it against
+            the whole table.
     """
     rows = _sample(client, table, sample, sampling, max_bytes)[0]
     return _scan_pii(rows, sample=sample, min_rate=min_rate, detectors=detectors)
@@ -167,15 +169,19 @@ def _sample(client: Any, table: Any, sample: int, sampling: str, max_bytes: int)
     sql, read, method = sample_query(full, t.table_type or "TABLE", n, fields, sample, sampling)
     values: dict[str, list[Any]] = {name: [] for name in read}
     if sql is not None:
-        for row in _run(client, sql, max_bytes):
+        # BigQuery checks maximumBytesBilled against the whole table for
+        # TABLESAMPLE; the dry run's estimate is the accurate one there.
+        enforce = method != "bigquery-tablesample"
+        for row in _run(client, sql, max_bytes, enforce):
             for i, name in enumerate(read):
                 values[name].append(row[i])
     columns = {f[0]: values.get(f[0], []) for f in fields}
     return _Sampled(columns, int(n), method), t
 
 
-def _run(client: Any, sql: str, max_bytes: int) -> Any:
-    """Run a query after a dry run shows it stays within ``max_bytes``."""
+def _run(client: Any, sql: str, max_bytes: int, enforce: bool = True) -> Any:
+    """Run a query after a dry run shows it stays within ``max_bytes``; with
+    ``enforce``, BigQuery also enforces the limit (maximumBytesBilled)."""
     from google.cloud import bigquery
 
     dry = client.query(sql, job_config=bigquery.QueryJobConfig(dry_run=True, use_query_cache=False))
@@ -186,8 +192,10 @@ def _run(client: Any, sql: str, max_bytes: int) -> Any:
             f"{max_bytes:,}; nothing was run. Raise max_bytes, or use a smaller sample "
             f"(with sampling='tablesample' only sampled blocks are billed).\n{sql}"
         )
-    job = client.query(sql, job_config=bigquery.QueryJobConfig(maximum_bytes_billed=max_bytes))
-    return job.result()
+    config = bigquery.QueryJobConfig()
+    if enforce:
+        config.maximum_bytes_billed = max_bytes
+    return client.query(sql, job_config=config).result()
 
 
 def _ident(name: str) -> str:

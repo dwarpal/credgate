@@ -54,7 +54,8 @@ sampled blocks are billed) or \code{"rand"} (reads and bills whole columns).
 Views and external tables always use \code{"rand"}.}
 
 \item{max_bytes}{Refuse any query estimated to process more bytes than
-this (default 1 GB); also sent to BigQuery as the billing limit.}
+this (default 1 GB). Also sent to BigQuery as the billing limit, except
+with TABLESAMPLE, where BigQuery would check it against the whole table.}
 
 \item{source}{Source name for the inventory; defaults to
 \code{"bigquery:<project>"}. The table is recorded as \code{"dataset.table"}.}

@@ -129,3 +129,43 @@ def test_whole_dataset(client):
     inv = cgbq.inventory_dataset(client, "test.crm")
     assert sorted({r.table for r in inv}) == ["crm.calls", "crm.customers"]
     assert any(r.table == "crm.calls" and r.type == "mobile_in" for r in inv)
+
+
+class _FakeClient:
+    """Records the queries and job settings that would reach BigQuery."""
+
+    def __init__(self, n, kind="TABLE"):
+        self.n, self.kind, self.jobs = n, kind, []
+
+    def get_table(self, table):
+        field = type("Field", (), {"name": "pan", "field_type": "STRING", "mode": "NULLABLE"})
+        return type(
+            "Table",
+            (),
+            {
+                "project": "p",
+                "dataset_id": "d",
+                "table_id": "t",
+                "num_rows": self.n,
+                "table_type": self.kind,
+                "schema": [field],
+            },
+        )
+
+    def query(self, sql, job_config):
+        self.jobs.append((sql, job_config.dry_run, job_config.maximum_bytes_billed))
+        rows = [("ABCPE1234F",)] * 3
+        return type("Job", (), {"total_bytes_processed": 1000, "result": lambda self: rows})()
+
+
+@pytest.mark.parametrize(("kind", "limit"), [("TABLE", None), ("VIEW", 10**9)])
+def test_bigquery_limit_is_not_sent_with_tablesample(kind, limit):
+    # BigQuery checks maximumBytesBilled against the whole table for
+    # TABLESAMPLE, though it bills only the sampled blocks.
+    client = _FakeClient(n=10**6, kind=kind)
+    cgbq.scan_pii(client, "p.d.t", sample=100)
+    dry, run = client.jobs
+    assert dry[1] is True
+    assert run[1] is not True
+    assert run[2] == limit
+    assert ("TABLESAMPLE" in run[0]) == (kind == "TABLE")
