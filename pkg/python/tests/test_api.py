@@ -26,8 +26,17 @@ def test_detector_subset_and_min_confidence():
 
 def test_window_controls_how_far_context_reaches():
     text = "voter" + " " * 60 + "FSO6231132"
-    assert detect_pii(text) == []
-    assert [s.type for s in detect_pii(text, window=80)] == ["voter_epic"]
+    assert [s.confidence for s in detect_pii(text)] == [0.3]
+    assert [s.confidence for s in detect_pii(text, window=80)] == [0.97]
+
+
+def test_text_cues_outweigh_extra_context():
+    # Extra context (a column name) counts as farther than any cue in the text.
+    (s,) = detect_pii("order 542229371182", context="aadhaar")
+    assert s.confidence == 0.48
+    (s,) = detect_pii("Aadhaar 542229371182", context="order id")
+    assert s.confidence == 0.97
+    assert "farther negative context 'order' ignored" in s.reasons
 
 
 def test_span_to_dict():

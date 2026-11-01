@@ -13,6 +13,7 @@ new_detector(
   validate = NULL,
   checks = NULL,
   base = 0.8,
+  base_without_context = NULL,
   context = NULL,
   negative = NULL,
   context_required = FALSE,
@@ -46,6 +47,11 @@ reason for each match (e.g. \code{"Verhoeff checksum valid"}).}
 context, or a function taking the matched strings and returning one
 confidence per match (e.g. higher for a mobile number written with
 \code{+91}).}
+
+\item{base_without_context}{Confidence (0-1) used instead of \code{base} when no
+context keyword is found, or \code{NULL}. For patterns that are strong
+evidence with context but weak without it (a voter ID format alone could
+be a product code).}
 
 \item{context}{Regex (case-insensitive) of keywords that raise confidence
 when they appear near the match, or \code{NULL}.}

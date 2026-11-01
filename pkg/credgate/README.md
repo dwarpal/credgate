@@ -42,9 +42,9 @@ Ollama, vLLM, data frames and evaluation; runnable scripts are in the
 
 | On 700 held-out synthetic documents | Precision | Recall | **F1** | Time |
 |---|---:|---:|---:|---:|
-| **credgate** | 0.985 | 0.916 | **0.949** | 0.3 s |
-| Presidio, India-configured | 0.600 | 0.748 | 0.666 | 12.1 s |
-| Presidio, default | 0.555 | 0.472 | 0.510 | 15.6 s |
+| **credgate** | 0.999 | 0.957 | **0.977** | 0.2 s |
+| Presidio, India-configured | 0.600 | 0.748 | 0.666 | 11.4 s |
+| Presidio, default | 0.555 | 0.472 | 0.510 | 11.9 s |
 
 <sub>**About the data:** the 700 documents are **synthetic** - KYC forms, bank
 messages, call-centre notes, Hinglish chats, Hindi text and hospital
@@ -62,12 +62,13 @@ and Indian-language context, and that is what this benchmark measures.
 Presidio is broader and more mature:
 
 - **Voter IDs without context**: Presidio scores 1.000 here, credgate 0.677
-  (credgate needs a nearby keyword such as "voter" or "EPIC").
+  (credgate reports a bare voter ID format at low confidence, 0.3, because
+  it could equally be a product code).
 - **Many more entity types**: international IDs (US, UK, EU, ...), IBAN, IP
   and MAC addresses, URLs, crypto wallets, dates, nationality and religion -
   credgate detects none of these.
-- **Names in running text**: Presidio's NER finds names without an honorific
-  or field label; credgate does not yet.
+- **Names in running text**: Presidio's NER finds names without an honorific,
+  field label or "ji"; credgate does not yet.
 - **Anonymisation**: Presidio can mask, hash or reversibly encrypt;
   credgate only redacts irreversibly so far.
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
@@ -197,11 +198,33 @@ register_detector(new_detector(
 cg_detectors() # all registered detectors
 ```
 
+## Masked output
+
+Wherever credgate *shows* a detected value (printed matches, `preview()`,
+`scan_pii()` examples), it masks it:
+
+| Value | Shown as |
+|---|---|
+| Identifiers (Aadhaar, PAN, mobile, account, card, ...) | last 4 characters kept: `XXXX XXXX 1182`, `XXXXXX234F` |
+| Names and addresses | masked in full: `XXXXX XXX` |
+
+Keeping the last 4 characters lets you check which value matched, and stays
+within the display limits of UIDAI's masked Aadhaar and PCI DSS (cards). If
+your policy allows no part of a value to be shown, mask everything:
+
+```r
+options(credgate.mask = "full")   # or CREDGATE_MASK=full in ~/.Renviron
+```
+
+Masking changes only what is displayed; detection and `redact()`
+(`[AADHAAR]`, `[PERSON_NAME]`) are unaffected.
+
 ## Limits
 
 Names and addresses are found only next to a cue: an honorific (Shri, Smt,
-श्रीमती), a relation (S/o, D/o), a field label (`Name:`, `पता:`) or a
-house/village keyword followed by a PIN code. A bare 12-digit number may pass
+श्रीमती, or "ji" after the name), a relation (S/o, D/o), a field label
+(`Name:`, `पता:`) or a house/village keyword followed by a PIN code. A deity
+addressed with "ji" ("Ram ji") is taken as a name. A bare 12-digit number may pass
 the Aadhaar checksum by chance and is reported with lower confidence.
 
 ## Citing credgate

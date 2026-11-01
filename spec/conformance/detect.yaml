@@ -69,9 +69,10 @@ cases:
     text: 'pan aaacr5055k'
     expect:
       - {type: pan, value: aaacr5055k, canonical: AAACR5055K, confidence: 0.97, reason: 'holder type: company'}
-  - id: voter-needs-context
+  - id: voter-format-alone-is-low-confidence
     text: 'ABC1234567'
-    expect: []
+    expect:
+      - {type: voter_epic, value: ABC1234567, confidence: 0.3}
   - id: voter-with-context
     text: 'voter id FSO6231132'
     expect:
@@ -323,3 +324,57 @@ cases:
       - {type: person_name, value: पूजा यादव}
       - {type: mobile_in, value: '9468451273', confidence: 0.93}
       - {type: address, value: 'मकान 185, शिवाजी पार्क, इंदौर 452001'}
+
+  # --- Context: the stronger cue wins -------------------------------------
+  - id: nearer-context-beats-farther-negative
+    text: 'Caller gave Aadhaar 542229371182 for e-KYC; order 51966'
+    expect:
+      - {type: aadhaar, value: '542229371182', confidence: 0.97,
+         reason: "farther negative context 'order' ignored"}
+  - id: nearer-negative-beats-farther-context
+    text: 'Aadhaar check: order 542229371182'
+    expect:
+      - {type: aadhaar, value: '542229371182', confidence: 0.48,
+         reason: "negative context 'order'"}
+  - id: label-before-value-beats-label-of-next-item
+    # "Aadhaar" labels the second number, not the first.
+    text: 'order no 878245671885, Aadhaar 542229371182'
+    expect:
+      - {type: aadhaar, value: '878245671885', confidence: 0.48,
+         reason: "negative context 'order'"}
+      - {type: aadhaar, value: '542229371182', confidence: 0.97}
+  - id: context-distance-counts-from-whole-word
+    text: 'Verified mobile 08355376125. Ticket B81742.'
+    expect:
+      - {type: mobile_in, value: '08355376125', confidence: 0.97,
+         reason: "farther negative context 'Ticket' ignored"}
+
+  # --- Bank accounts and voter IDs without labels --------------------------
+  - id: ifsc-next-to-account-number
+    text: 'LQN0147194|581643357870332137|UTIB0662682'
+    expect:
+      - {type: voter_epic, value: LQN0147194, confidence: 0.3}
+      - {type: bank_account, value: '581643357870332137', confidence: 0.97,
+         reason: "context 'UTIB0662682'"}
+      - {type: ifsc, value: UTIB0662682}
+  - id: ifsc-does-not-turn-a-mobile-into-an-account
+    text: 'mobile 9876543210, IFSC HDFC0001234'
+    expect:
+      - {type: mobile_in, value: '9876543210', confidence: 0.93}
+      - {type: ifsc, value: HDFC0001234, confidence: 0.98}
+
+  # --- Names with "ji" -----------------------------------------------------
+  - id: name-before-ji
+    text: 'Subhash Verma ji ka number 9876543210 hai'
+    expect:
+      - {type: person_name, value: Subhash Verma, confidence: 0.8}
+      - {type: mobile_in, value: '9876543210', confidence: 0.65}
+  - id: greeting-before-name-ji
+    text: 'Namaste Sharma ji'
+    expect:
+      - {type: person_name, value: Sharma}
+  - id: name-before-ji-devanagari
+    text: 'सुनीता जी का फोन आया'
+    expect:
+      - {type: person_name, value: सुनीता}
+

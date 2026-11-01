@@ -5,8 +5,8 @@ spec_version_supported <- 1L
 
 detector_fields <- c(
   "id", "class", "label", "patterns", "bounded", "capture", "ignore_case",
-  "validate", "checks", "base", "context", "negative", "context_required",
-  "describe", "canonical"
+  "validate", "checks", "base", "base_without_context", "context", "negative",
+  "context_required", "describe", "canonical"
 )
 
 #' Path to the detection spec shipped with the package
@@ -113,6 +113,7 @@ compile_detector <- function(def) {
     validate = compile_validators(def$validate),
     checks = def$checks,
     base = compile_base(def$base),
+    base_without_context = def$base_without_context,
     context = expand_fragments(def$context),
     negative = expand_fragments(def$negative),
     context_required = isTRUE(def$context_required),

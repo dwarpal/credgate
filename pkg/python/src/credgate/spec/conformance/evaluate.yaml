@@ -18,13 +18,13 @@ cases:
 
   - id: false-positive-and-miss
     # The order number is detected as a low-confidence Aadhaar (a false
-    # positive); the voter ID has no context and is missed.
+    # positive); the name has no cue (honorific, label, "ji") and is missed.
     documents:
       - {id: d1, text: 'order no 878245671885', spans: []}
-      - {id: d2, text: 'ABC1234567', spans: [{start: 0, end: 10, type: voter_epic}]}
+      - {id: d2, text: 'Mary Singh called', spans: [{start: 0, end: 10, type: person_name}]}
     expect:
       - {type: aadhaar, tp: 0, fp: 1, fn: 0, precision: 0.0, recall: null, f1: null}
-      - {type: voter_epic, tp: 0, fp: 0, fn: 1, precision: null, recall: 0.0, f1: null}
+      - {type: person_name, tp: 0, fp: 0, fn: 1, precision: null, recall: 0.0, f1: null}
       - {type: overall, tp: 0, fp: 1, fn: 1, precision: 0.0, recall: 0.0, f1: null}
 
   - id: min-confidence-removes-false-positive
@@ -75,7 +75,7 @@ cases:
           - {start: 23, end: 33, type: pan}
           - {start: 43, end: 53, type: mobile_in}
       - id: d2
-        text: 'Ms Word file, ref 5422293711820'
+        text: 'Ram ji ki kripa, ref 5422293711820'
         spans: []
     expect:
       - {type: mobile_in, tp: 1, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0}

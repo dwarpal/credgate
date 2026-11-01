@@ -11,13 +11,22 @@ test_that("detector subset, min_confidence and window", {
   expect_error(detect_pii(text, detectors = "nope"), "Unknown detector")
 
   far <- paste0("voter", strrep(" ", 60), "FSO6231132")
-  expect_equal(nrow(detect_pii(far)), 0)
-  expect_equal(detect_pii(far, window = 80)$type, "voter_epic")
+  expect_equal(detect_pii(far)$confidence, 0.3)
+  expect_equal(detect_pii(far, window = 80)$confidence, 0.97)
+})
+
+test_that("text cues outweigh extra context", {
+  # Extra context (a column name) counts as farther than any cue in the text.
+  expect_equal(detect_pii("order 542229371182", context = "aadhaar")$confidence, 0.48)
+  s <- detect_pii("Aadhaar 542229371182", context = "order id")
+  expect_equal(s$confidence, 0.97)
+  expect_match(s$reasons, "farther negative context 'order' ignored", fixed = TRUE)
 })
 
 test_that("context is recycled across documents", {
   spans <- detect_pii(c("ABC1234567", "ABC1234567"), context = c("voter_id", NA))
-  expect_equal(spans$doc, 1L)
+  expect_equal(spans$doc, 1:2)
+  expect_equal(spans$confidence, c(0.97, 0.3))
   expect_equal(detect_pii(c("ABC1234567", "ABC1234567"), context = "voter")$doc, 1:2)
 })
 
@@ -25,6 +34,16 @@ test_that("print can reveal values when asked", {
   spans <- detect_pii("PAN ABCPE1234F")
   out <- suppressMessages(capture.output(print(spans, reveal = TRUE), type = "output"))
   expect_true(any(grepl("ABCPE1234F", out, fixed = TRUE)))
+})
+
+test_that("new_detector validates base_without_context", {
+  args <- list(id = "x", class = "c", label = "X", pattern = "X[0-9]+")
+  expect_error(do.call(new_detector, c(args, base_without_context = 0.3)), "needs `context`")
+  expect_error(
+    do.call(new_detector, c(args, base_without_context = 0.3, context = "x", context_required = TRUE)),
+    "exclude each other"
+  )
+  expect_error(do.call(new_detector, c(args, base_without_context = 0, context = "x")))
 })
 
 test_that("new_detector validates its arguments", {

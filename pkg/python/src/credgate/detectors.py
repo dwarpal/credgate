@@ -19,8 +19,8 @@ from .checksums import gstin_valid, luhn_valid, strip_separators, verhoeff_valid
 
 _DETECTOR_FIELDS = {
     "id", "class", "label", "patterns", "bounded", "capture", "ignore_case",
-    "validate", "checks", "base", "context", "negative", "context_required",
-    "describe", "canonical",
+    "validate", "checks", "base", "base_without_context", "context", "negative",
+    "context_required", "describe", "canonical",
 }  # fmt: skip
 
 
@@ -48,6 +48,9 @@ class Detector:
             reasons.
         base: Confidence (0-1) without supporting context, or a function of
             the matched string returning it.
+        base_without_context: Confidence (0-1) used instead of ``base`` when no
+            context keyword is found; for patterns that are strong evidence
+            with context but weak without it.
         context: Regex (case-insensitive) of keywords that raise confidence
             when they appear near the match.
         negative: Regex (case-insensitive) of keywords that lower confidence.
@@ -66,6 +69,7 @@ class Detector:
     validate: Callable[[str], bool] | None = None
     checks: str | None = None
     base: float | Callable[[str], float] = 0.8
+    base_without_context: float | None = None
     context: str | None = None
     negative: str | None = None
     context_required: bool = False
@@ -79,6 +83,15 @@ class Detector:
             object.__setattr__(self, "patterns", (self.patterns,))
         if not callable(self.base) and not 0 < self.base <= 1:
             raise ValueError("`base` must be in (0, 1] or a function.")
+        if self.base_without_context is not None:
+            if not 0 < self.base_without_context <= 1:
+                raise ValueError("`base_without_context` must be in (0, 1].")
+            if self.context_required:
+                raise ValueError(
+                    "`base_without_context` and `context_required` exclude each other."
+                )
+            if not self.context:
+                raise ValueError("`base_without_context` needs `context`.")
         flags = regex.IGNORECASE if self.ignore_case else 0
         compiled = (
             tuple(regex.compile(p, flags) for p in self.patterns),
@@ -257,6 +270,7 @@ def compile_detector(spec: dict[str, Any]) -> Detector:
         validate=_compile_validators(spec.get("validate")),
         checks=spec.get("checks"),
         base=_compile_base(spec["base"]),
+        base_without_context=spec.get("base_without_context"),
         context=expand_fragments(spec.get("context")),
         negative=expand_fragments(spec.get("negative")),
         context_required=bool(spec.get("context_required", False)),
