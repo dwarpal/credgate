@@ -1,0 +1,125 @@
+---
+title: "Large data: Arrow, Parquet, DuckDB and databases"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Large data: Arrow, Parquet, DuckDB and databases}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+has <- function(...) all(vapply(c(...), requireNamespace, logical(1), quietly = TRUE))
+```
+
+Bank and insurance data rarely fits in a data frame. credgate works on
+**Arrow** tables and **Parquet** files, and on tables in **DuckDB** and other
+databases through DBI and dbplyr, reading them in chunks so the data may be
+larger than memory. The packages are optional: install the ones you use.
+
+All data in this vignette is synthetic.
+
+```{r}
+library(credgate)
+
+recs <- synth_indian_pii(2000, seed = 42)
+templates <- c(
+  "Shri %s called about a failed UPI payment to %s.",
+  "Name: %s. PAN %s verified; wants the EMI date moved.",
+  "Branch hours query, no customer details given."
+)
+n <- 20000
+i <- (seq_len(n) - 1) %% nrow(recs) + 1
+kind <- seq_len(n) %% 3 + 1
+calls <- data.frame(
+  call_id = seq_len(n),
+  cust_pan = recs$pan[i],
+  mobile = as.numeric(recs$mobile[i]),
+  amount = round(seq_len(n) * 7.31 %% 250000, 2),
+  notes = ifelse(kind == 1, sprintf(templates[1], recs$name[i], recs$upi_id[i]),
+    ifelse(kind == 2, sprintf(templates[2], recs$name[i], recs$pan[i]), templates[3])
+  )
+)
+```
+
+## Which columns hold personal data?
+
+`scan_pii()` takes a data frame, an Arrow `Table` or `Dataset`, or a database
+table from dbplyr. Arrow and database tables are read **one column at a
+time, in chunks**, and sampled exactly as in memory: the report is the same
+whatever the size of the table.
+
+```{r}
+scan_pii(calls, sample = 5000)
+```
+
+## Arrow and Parquet
+
+```{r, eval = has("arrow")}
+path <- tempfile(fileext = ".parquet")
+arrow::write_parquet(calls, path, chunk_size = 5000)
+
+# Scan the file without loading it:
+scan_pii(arrow::open_dataset(path), sample = 5000)
+```
+
+`redact_parquet()` writes a redacted copy, `batch_size` rows at a time.
+Columns you do not name are copied unchanged, so drop or tokenise the
+structured identifier columns separately:
+
+```{r, eval = has("arrow")}
+safe <- tempfile(fileext = ".parquet")
+redact_parquet(path, safe, columns = "notes", min_confidence = 0.5)
+head(arrow::read_parquet(safe, col_select = c("call_id", "notes")), 3)
+```
+
+`redact()`, `tokenise()` and `detect_pii()` also accept Arrow arrays and
+return an Arrow array:
+
+```{r, eval = has("arrow")}
+redact(arrow::Array$create(c("PAN ABCPE1234F", NA, "no PII")))
+```
+
+## DuckDB and other databases
+
+With dbplyr, `scan_pii()` works on any database table: DuckDB, Postgres,
+SQLite, and others with a DBI driver. The query is run once per column, in
+chunks.
+
+```{r, eval = has("duckdb", "DBI", "dbplyr", "dplyr")}
+con <- DBI::dbConnect(duckdb::duckdb())
+DBI::dbWriteTable(con, "calls", calls)
+
+scan_pii(dplyr::tbl(con, "calls"), sample = 5000)
+
+# Any dbplyr query works, not only whole tables:
+recent <- dplyr::filter(dplyr::tbl(con, "calls"), call_id > 15000)
+scan_pii(recent, sample = 1000)
+```
+
+DuckDB cannot call R functions from SQL, so `redact_query()` fetches a
+query's result in chunks, redacts the text columns and appends them to a new
+table. With DuckDB the query can read files directly, and `COPY` writes the
+result back to Parquet:
+
+```{r, eval = has("duckdb", "DBI")}
+redact_query(con, "SELECT call_id, amount, notes FROM calls", "calls_safe",
+  min_confidence = 0.5
+)
+DBI::dbGetQuery(con, "SELECT * FROM calls_safe LIMIT 3")
+
+out <- tempfile(fileext = ".parquet")
+DBI::dbExecute(con, sprintf("COPY calls_safe TO '%s' (FORMAT parquet)", out))
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
+For a Parquet file, `redact_query(con, "SELECT * FROM 'calls.parquet'", ...)`
+reads it without loading it into R first.
+
+## Sizes and speed
+
+credgate processes roughly 0.2-0.3 MB of text per second per core in R (see
+the throughput section of the repository's `benchmark/README.md`). For very
+large tables, scan first: structured columns such as `cust_pan` are better
+dropped or tokenised as whole columns, leaving detection for free-text
+columns only.

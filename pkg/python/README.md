@@ -238,7 +238,9 @@ credgate redact --parquet calls.parquet --column notes -o safe.parquet
 credgate scan calls.parquet
 ```
 
-Parquet files, DuckDB queries and Polars lazy frames are processed in
+See the [large-data guide](https://github.com/dwarpal/credgate/blob/main/docs/large-data.md)
+for the approach and runnable examples. Parquet files, DuckDB queries and
+Polars lazy frames are processed in
 batches, so the data may be larger than memory. `scan_pii()` also accepts
 Polars frames (eager or lazy), Arrow tables and datasets, and DuckDB
 relations; it reads one column at a time and samples exactly as it does in

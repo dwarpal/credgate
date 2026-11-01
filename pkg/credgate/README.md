@@ -240,6 +240,24 @@ register_detector(new_detector(
 cg_detectors() # all registered detectors
 ```
 
+### Large data: Arrow, Parquet, DuckDB
+
+Tables too big for memory are read in chunks. Install the packages you use
+(`arrow`, `duckdb`, `DBI`, `dbplyr`):
+
+```r
+scan_pii(arrow::open_dataset("calls.parquet"))           # one column at a time
+redact_parquet("calls.parquet", "calls_safe.parquet", columns = "notes")
+
+con <- DBI::dbConnect(duckdb::duckdb())
+scan_pii(dplyr::tbl(con, "calls"))                       # any dbplyr table
+redact_query(con, "SELECT call_id, notes FROM calls", "calls_safe")
+```
+
+`redact()`, `tokenise()` and `detect_pii()` also accept Arrow arrays. See
+`vignette("large-data")` and the
+[large-data guide](https://github.com/dwarpal/credgate/blob/main/docs/large-data.md).
+
 ## Masked output
 
 Wherever credgate *shows* a detected value (printed matches, `preview()`,

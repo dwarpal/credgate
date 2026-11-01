@@ -67,6 +67,44 @@
         default = credgate;
       });
 
+      # R tests for Arrow, Parquet and databases (DuckDB, SQLite). The
+      # packages are large C++ builds, so this is not in `checks`; CI builds
+      # it in a separate job (.github/workflows/integrations.yml):
+      #   nix build -L .#legacyPackages.x86_64-linux.r-integration-tests
+      # On Linux every integration test must run (none skipped); elsewhere
+      # packages nixpkgs cannot build (Arrow on Intel macOS) are left out.
+      legacyPackages = forAll (pkgs:
+        let
+          wanted = with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr RSQLite ];
+          available = builtins.filter (p: (builtins.tryEval p.drvPath).success) wanted;
+          rTest = pkgs.rWrapper.override {
+            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr ]) ++ available;
+          };
+        in
+        {
+          r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
+            nativeBuildInputs = [ rTest ];
+            LC_ALL = "C";
+            REQUIRE_ALL = if pkgs.stdenv.isLinux then "1" else "";
+          } ''
+            cp -r ${./pkg/credgate/tests} tests
+            chmod -R u+w tests
+            cd tests/testthat
+            Rscript -e '
+              library(testthat); library(credgate)
+              res <- as.data.frame(test_file("test-frames.R", reporter = "progress",
+                                             package = "credgate", load_package = "installed"))
+              print(res[, c("test", "nb", "failed", "skipped", "error")])
+              if (any(res$failed > 0) || any(res$error)) quit(status = 1)
+              if (nzchar(Sys.getenv("REQUIRE_ALL")) && any(res$skipped)) {
+                message("Integration tests were skipped; every package must be present on Linux.")
+                quit(status = 1)
+              }
+            '
+            touch $out
+          '';
+        });
+
       checks = forAll (pkgs:
         let
           rTest = pkgs.rWrapper.override {

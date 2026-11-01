@@ -16,6 +16,22 @@ data is synthetic.
 | [`r/scan_then_redact.R`](r/scan_then_redact.R) | Find PII columns in a data frame, build prompts from redacted text only |
 | [`shell/redact_pipeline.sh`](shell/redact_pipeline.sh) | `credgate preview` / `credgate redact` piped into `ollama run` |
 
+### Large data (Parquet, Polars, DuckDB, Arrow)
+
+Create the synthetic input first: `python examples/python/make_synthetic_calls.py`
+(writes `examples/data/calls.parquet`, 100,000 rows). See also the
+[large-data guide](../docs/large-data.md).
+
+| Example | What it shows |
+|---|---|
+| [`python/pandas_scan_redact.py`](python/pandas_scan_redact.py) | Scan a pandas DataFrame, redact a text column (index kept) |
+| [`python/polars_redact.py`](python/polars_redact.py) | Polars, lazy: scan without loading, count rows with PII, redact and write Parquet |
+| [`python/duckdb_sql_redact.py`](python/duckdb_sql_redact.py) | DuckDB SQL: `cg_redact()` / `cg_has_pii()` straight from and to Parquet |
+| [`python/arrow_parquet_stream.py`](python/arrow_parquet_stream.py) | Arrow: scan a dataset, redact a Parquet file batch by batch |
+| [`r/arrow_parquet.R`](r/arrow_parquet.R) | R and Arrow: scan a dataset, `redact_parquet()` |
+| [`r/duckdb_dbplyr.R`](r/duckdb_dbplyr.R) | R and DuckDB: scan a dbplyr table, `redact_query()`, `COPY` to Parquet |
+| [`shell/parquet_pipeline.sh`](shell/parquet_pipeline.sh) | `credgate scan` and `credgate redact --parquet` |
+
 ## Running them
 
 ```sh

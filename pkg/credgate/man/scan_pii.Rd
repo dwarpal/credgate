@@ -7,7 +7,13 @@
 scan_pii(data, sample = 10000L, min_rate = 0, detectors = NULL)
 }
 \arguments{
-\item{data}{A data frame.}
+\item{data}{A data frame, an Arrow \code{Table} or \code{Dataset} (for example from
+\code{arrow::open_dataset()}), or a database table from dbplyr
+(\code{dplyr::tbl(con, "calls")}, for DuckDB, Postgres and other DBI
+databases). Arrow and database tables are read one column at a time, in
+chunks, so they may be larger than memory; the sample is the same as for
+the table in memory. For a database, rows must come back in the same order
+on each read (DuckDB and SQLite do for a plain table).}
 
 \item{sample}{Maximum number of values checked per column.}
 

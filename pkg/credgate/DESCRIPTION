@@ -31,9 +31,15 @@ Imports:
     stringi,
     yaml
 Suggests:
+    arrow,
     askpass,
+    DBI,
+    dbplyr,
+    dplyr,
+    duckdb,
     knitr,
     rmarkdown,
+    RSQLite,
     sodium,
     testthat (>= 3.0.0),
     withr
