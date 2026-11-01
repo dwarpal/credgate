@@ -119,7 +119,7 @@
       checks = forAll (pkgs:
         let
           rTest = pkgs.rWrapper.override {
-            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr sodium ]);
+            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr sodium openssl ]);
           };
         in
         {
@@ -182,7 +182,7 @@
             (pkgs.rWrapper.override {
               packages = with pkgs.rPackages; [
                 cli rlang stringi yaml jsonlite
-                testthat withr roxygen2 rcmdcheck pkgload knitr rmarkdown sodium askpass
+                testthat withr roxygen2 rcmdcheck pkgload knitr rmarkdown sodium askpass openssl
               ];
             })
             (pkgs.python3.withPackages (ps: [ ps.regex ps.pyyaml ps.pytest ps.pynacl ps.hatchling ps.build ]))

@@ -103,7 +103,7 @@ credgate as a strong filter, not a proof of absence.
 
 - *Numbered tokens* (`[PAN_1]`) reveal how many distinct values a text
   holds and in which order they appeared - little, but not nothing.
-- *Keyed tokens* (planned: derived from the value with a secret key) let the
+- *Keyed tokens* (derived from the value with a secret key) let the
   same customer get the same token across datasets. Without the key they
   reveal nothing; **with the key, an insider can test guesses** - Indian
   mobile numbers have about 10^10 possibilities, few enough to try them all.

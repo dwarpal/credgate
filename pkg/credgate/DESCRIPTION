@@ -38,6 +38,7 @@ Suggests:
     dplyr,
     duckdb,
     knitr,
+    openssl,
     rmarkdown,
     RSQLite,
     sodium,

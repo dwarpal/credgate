@@ -170,6 +170,23 @@ vault = credgate.Vault.open("loans.cgvault")   # later: same tokens, numbering c
 The passphrase is never stored: without it the file cannot be opened. Keep
 `*.cgvault` files out of version control.
 
+**Keyed tokens** make the same identifier get the same token everywhere -
+across sessions, datasets, machines and R or Python - so tokenised tables
+can still be joined and counted, and parallel workers agree:
+
+```python
+key = credgate.new_token_key()          # store it like a password, e.g. in CREDGATE_TOKEN_KEY
+a, b = credgate.Vault(key), credgate.Vault(key)
+a.tokenise("PAN ABCPE1234F")            # 'PAN [PAN_bpg46o6x465d4]' (depends on the key)
+b.tokenise("pan abcpe1234f")            # the same token
+a.merge(b)                              # combine vaults from parallel workers
+```
+
+Whoever holds the key can confirm a guessed value by computing its token,
+so keep it out of code and project files. The key is never saved in a vault
+file; opening a keyed vault needs it again (`Vault.open(path, key=...)`).
+
+
 Scan a table (a pandas DataFrame, or a dict of column -> values) to see
 which columns hold PII; column names count as context:
 

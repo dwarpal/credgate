@@ -7,7 +7,7 @@
 \usage{
 vault_save(vault, path, passphrase = NULL)
 
-vault_open(path, passphrase = NULL)
+vault_open(path, passphrase = NULL, key = NULL)
 }
 \arguments{
 \item{vault}{A vault from \code{\link[=cg_vault]{cg_vault()}} or \code{vault_open()}.}
@@ -16,6 +16,10 @@ vault_open(path, passphrase = NULL)
 
 \item{passphrase}{The passphrase, or \code{NULL} to use
 \code{CREDGATE_VAULT_PASSPHRASE} or a prompt.}
+
+\item{key}{For a keyed vault: its token key, or \code{NULL} to use
+\code{CREDGATE_TOKEN_KEY}. The key is never saved; opening fails if it differs
+from the one the vault was saved with.}
 }
 \value{
 \code{vault_save()} returns \code{path} invisibly; \code{vault_open()} returns a

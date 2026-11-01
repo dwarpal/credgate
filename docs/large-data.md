@@ -30,9 +30,12 @@ synthetic data; runnable versions are in [`examples/`](../examples/).
 | Other databases (DBI) | - | `redact_query()`, `scan_pii()` on dbplyr tables | - |
 | Scan a file | `scan_pii()` | `scan_pii()` | `credgate scan file.parquet` |
 
-Numbered tokens (`[PAN_1]`) are available for in-memory columns. Inside
-Polars and DuckDB, which process batches in parallel and in no fixed order,
-use redaction; keyed tokens that work in parallel are planned.
+Numbered tokens (`[PAN_1]`) are available for in-memory columns. Keyed
+tokens (`Vault(key)` in Python, `cg_vault(key)` in R) give the same token
+for the same identifier in every vault with the same key, so parallel
+workers agree and their vaults can be merged; tokenising inside Polars,
+DuckDB and Spark with them comes with the Spark integration. Until then,
+use redaction inside those engines.
 
 ## Python
 

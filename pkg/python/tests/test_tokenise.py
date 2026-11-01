@@ -27,7 +27,7 @@ def test_printing_a_vault_masks_values():
     assert "Ramesh" not in shown
     assert "ABCPE" not in shown
     assert "XXXXXX234F" in shown
-    assert repr(vault) == "<credgate.Vault: 2 tokens>"
+    assert repr(vault) == "<credgate.Vault: 2 numbered tokens>"
     revealed = vault.entries(reveal=True)
     assert [e["value"] for e in revealed] == ["Ramesh Kumar", "ABCPE1234F"]
     assert [e["token"] for e in vault.entries()] == ["[PERSON_NAME_1]", "[PAN_1]"]
