@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Keyed tokens: `Vault(key)` makes tokens derived from the identifier with a
+  secret key (`[PAN_bpg46o6x465d4]`), so the same identifier gets the same
+  token in every vault with that key - across sessions, datasets, machines,
+  and R as well as Python. Vaults from parallel workers combine with
+  `Vault.merge()`; a token standing for two different values is an error
+  (`TokenCollisionError`), never merged silently. `new_token_key()` makes a
+  key and `key_fingerprint()` identifies one without revealing it; keys come
+  from the argument or `CREDGATE_TOKEN_KEY`. Saved keyed vaults record the
+  key's fingerprint, never the key, and need the key to open
+  (`Vault.open(path, key=...)`). Restore accepts keyed tokens in any case,
+  with or without brackets.
+
 ## 0.5.0 (2026-11-01)
 
 Large data - pandas, Polars, Arrow, DuckDB and Parquet - faster detection,

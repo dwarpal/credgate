@@ -4,7 +4,13 @@
 \alias{cg_vault}
 \title{Create a token vault}
 \usage{
-cg_vault()
+cg_vault(key = NULL, keyed = FALSE)
+}
+\arguments{
+\item{key}{A token key: at least 64 hex digits (32 bytes), or a raw
+vector. Make one with \code{\link[=cg_new_token_key]{cg_new_token_key()}}.}
+
+\item{keyed}{Use keyed tokens with the key from \code{CREDGATE_TOKEN_KEY}.}
 }
 \value{
 An object of class \code{cg_vault}. It is modified in place by
@@ -16,8 +22,26 @@ they stand for. It starts empty and grows as \code{\link[=tokenise]{tokenise()}}
 identifiers; the same identifier always gets the same token. The vault
 lives in memory only, and printing it masks the values.
 }
+\details{
+With a token \code{key}, tokens are \strong{keyed} (\verb{[PAN_4qzm7k2x9tbc3]}): the same
+identifier gets the same token in every vault with that key - across
+sessions, datasets, R and Python, and parallel workers, whose vaults can be
+combined with \code{\link[=vault_merge]{vault_merge()}}. Without a key, tokens are numbered
+(\verb{[PAN_1]}) and belong to this vault only. Keyed tokens need the openssl
+package.
+
+Whoever holds the key can confirm a guessed value by computing its token,
+so keep the key like a password: from a key store or the environment
+variable, never in code or project files.
+}
 \examples{
 vault <- cg_vault()
 tokenise("PAN ABCPE1234F", vault)
 vault
+\dontshow{if (requireNamespace("openssl", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+key <- cg_new_token_key()
+a <- cg_vault(key)
+b <- cg_vault(key)
+tokenise("PAN ABCPE1234F", a) == tokenise("pan abcpe1234f", b)
+\dontshow{\}) # examplesIf}
 }

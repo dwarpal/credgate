@@ -129,9 +129,15 @@ for (case in conformance("evaluate.yaml")$cases) {
 
 for (case in conformance("tokenise.yaml")$cases) {
   test_that(paste("tokenise:", case$id), {
-    vault <- cg_vault()
+    if (!is.null(case$key)) skip_if_not_installed("openssl")
+    if (!is.null(case$fingerprint)) {
+      expect_identical(cg_key_fingerprint(case$key), case$fingerprint)
+    }
+    vault <- cg_vault(case$key)
     for (step in case$steps) {
-      if (!is.null(step$tokenise)) {
+      if (isTRUE(step$new_vault)) {
+        vault <- cg_vault(case$key)
+      } else if (!is.null(step$tokenise)) {
         got <- tokenise(unlist(step$tokenise), vault,
           context = step$context, min_confidence = step$min_confidence %||% 0
         )
@@ -159,15 +165,29 @@ for (f in vault_spec$files) {
   test_that(paste("vault file:", f$file), {
     skip_if_not_installed("sodium")
     path <- file.path(cg_spec_path(), "conformance", f$file)
-    vault <- vault_open(path, passphrase = f$passphrase)
+    if (!is.null(f$key)) skip_if_not_installed("openssl")
+    vault <- vault_open(path, passphrase = f$passphrase, key = f$key)
     e <- vault$entries
     got <- lapply(seq_len(nrow(e)), function(i) {
       c(e$token[i], e$type[i], e$class[i], e$canonical[i], e$value[i])
     })
     expect_identical(got, lapply(f$entries, unlist))
     expect_error(
-      vault_open(path, passphrase = vault_spec$wrong_passphrase),
+      vault_open(path, passphrase = vault_spec$wrong_passphrase, key = f$key),
       class = "credgate_vault_file"
     )
+    if (!is.null(f$key)) {
+      expect_error(
+        vault_open(path, passphrase = f$passphrase, key = vault_spec$other_key),
+        "token key does not match", class = "credgate_vault_file"
+      )
+      # the reopened vault keeps making the same keyed tokens
+      expect_identical(tokenise("PAN ABCPE1234F", vault), "PAN [PAN_bpg46o6x465d4]")
+    } else {
+      expect_error(
+        vault_open(path, passphrase = f$passphrase, key = vault_spec$other_key),
+        "numbered", class = "credgate_vault_file"
+      )
+    }
   })
 }

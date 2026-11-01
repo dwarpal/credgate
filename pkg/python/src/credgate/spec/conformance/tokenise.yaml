@@ -8,6 +8,10 @@
 #              output, or `error: true` when strict restoring must fail
 #   vault      `expect` lists the vault entries in order, as [token, type,
 #              canonical]
+#   new_vault  start a new, empty vault (with the case's key, if any)
+#
+# A case with `key` (hex) uses keyed tokens; `fingerprint` is that key's
+# fingerprint.
 #
 # All identifiers are synthetic.
 
@@ -84,3 +88,46 @@ cases:
         expect: ['No identifiers here.', '']
       - vault:
         expect: []
+
+  # --- Keyed tokens ----------------------------------------------------------
+  - id: keyed-same-identifier-same-token-in-any-vault
+    key: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    fingerprint: f6b1b6493c30fead
+    steps:
+      - tokenise: ['PAN ABCPE1234F; mobile +91 98765 43210',
+                   'Shri Ramesh Kumar, account 50100123456789']
+        expect: ['PAN [PAN_bpg46o6x465d4]; mobile [MOBILE_IN_zrnxktjp2kdhi]',
+                 'Shri [PERSON_NAME_ewm3jn5zm5wng], account [BANK_ACCOUNT_rjtxngnysg5p4]']
+      - vault:
+        expect:
+          - ['[PAN_bpg46o6x465d4]', pan, ABCPE1234F]
+          - ['[MOBILE_IN_zrnxktjp2kdhi]', mobile_in, '9876543210']
+          - ['[PERSON_NAME_ewm3jn5zm5wng]', person_name, RAMESH KUMAR]
+          - ['[BANK_ACCOUNT_rjtxngnysg5p4]', bank_account, '50100123456789']
+      - new_vault: true
+      - tokenise: ['pan abcpe1234f called from 9876543210 and AAACR5055K']
+        expect: ['pan [PAN_bpg46o6x465d4] called from [MOBILE_IN_zrnxktjp2kdhi] and [PAN_jesrdwi6ldkv6]']
+
+  - id: keyed-type-is-part-of-the-token
+    key: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    steps:
+      - tokenise: ['mobile 9876543210', 'account 9876543210']
+        expect: ['mobile [MOBILE_IN_zrnxktjp2kdhi]', 'account [BANK_ACCOUNT_7yfh6cbhtx72k]']
+
+  - id: keyed-restore-tolerates-case-and-missing-brackets
+    key: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    steps:
+      - tokenise: ['PAN ABCPE1234F']
+        expect: ['PAN [PAN_bpg46o6x465d4]']
+      - restore: '[pan_BPG46O6X465D4] and PAN_bpg46o6x465d4; [PAN_aaaaaaaaaaaaa] stays'
+        expect: 'ABCPE1234F and ABCPE1234F; [PAN_aaaaaaaaaaaaa] stays'
+      - restore: 'unknown [PAN_aaaaaaaaaaaaa]'
+        strict: true
+        error: true
+
+  - id: keyed-devanagari-hashes-utf8
+    key: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    steps:
+      - tokenise: ['Smt. सुनीता देवी']
+        expect: ['Smt. [PERSON_NAME_asmcgedvsxys2]']
+

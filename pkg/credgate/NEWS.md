@@ -1,5 +1,16 @@
 # credgate (development version)
 
+* Keyed tokens: `cg_vault(key)` makes tokens derived from the identifier
+  with a secret key (`[PAN_bpg46o6x465d4]`), so the same identifier gets the
+  same token in every vault with that key - across sessions, datasets,
+  machines, and Python as well as R. Vaults from parallel workers combine
+  with `vault_merge()`; a token standing for two different values is an
+  error, never merged silently. `cg_new_token_key()` makes a key and
+  `cg_key_fingerprint()` identifies one without revealing it (openssl
+  package); keys come from the argument or `CREDGATE_TOKEN_KEY`. Saved keyed
+  vaults record the key's fingerprint, never the key, and need the key to
+  open (`vault_open(path, key = ...)`). Restore accepts keyed tokens in any
+  case, with or without brackets.
 * Large data: `scan_pii()` accepts Arrow `Table`s and `Dataset`s and database
   tables from dbplyr (DuckDB, Postgres, SQLite and other DBI databases),
   reading one column at a time in chunks with the same sample as in memory.

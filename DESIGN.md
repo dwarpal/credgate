@@ -288,8 +288,10 @@ are built in dependency order, so nothing is built twice or retrofitted
 (see [docs/threat-model.md](docs/threat-model.md) for the reasoning):
 
 1. **Threat model** (done: docs/threat-model.md).
-2. **Keyed tokens** in the spec: HMAC of type and canonical value; needed by
-   the audit log, the proxy and parallel engines.
+2. **Keyed tokens** in the spec (done): HMAC-SHA256 of type and canonical
+   value, 64-bit base32 ids, key fingerprints, merging, keyed vault files;
+   identical in R and Python. Needed by the audit log, the proxy and
+   parallel engines.
 3. **New detectors**: card verification code and expiry (for policies;
    never stored), CKYC, ration card, NREGA job card numbers.
 4. **Policy engine** in the spec: destinations (local, internal, frontier),

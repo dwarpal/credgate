@@ -128,9 +128,14 @@ TOKENISE_CASES = conformance("tokenise.yaml")["cases"]
 
 @pytest.mark.parametrize("case", TOKENISE_CASES, ids=[c["id"] for c in TOKENISE_CASES])
 def test_tokenise(case):
-    vault = credgate.Vault()
+    key = case.get("key")
+    if "fingerprint" in case:
+        assert credgate.key_fingerprint(key) == case["fingerprint"]
+    vault = credgate.Vault(key)
     for step in case["steps"]:
-        if "tokenise" in step:
+        if step.get("new_vault"):
+            vault = credgate.Vault(key)
+        elif "tokenise" in step:
             got = credgate.tokenise(
                 step["tokenise"],
                 vault,
@@ -157,8 +162,17 @@ VAULT_SPEC = conformance("vault.yaml")
 def test_vault_file(case):
     pytest.importorskip("nacl")
     path = credgate.spec_path() / "conformance" / case["file"]
-    vault = credgate.Vault.open(path, passphrase=case["passphrase"])
+    key = case.get("key")
+    vault = credgate.Vault.open(path, passphrase=case["passphrase"], key=key)
     got = [[e.token, e.type, e.data_class, e.canonical, e.value] for e in vault._entries]
     assert got == case["entries"]
     with pytest.raises(credgate.VaultFileError):
-        credgate.Vault.open(path, passphrase=VAULT_SPEC["wrong_passphrase"])
+        credgate.Vault.open(path, passphrase=VAULT_SPEC["wrong_passphrase"], key=key)
+    if key is not None:
+        with pytest.raises(credgate.VaultFileError, match="token key does not match"):
+            credgate.Vault.open(path, passphrase=case["passphrase"], key=VAULT_SPEC["other_key"])
+        # the reopened vault keeps making the same keyed tokens
+        assert credgate.tokenise("PAN ABCPE1234F", vault) == "PAN [PAN_bpg46o6x465d4]"
+    else:
+        with pytest.raises(credgate.VaultFileError, match="numbered"):
+            credgate.Vault.open(path, passphrase=case["passphrase"], key=VAULT_SPEC["other_key"])

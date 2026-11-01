@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -17,7 +21,8 @@ import regex
 from ._frames import texts
 from .detect import Span, detect_pii, mask_value
 
-_NAME = r"[A-Za-z]+(?:_[A-Za-z]+)*_[0-9]+"
+# TYPE_n (numbered) or TYPE_<13 base32 characters> (keyed).
+_NAME = r"[A-Za-z]+(?:_[A-Za-z]+)*_(?:[0-9]+|[A-Za-z2-7]{13})"
 _CANDIDATE = regex.compile(
     rf"\[\s*(?P<bracketed>{_NAME})\s*\]|(?<![\p{{L}}\p{{N}}_])(?P<bare>{_NAME})(?![\p{{L}}\p{{N}}_])",
     regex.IGNORECASE,
@@ -35,6 +40,57 @@ class _Entry:
 
 class UnknownTokenError(ValueError):
     """Raised by a strict :func:`restore` when text holds tokens the vault does not know."""
+
+
+class TokenCollisionError(ValueError):
+    """Two different values got the same keyed token (or the same token
+    stands for different values in two vaults being merged)."""
+
+
+# Keyed tokens (spec, "Keyed token id").
+_TOKEN_DOMAIN = b"credgate-token-v1"
+_KEY_CHECK = b"credgate-key-check-v1"
+_MIN_KEY_BYTES = 32
+
+
+def new_token_key() -> str:
+    """A new random token key, as 64 hex digits. Keep it like a password:
+    whoever holds it can check a guessed value against a token."""
+    return secrets.token_hex(_MIN_KEY_BYTES)
+
+
+def _token_key(key: str | bytes | None) -> bytes:
+    if key is None:
+        key = os.environ.get("CREDGATE_TOKEN_KEY") or None
+        if key is None:
+            raise ValueError("No token key: pass `key` or set CREDGATE_TOKEN_KEY.")
+    if isinstance(key, str):
+        try:
+            raw = bytes.fromhex(key.strip())
+        except ValueError:
+            raise ValueError("A token key given as text must be hex digits.") from None
+    elif isinstance(key, bytes):
+        raw = key
+    else:
+        raise TypeError("A token key must be hex text or bytes.")
+    if len(raw) < _MIN_KEY_BYTES:
+        raise ValueError(
+            f"A token key needs at least {_MIN_KEY_BYTES} bytes ({2 * _MIN_KEY_BYTES} hex "
+            "digits); make one with new_token_key()."
+        )
+    return raw
+
+
+def key_fingerprint(key: str | bytes | None = None) -> str:
+    """16 hex digits that identify a token key without revealing it
+    (``None`` uses ``CREDGATE_TOKEN_KEY``)."""
+    return hmac.new(_token_key(key), _KEY_CHECK, hashlib.sha256).digest()[:8].hex()
+
+
+def _keyed_id(key: bytes, type_: str, canonical: str) -> str:
+    message = _TOKEN_DOMAIN + b"\0" + type_.encode() + b"\0" + canonical.encode()
+    mac = hmac.new(key, message, hashlib.sha256).digest()
+    return base64.b32encode(mac[:8]).decode("ascii").rstrip("=").lower()
 
 
 class VaultFileError(ValueError):
@@ -127,19 +183,39 @@ class Vault:
     A vault starts empty and grows as :func:`tokenise` meets new
     identifiers; the same identifier always gets the same token. It lives in
     memory only. Printing it masks the values.
+
+    Args:
+        key: A token key (hex text or bytes, at least 32 bytes) for **keyed**
+            tokens such as ``[PAN_4qzm7k2x9tbc3]``: the same identifier then
+            gets the same token in every vault with this key - across
+            sessions, datasets and parallel workers. Without a key, tokens
+            are numbered (``[PAN_1]``) and belong to this vault only.
+        keyed: Use keyed tokens with the key from ``CREDGATE_TOKEN_KEY``.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, key: str | bytes | None = None, *, keyed: bool = False) -> None:
+        self._key = _token_key(key) if key is not None or keyed else None
         self._entries: list[_Entry] = []
         self._by_key: dict[tuple[str, str], _Entry] = {}
-        self._by_token: dict[str, _Entry] = {}
+        self._by_token: dict[str, _Entry] = {}  # upper-cased token -> entry
         self._counts: dict[str, int] = {}
+
+    @property
+    def keyed(self) -> bool:
+        """Whether this vault makes keyed tokens."""
+        return self._key is not None
+
+    @property
+    def key_fingerprint(self) -> str | None:
+        """The fingerprint of this vault's token key, or ``None`` if numbered."""
+        return None if self._key is None else key_fingerprint(self._key)
 
     def __len__(self) -> int:
         return len(self._entries)
 
     def __repr__(self) -> str:
-        return f"<credgate.Vault: {len(self)} token{'s' if len(self) != 1 else ''}>"
+        mode = "keyed" if self.keyed else "numbered"
+        return f"<credgate.Vault: {len(self)} {mode} token{'s' if len(self) != 1 else ''}>"
 
     def __str__(self) -> str:
         if not self._entries:
@@ -166,19 +242,43 @@ class Vault:
         key = (span.type, span.canonical)
         entry = self._by_key.get(key)
         if entry is None:
-            n = self._counts.get(span.type, 0) + 1
-            self._counts[span.type] = n
-            entry = _Entry(
-                token=f"[{span.type.upper()}_{n}]",
-                type=span.type,
-                data_class=span.data_class,
-                canonical=span.canonical,
-                value=span.value,
-            )
-            self._entries.append(entry)
-            self._by_key[key] = entry
-            self._by_token[entry.token] = entry
+            if self._key is None:
+                n = self._counts.get(span.type, 0) + 1  # _add() records it
+                token = f"[{span.type.upper()}_{n}]"
+            else:
+                token = f"[{span.type.upper()}_{_keyed_id(self._key, span.type, span.canonical)}]"
+            entry = _Entry(token, span.type, span.data_class, span.canonical, span.value)
+            self._add(entry)
         return entry.token
+
+    def _add(self, entry: _Entry) -> None:
+        other = self._by_token.get(entry.token.upper())
+        if other is not None and (other.type, other.canonical) != (entry.type, entry.canonical):
+            raise TokenCollisionError(
+                f"Token {entry.token} would stand for two different values; "
+                "use a different key, or keep these values in separate vaults."
+            )
+        self._entries.append(entry)
+        self._by_key[(entry.type, entry.canonical)] = entry
+        self._by_token[entry.token.upper()] = entry
+        self._counts[entry.type] = self._counts.get(entry.type, 0) + 1
+
+    def merge(self, other: Vault) -> Vault:
+        """Add the entries of another keyed vault made with the same key (for
+        example by a parallel worker). Returns this vault."""
+        if not (self.keyed and other.keyed):
+            raise ValueError(
+                "Only keyed vaults can be merged: numbered tokens belong to one vault."
+            )
+        if self.key_fingerprint != other.key_fingerprint:
+            raise ValueError("The vaults were made with different token keys.")
+        for e in other._entries:
+            mine = self._by_key.get((e.type, e.canonical))
+            if mine is None:
+                self._add(e)
+            elif mine.token.upper() != e.token.upper():
+                raise TokenCollisionError(f"{e.type} value has tokens {mine.token} and {e.token}.")
+        return self
 
     def save(self, path: str | os.PathLike[str], passphrase: str | None = None) -> None:
         """Save the vault to an encrypted file, so its tokens can be restored later.
@@ -200,6 +300,8 @@ class Vault:
             "format": "credgate-vault",
             "version": 1,
             "saved_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "mode": "keyed" if self.keyed else "numbered",
+            **({"key_fingerprint": self.key_fingerprint} if self.keyed else {}),
             "entries": [
                 {
                     "token": e.token,
@@ -226,20 +328,37 @@ class Vault:
             raise
 
     @classmethod
-    def open(cls, path: str | os.PathLike[str], passphrase: str | None = None) -> Vault:
+    def open(
+        cls,
+        path: str | os.PathLike[str],
+        passphrase: str | None = None,
+        key: str | bytes | None = None,
+    ) -> Vault:
         """Open a vault saved with :meth:`save`. Tokenising with it continues
-        its numbering, and :func:`restore` can put its values back."""
+        its numbering, and :func:`restore` can put its values back.
+
+        A keyed vault needs its token key again (``key``, else
+        ``CREDGATE_TOKEN_KEY``); the key itself is never saved.
+        """
         data = Path(path).read_bytes()
         payload = json.loads(_decrypt(data, _passphrase(passphrase, confirm=False)))
         if payload.get("format") != "credgate-vault" or payload.get("version") != 1:
             raise VaultFileError("Unsupported vault contents.")
-        vault = cls()
+        mode = payload.get("mode", "numbered")
+        if mode == "keyed":
+            vault = cls(key, keyed=True)
+            if vault.key_fingerprint != payload.get("key_fingerprint"):
+                raise VaultFileError(
+                    "The token key does not match the one this vault was saved with."
+                )
+        elif mode == "numbered":
+            if key is not None:
+                raise VaultFileError("This vault has numbered tokens; it does not use a token key.")
+            vault = cls()
+        else:
+            raise VaultFileError(f"Unsupported vault mode {mode!r}.")
         for e in payload["entries"]:
-            entry = _Entry(e["token"], e["type"], e["class"], e["canonical"], e["value"])
-            vault._entries.append(entry)
-            vault._by_key[(entry.type, entry.canonical)] = entry
-            vault._by_token[entry.token] = entry
-            vault._counts[entry.type] = vault._counts.get(entry.type, 0) + 1
+            vault._add(_Entry(e["token"], e["type"], e["class"], e["canonical"], e["value"]))
         return vault
 
     def tokenise(
@@ -301,7 +420,7 @@ def restore(text: str, vault: Vault, strict: bool = False) -> str:
 
     def replace(m: regex.Match[str]) -> str:
         name = m.group("bracketed") or m.group("bare")
-        entry = vault._by_token.get(f"[{name.upper()}]")
+        entry = vault._by_token.get(f"[{name}]".upper())
         if entry is not None:
             return entry.value
         if m.group("bracketed"):

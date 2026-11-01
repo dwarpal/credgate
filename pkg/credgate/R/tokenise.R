@@ -1,6 +1,7 @@
 # Reversible tokenisation (the spec's "Tokenisation" rules).
 
-token_name <- "[A-Za-z]+(?:_[A-Za-z]+)*_[0-9]+"
+# TYPE_n (numbered) or TYPE_<13 base32 characters> (keyed).
+token_name <- "[A-Za-z]+(?:_[A-Za-z]+)*_(?:[0-9]+|[A-Za-z2-7]{13})"
 token_candidate <- paste0(
   "\\[\\s*(", token_name, ")\\s*\\]|(?<![\\p{L}\\p{N}_])(", token_name, ")(?![\\p{L}\\p{N}_])"
 )
@@ -12,6 +13,20 @@ token_candidate <- paste0(
 #' identifiers; the same identifier always gets the same token. The vault
 #' lives in memory only, and printing it masks the values.
 #'
+#' With a token `key`, tokens are **keyed** (`[PAN_4qzm7k2x9tbc3]`): the same
+#' identifier gets the same token in every vault with that key - across
+#' sessions, datasets, R and Python, and parallel workers, whose vaults can be
+#' combined with [vault_merge()]. Without a key, tokens are numbered
+#' (`[PAN_1]`) and belong to this vault only. Keyed tokens need the openssl
+#' package.
+#'
+#' Whoever holds the key can confirm a guessed value by computing its token,
+#' so keep the key like a password: from a key store or the environment
+#' variable, never in code or project files.
+#'
+#' @param key A token key: at least 64 hex digits (32 bytes), or a raw
+#'   vector. Make one with [cg_new_token_key()].
+#' @param keyed Use keyed tokens with the key from `CREDGATE_TOKEN_KEY`.
 #' @return An object of class `cg_vault`. It is modified in place by
 #'   [tokenise()], so it does not need to be reassigned.
 #' @export
@@ -19,13 +34,141 @@ token_candidate <- paste0(
 #' vault <- cg_vault()
 #' tokenise("PAN ABCPE1234F", vault)
 #' vault
-cg_vault <- function() {
+#' @examplesIf requireNamespace("openssl", quietly = TRUE)
+#' key <- cg_new_token_key()
+#' a <- cg_vault(key)
+#' b <- cg_vault(key)
+#' tokenise("PAN ABCPE1234F", a) == tokenise("pan abcpe1234f", b)
+cg_vault <- function(key = NULL, keyed = FALSE) {
   vault <- new.env(parent = emptyenv())
+  vault$key <- if (!is.null(key) || keyed) token_key(key) else NULL
   vault$entries <- data.frame(
     token = character(), type = character(), class = character(),
     canonical = character(), value = character()
   )
   structure(vault, class = "cg_vault")
+}
+
+#' Token keys for keyed tokens
+#'
+#' `cg_new_token_key()` makes a new random key (64 hex digits) for
+#' [cg_vault()]. `cg_key_fingerprint()` returns 16 hex digits that identify a
+#' key without revealing it; saved keyed vaults record it, so opening one with
+#' the wrong key fails. Both need the openssl package.
+#'
+#' @param key A key as hex digits or a raw vector; `NULL` uses
+#'   `CREDGATE_TOKEN_KEY`.
+#' @return A string.
+#' @export
+#' @examplesIf requireNamespace("openssl", quietly = TRUE)
+#' key <- cg_new_token_key()
+#' cg_key_fingerprint(key)
+cg_new_token_key <- function() {
+  check_installed("openssl")
+  paste(format(openssl::rand_bytes(token_key_min_bytes)), collapse = "")
+}
+
+#' @rdname cg_new_token_key
+#' @export
+cg_key_fingerprint <- function(key = NULL) {
+  check_installed("openssl")
+  mac <- openssl::sha256(charToRaw("credgate-key-check-v1"), key = token_key(key))
+  paste(format(as.raw(mac)[1:8]), collapse = "")
+}
+
+token_key_min_bytes <- 32L
+
+token_key <- function(key) {
+  if (is.null(key)) {
+    env <- Sys.getenv("CREDGATE_TOKEN_KEY")
+    if (!nzchar(env)) {
+      rlang::abort("No token key: pass `key` or set CREDGATE_TOKEN_KEY.")
+    }
+    key <- env
+  }
+  if (is.character(key)) {
+    hex <- trimws(key)
+    if (length(hex) != 1 || !grepl("^([0-9A-Fa-f]{2})+$", hex)) {
+      rlang::abort("A token key given as text must be hex digits.")
+    }
+    key <- as.raw(strtoi(substring(hex, seq(1, nchar(hex), 2), seq(2, nchar(hex), 2)), 16L))
+  }
+  if (!is.raw(key)) {
+    rlang::abort("A token key must be hex text or a raw vector.")
+  }
+  if (length(key) < token_key_min_bytes) {
+    rlang::abort(paste0(
+      "A token key needs at least ", token_key_min_bytes, " bytes (",
+      2 * token_key_min_bytes, " hex digits); make one with cg_new_token_key()."
+    ))
+  }
+  key
+}
+
+# The keyed token id (spec, "Keyed token id"): HMAC-SHA256 of
+# "credgate-token-v1" \0 type \0 canonical; first 8 bytes in base32.
+keyed_id <- function(key, type, canonical) {
+  check_installed("openssl")
+  vapply(seq_along(type), function(i) {
+    message <- c(
+      charToRaw("credgate-token-v1"), as.raw(0L), charToRaw(enc2utf8(type[i])),
+      as.raw(0L), charToRaw(enc2utf8(canonical[i]))
+    )
+    base32_lower(as.raw(openssl::sha256(message, key = key))[1:8])
+  }, character(1))
+}
+
+# RFC 4648 base32, lower case, no padding.
+base32_lower <- function(bytes) {
+  bits <- as.integer(unlist(lapply(bytes, function(b) rev(as.integer(rawToBits(b))))))
+  bits <- c(bits, integer((5 - length(bits) %% 5) %% 5))
+  groups <- matrix(bits, nrow = 5)
+  values <- colSums(groups * c(16L, 8L, 4L, 2L, 1L))
+  paste(strsplit("abcdefghijklmnopqrstuvwxyz234567", "")[[1]][values + 1L], collapse = "")
+}
+
+#' Combine keyed vaults
+#'
+#' Adds the entries of `other` that `vault` does not have yet, for example
+#' from parallel workers that each tokenised part of a table with the same
+#' key. Both vaults must be keyed with the same key; it is an error if a
+#' token stands for different values in the two.
+#'
+#' @param vault,other Keyed vaults from [cg_vault()].
+#' @return `vault`, modified in place, invisibly.
+#' @export
+vault_merge <- function(vault, other) {
+  check_vault(vault)
+  check_vault(other)
+  if (is.null(vault$key) || is.null(other$key)) {
+    rlang::abort("Only keyed vaults can be merged: numbered tokens belong to one vault.")
+  }
+  if (!identical(vault$key, other$key)) {
+    rlang::abort("The vaults were made with different token keys.")
+  }
+  add_entries(vault, other$entries)
+  invisible(vault)
+}
+
+# Append entries not yet in the vault, checking that no token stands for two
+# different values (spec: collisions are errors, never merged silently).
+add_entries <- function(vault, new) {
+  entries <- vault$entries
+  key_of <- function(e) paste(e$type, e$canonical, sep = "\r")
+  new <- new[!duplicated(key_of(new)) & !key_of(new) %in% key_of(entries), , drop = FALSE]
+  all <- rbind(entries, new)
+  token <- toupper(all$token)
+  clash <- duplicated(token) & !duplicated(key_of(all))
+  if (any(clash)) {
+    rlang::abort(
+      paste0(
+        "Token ", all$token[clash][1], " would stand for two different values; ",
+        "use a different key, or keep these values in separate vaults."
+      ),
+      class = "credgate_token_collision"
+    )
+  }
+  vault$entries <- all
 }
 
 #' Replace identifiers with tokens that can be restored
@@ -89,7 +232,7 @@ restore <- function(text, vault, strict = FALSE) {
   if (!is.character(text)) {
     rlang::abort("`text` must be a character vector.")
   }
-  values <- stats::setNames(vault$entries$value, vault$entries$token)
+  values <- stats::setNames(vault$entries$value, toupper(vault$entries$token))
   unknown <- character()
   out <- vapply(text, function(t) {
     if (is.na(t)) {
@@ -108,7 +251,7 @@ restore <- function(text, vault, strict = FALSE) {
     )[[1]]
     bracketed <- !is.na(m[, 2])
     name <- toupper(ifelse(bracketed, m[, 2], m[, 3]))
-    value <- values[paste0("[", name, "]")]
+    value <- values[toupper(paste0("[", name, "]"))]
     unknown <<- c(unknown, m[bracketed & is.na(value), 1])
     for (i in rev(which(!is.na(value)))) {
       t <- paste0(
@@ -137,10 +280,14 @@ tokens_for <- function(vault, spans) {
   new <- !duplicated(key) & !key %in% known
   if (any(new)) {
     type <- spans$type[new]
-    n <- as.vector(table(factor(entries$type, levels = unique(type)))[type]) +
-      stats::ave(seq_along(type), type, FUN = seq_along)
-    vault$entries <- rbind(entries, data.frame(
-      token = paste0("[", toupper(type), "_", n, "]"), type = type,
+    id <- if (is.null(vault$key)) {
+      as.vector(table(factor(entries$type, levels = unique(type)))[type]) +
+        stats::ave(seq_along(type), type, FUN = seq_along)
+    } else {
+      keyed_id(vault$key, type, spans$canonical[new])
+    }
+    add_entries(vault, data.frame(
+      token = paste0("[", toupper(type), "_", id, "]"), type = type,
       class = spans$class[new], canonical = spans$canonical[new], value = spans$value[new]
     ))
   }
@@ -211,6 +358,9 @@ vault_min_passphrase <- 12L
 #' @param path File to write or read, conventionally ending in `.cgvault`.
 #' @param passphrase The passphrase, or `NULL` to use
 #'   `CREDGATE_VAULT_PASSPHRASE` or a prompt.
+#' @param key For a keyed vault: its token key, or `NULL` to use
+#'   `CREDGATE_TOKEN_KEY`. The key is never saved; opening fails if it differs
+#'   from the one the vault was saved with.
 #' @return `vault_save()` returns `path` invisibly; `vault_open()` returns a
 #'   vault.
 #' @export
@@ -240,14 +390,16 @@ vault_save <- function(vault, path, passphrase = NULL) {
       format = "credgate-vault",
       version = 1L,
       saved_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+      mode = if (is.null(vault$key)) "numbered" else "keyed",
+      key_fingerprint = if (is.null(vault$key)) NULL else cg_key_fingerprint(vault$key),
       entries = entries[c("token", "type", "class", "canonical", "value")]
     ),
     auto_unbox = TRUE, dataframe = "rows"
   )
   salt <- sodium::random(32L)
   nonce <- sodium::random(24L)
-  key <- sodium::scrypt(charToRaw(enc2utf8(passphrase)), salt, 32L)
-  sealed <- sodium::data_encrypt(charToRaw(enc2utf8(as.character(payload))), key, nonce)
+  box_key <- sodium::scrypt(charToRaw(enc2utf8(passphrase)), salt, 32L)
+  sealed <- sodium::data_encrypt(charToRaw(enc2utf8(as.character(payload))), box_key, nonce)
   data <- c(vault_magic, vault_kdf_scrypt_interactive, salt, nonce, as.vector(sealed))
 
   tmp <- tempfile(pattern = paste0(".", basename(path), "."), tmpdir = dirname(path), fileext = ".tmp")
@@ -264,7 +416,7 @@ vault_save <- function(vault, path, passphrase = NULL) {
 
 #' @rdname vault_save
 #' @export
-vault_open <- function(path, passphrase = NULL) {
+vault_open <- function(path, passphrase = NULL, key = NULL) {
   check_sodium()
   stopifnot(rlang::is_string(path))
   data <- readBin(path, "raw", file.size(path))
@@ -280,9 +432,9 @@ vault_open <- function(path, passphrase = NULL) {
   }
   salt <- data[10:41]
   nonce <- data[42:65]
-  key <- sodium::scrypt(charToRaw(enc2utf8(vault_passphrase(passphrase, confirm = FALSE))), salt, 32L)
+  box_key <- sodium::scrypt(charToRaw(enc2utf8(vault_passphrase(passphrase, confirm = FALSE))), salt, 32L)
   plain <- tryCatch(
-    sodium::data_decrypt(data[-seq_len(vault_header_bytes)], key, nonce),
+    sodium::data_decrypt(data[-seq_len(vault_header_bytes)], box_key, nonce),
     error = function(e) fail("Wrong passphrase, or the file is damaged or altered.")
   )
   json <- rawToChar(plain)
@@ -291,13 +443,26 @@ vault_open <- function(path, passphrase = NULL) {
   if (!identical(payload$format, "credgate-vault") || !identical(payload$version, 1L)) {
     fail("Unsupported vault contents.")
   }
-  vault <- cg_vault()
+  mode <- payload$mode %||% "numbered"
+  if (identical(mode, "keyed")) {
+    vault <- cg_vault(key, keyed = TRUE)
+    if (!identical(cg_key_fingerprint(vault$key), payload$key_fingerprint)) {
+      fail("The token key does not match the one this vault was saved with.")
+    }
+  } else if (identical(mode, "numbered")) {
+    if (!is.null(key)) {
+      fail("This vault has numbered tokens; it does not use a token key.")
+    }
+    vault <- cg_vault()
+  } else {
+    fail(paste0("Unsupported vault mode '", mode, "'."))
+  }
   field <- function(name) vapply(payload$entries, function(e) e[[name]], character(1))
   if (length(payload$entries) > 0) {
-    vault$entries <- data.frame(
+    add_entries(vault, data.frame(
       token = field("token"), type = field("type"), class = field("class"),
       canonical = field("canonical"), value = field("value")
-    )
+    ))
   }
   vault
 }

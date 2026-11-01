@@ -193,6 +193,25 @@ vault <- vault_open("loans.cgvault")    # later: same tokens, numbering continue
 The passphrase is never stored: without it the file cannot be opened. Keep
 `*.cgvault` files out of version control.
 
+**Keyed tokens** make the same identifier get the same token everywhere -
+across sessions, datasets, machines and R or Python - so tokenised tables
+can still be joined and counted, and parallel workers agree (needs the
+openssl package):
+
+```r
+key <- cg_new_token_key()   # store it like a password, e.g. in CREDGATE_TOKEN_KEY
+a <- cg_vault(key)
+b <- cg_vault(key)
+tokenise("PAN ABCPE1234F", a)   # "PAN [PAN_bpg46o6x465d4]" (depends on the key)
+tokenise("pan abcpe1234f", b)   # the same token
+vault_merge(a, b)               # combine vaults from parallel workers
+```
+
+Whoever holds the key can confirm a guessed value by computing its token,
+so keep it out of code and project files. The key is never saved in a vault
+file; `vault_open(path, key = ...)` needs it again.
+
+
 ### Scanning data frames
 
 `scan_pii()` reports which columns hold PII and how much, without sending

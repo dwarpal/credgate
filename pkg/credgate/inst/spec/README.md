@@ -196,10 +196,46 @@ reason about ("[PAN_1] and [PAN_2] are different customers"), and the real
 values are put back into its answer. The mapping is kept in a **vault**.
 
 **Vault.** An ordered list of entries `(token, type, canonical, value)`,
-starting empty. `token` is `[` + upper-cased type + `_` + n + `]`, where n
-counts entries of that type from 1 in order of creation (`[PAN_1]`,
-`[PAN_2]`, `[MOBILE_IN_1]`). `value` is the original text of the first
-occurrence.
+starting empty, in one of two modes. `value` is the original text of the
+first occurrence.
+
+- **Numbered** (default): `token` is `[` + upper-cased type + `_` + n + `]`,
+  where n counts entries of that type from 1 in order of creation
+  (`[PAN_1]`, `[PAN_2]`, `[MOBILE_IN_1]`). Readable, but the same customer
+  gets different tokens in different vaults.
+- **Keyed**: `token` is `[` + upper-cased type + `_` + id + `]`, where id is
+  derived from a secret key (below). The same identifier gets the same token
+  in every vault with the same key - across sessions, datasets, machines and
+  parallel workers - so tokenised tables can still be joined and counted.
+
+Tokens are compared ignoring case.
+
+**Keyed token id.** With a key of at least 32 bytes:
+
+1. `message` = the UTF-8 bytes of `credgate-token-v1`, a zero byte, the
+   type, a zero byte, the canonical form.
+2. `mac` = HMAC-SHA256(key, message).
+3. id = the first 8 bytes of `mac` in base32 (RFC 4648 alphabet, lower
+   case, no padding): 13 characters from `a-z` and `2-7`.
+
+64 bits keep collisions negligible (expected far below one for a billion
+distinct values of one type); two different values that do get the same
+token are reported as an error, never merged silently. A key is given as
+hex (at least 64 hex digits) or as raw bytes, by the caller or in the
+environment variable `CREDGATE_TOKEN_KEY`. Implementations provide a helper
+that makes a new random key. The **key fingerprint** - the first 8 bytes of
+HMAC-SHA256(key, `credgate-key-check-v1`), as 16 hex digits - identifies a
+key without revealing it.
+
+Whoever holds the key can confirm a guessed value by computing its token
+(Indian mobile numbers have only about 10^10 values), so the key needs the
+same care as a vault: see `docs/threat-model.md`.
+
+**merge(vault, other)**: adds the other vault's entries that are not yet
+present, in its order. Both must be keyed with the same key (same
+fingerprint); it is an error if a token stands for a different
+`(type, canonical)` in the two vaults. Parallel workers each tokenise with
+their own keyed vault and merge the results.
 
 **tokenise(texts, vault)**:
 
@@ -218,9 +254,10 @@ copy tokens:
    - bracketed: `\[\s*T_N\s*\]`;
    - bare: `(?<![\p{L}\p{N}_])T_N(?![\p{L}\p{N}_])`;
 
-   where `T` is `[A-Za-z]+(?:_[A-Za-z]+)*` and `N` is `[0-9]+`; bracketed
-   form first at each position.
-2. Upper-case `T_N`; if the vault has the token `[T_N]`, replace the whole
+   where `T` is `[A-Za-z]+(?:_[A-Za-z]+)*` and `N` is `[0-9]+` or 13
+   characters from `[A-Za-z2-7]` (a keyed id); bracketed form first at each
+   position.
+2. If the vault has the token `[T_N]` (ignoring case), replace the whole
    candidate by its `value`. Otherwise leave it unchanged.
 3. With `strict`, it is an error if any **bracketed** candidate is not in
    the vault (a token the model invented or altered). Bare unknown
@@ -254,9 +291,13 @@ Every save draws a new salt and nonce.
 
 **Payload**: UTF-8 JSON
 `{"format": "credgate-vault", "version": 1, "saved_at": "<UTC, ISO 8601>",
-"entries": [{"token", "type", "class", "canonical", "value"}, ...]}`, with
-entries in vault order. Opening rebuilds the vault exactly, so tokenising
-continues the numbering.
+"mode": "numbered" | "keyed", "key_fingerprint": "<16 hex digits, keyed
+only>", "entries": [{"token", "type", "class", "canonical", "value"}, ...]}`,
+with entries in vault order; a payload without `mode` is numbered. Opening
+rebuilds the vault exactly, so tokenising continues the numbering. The key
+itself is **never** stored: opening a keyed vault needs the key again (from
+the caller or `CREDGATE_TOKEN_KEY`), and it is an error if its fingerprint
+differs from the one saved.
 
 **Rules**:
 
