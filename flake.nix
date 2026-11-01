@@ -89,11 +89,40 @@
           rTest = pkgs.rWrapper.override {
             packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr ]) ++ available;
           };
+          # The documentation site: MkDocs (home, Python API, guides, spec) with
+          # the R package's pkgdown site under r/. The large-data vignette runs
+          # its Arrow and DuckDB examples where those packages are available.
+          # Published by .github/workflows/docs.yml.
+          docsR = pkgs.rWrapper.override {
+            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ pkgdown knitr rmarkdown ])
+              ++ builtins.filter (p: (builtins.tryEval p.drvPath).success)
+                (with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr ]);
+          };
+          docsPy = pkgs.python3.withPackages (ps: with ps; [
+            mkdocs mkdocs-material mkdocstrings mkdocstrings-python
+          ]);
         in
         {
           # The slow-to-build R packages on their own (nixpkgs' public cache
           # lacks some of them), so CI can keep them in its Nix store cache.
           r-integration-deps = pkgs.linkFarmFromDrvs "credgate-r-integration-deps" available;
+
+          docs = pkgs.runCommand "credgate-docs" {
+            nativeBuildInputs = [ docsR docsPy pkgs.pandoc ];
+            LC_ALL = "C.UTF-8";
+          } ''
+            export HOME=$TMPDIR
+            cp -r ${./mkdocs.yml} mkdocs.yml
+            cp -r ${./docs} docs
+            mkdir -p pkg && cp -r ${./pkg/python} pkg/python && cp -r ${./pkg/credgate} pkg/credgate
+            chmod -R u+w docs pkg
+            cp ${./spec/README.md} docs/spec.md
+            mkdocs build --site-dir $out
+
+            export DOCS_R=$out/r
+            Rscript -e 'pkgdown::build_site("pkg/credgate", override = list(destination = Sys.getenv("DOCS_R")),
+                                            install = FALSE, new_process = FALSE, preview = FALSE)'
+          '';
 
           r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
             nativeBuildInputs = [ rTest pkgs.postgresql pkgs.jdk17_headless ];

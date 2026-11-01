@@ -1,0 +1,73 @@
+# The documentation site: this MkDocs site (home, Python, guides, spec) with
+# the R package's pkgdown site under r/. Built with Nix (`nix build .#docs`)
+# and published to GitHub Pages by .github/workflows/docs.yml.
+site_name: credgate
+site_description: Governance-first PII detection for LLM requests, with Indian identifiers built in
+site_url: https://dwarpal.github.io/credgate/
+repo_url: https://github.com/dwarpal/credgate
+repo_name: dwarpal/credgate
+edit_uri: edit/main/docs/
+copyright: Copyright 2026 Bharat Sikka and Aishwarya Bais - Apache-2.0
+
+theme:
+  name: material
+  # No web fonts: the site works offline and loads nothing from third parties.
+  font: false
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/weather-night, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/weather-sunny, name: Light mode}
+
+nav:
+  - Home: index.md
+  - Python:
+      - Get started: python/index.md
+      - "API: detection": python/api/detection.md
+      - "API: redaction and tokens": python/api/redaction.md
+      - "API: inventory and discovery": python/api/inventory.md
+      - "API: policies and audit log": python/api/policies.md
+      - "API: integrations": python/api/integrations.md
+      - "API: evaluation and test data": python/api/evaluation.md
+  - R: https://dwarpal.github.io/credgate/r/
+  - Guides:
+      - Large data: large-data.md
+      - Threat model: threat-model.md
+  - Specification: spec.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [pkg/python/src]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: false
+            heading_level: 2
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            merge_init_into_class: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+validation:
+  # Guides link to files elsewhere in the repository (benchmark/, examples/).
+  unrecognized_links: info

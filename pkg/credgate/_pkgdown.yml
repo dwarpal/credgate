@@ -1,0 +1,81 @@
+url: https://dwarpal.github.io/credgate/r/
+
+template:
+  bootstrap: 5
+  # No web fonts: the site works offline and loads nothing from third parties.
+  bslib:
+    base_font: system-ui
+    code_font: ui-monospace
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [site, github]
+  components:
+    site:
+      text: credgate (both languages)
+      href: https://dwarpal.github.io/credgate/
+    github:
+      icon: fa-github
+      href: https://github.com/dwarpal/credgate
+      aria-label: GitHub
+
+home:
+  title: credgate for R
+
+reference:
+  - title: Detect and scan
+    desc: Find PII in text and in the columns of tables.
+    contents:
+      - credgate-package
+      - detect_pii
+      - scan_pii
+      - preview
+      - cg_detectors
+      - new_detector
+      - register_detector
+      - bounded
+      - cg_normalise
+  - title: Redact and tokenise
+    desc: Replace identifiers before text leaves the machine, and restore them afterwards.
+    contents:
+      - redact
+      - tokenise
+      - restore
+      - cg_vault
+      - vault_merge
+      - vault_save
+      - cg_new_token_key
+  - title: Discovery and inventory
+    desc: Record where PII is, across tables, Spark and BigQuery.
+    contents:
+      - pii_inventory
+      - write_inventory
+      - bq_scan_pii
+  - title: Large data
+    contents:
+      - redact_parquet
+      - redact_query
+  - title: Policies and audit log
+    contents:
+      - cg_policy
+      - policy_decide
+      - cg_audit_log
+  - title: Evaluation and test data
+    contents:
+      - cg_evaluate
+      - cg_read_corpus
+      - synth_indian_pii
+  - title: Checksums and the shared spec
+    contents:
+      - verhoeff_valid
+      - luhn_valid
+      - gstin_valid
+      - cg_spec_path
+
+articles:
+  - title: Guides
+    navbar: ~
+    contents:
+      - local-llms
+      - large-data
