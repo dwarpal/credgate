@@ -152,7 +152,7 @@ structured column), `note` one corpus document, `long` 12 documents joined
 | long (913 characters) | 429 | 433 | 152 | 293 |
 | clean (71 characters) | 7,439 | 9,248 | 1,905 | 2,203 |
 
-"Before" is 0.4.0; "after" is this version. `redact()` runs at the same
+"Before" is 0.4.0; "after" is 0.5.0. `redact()` runs at the same
 speed as detection; R's `tokenise()` went from 538 to 2,672 notes per second
 (the vault no longer grows one row at a time). `scan_pii()` on 8 columns x
 20,000 rows: 4.6 s to 3.0 s in Python.

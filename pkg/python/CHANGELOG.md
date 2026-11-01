@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-01)
+
+Large data - pandas, Polars, Arrow, DuckDB and Parquet - faster detection,
+and a fix for a race when credgate is first used from several threads at
+once. Upgrade if you call credgate from parallel code.
 
 - **Fixed: detection could silently miss identifiers when its first calls
   ran on several threads at once** (for example inside DuckDB or Polars, or
@@ -12,7 +16,10 @@
   `credgate.polars` (`pl.col(...).credgate.redact()` / `.has_pii()`),
   `credgate.duckdb` (`register(con)` adds `cg_redact()` and `cg_has_pii()`)
   and `credgate.arrow` (tables, record-batch streams, `redact_parquet()`),
-  with extras `credgate[polars]`, `[arrow]` and `[duckdb]`.
+  with extras `credgate[polars]`, `[arrow]` and `[duckdb]` (which includes
+  numpy, needed by DuckDB's Python functions).
+- `pip install 'credgate[all]'` installs every optional integration (vault,
+  Arrow, Polars, DuckDB).
 - `scan_pii()` accepts Polars frames (eager and lazy), Arrow tables and
   datasets and DuckDB relations, reading one column at a time with the same
   sampling as in memory.
