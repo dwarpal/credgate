@@ -264,7 +264,7 @@ compliance people at banks, NBFCs and insurers).
 
 ## 6. Improvement roadmap (agreed 2026-10-31)
 
-Status as of py-v0.4.0 / CRAN 0.1.0 (under review). The evaluation
+Status as of py-v0.5.0 / CRAN 0.1.0 (under review). The evaluation
 harness (item 1) is done. **Reordered 2026-10-31** (see section 5):
 accuracy is already ahead of the alternatives on our benchmark, so after a
 few quick accuracy fixes the next work is the product chain - tokenise and

@@ -9,7 +9,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("credgate")
 except PackageNotFoundError:  # running from a source checkout
-    __version__ = "0.4.0"
+    __version__ = "0.5.0"
 
 from ._spec import spec_path
 from .checksums import (
