@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* BigQuery: `bq_scan_pii()`, `bq_pii_inventory()` and
+  `bq_inventory_dataset()` (every table in a dataset), through bigrquery.
+  BigQuery samples the table (`TABLESAMPLE`, billing only the sampled
+  blocks; `sampling = "rand"` for views) and only the sample is downloaded;
+  only scannable columns are read. A dry run checks the cost of every query
+  first and anything estimated above `max_bytes` (default 1 GB) is refused
+  before it runs; the limit is also sent to BigQuery.
 * Spark: `scan_pii()` and `pii_inventory()` accept sparklyr tables. The
   table is sampled inside the cluster (a seeded random sample of up to
   `sample` rows, `seed = 42L` by default) and only the sample reaches the

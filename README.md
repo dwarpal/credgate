@@ -237,8 +237,20 @@ customers <- dplyr::tbl(sc, "customers")              # sc from sparklyr::spark_
 inv <- pii_inventory(customers, source = "hive", table = "crm.customers")
 ```
 
-Scanning whole warehouses (BigQuery, every table of a database) builds on
-this and is in progress.
+BigQuery tables are sampled by BigQuery itself, and only the sample is
+downloaded. Only the columns credgate can scan are read, and a dry run
+checks every query's cost first: anything estimated above `max_bytes`
+(default 1 GB) is refused before it runs.
+
+```python
+from credgate import bigquery as cgbq
+inv = cgbq.inventory_dataset(client, "my-project.crm")     # every table in a dataset
+```
+
+In R, with bigrquery: `bq_pii_inventory("my-project.crm.customers")`,
+`bq_inventory_dataset("my-project.crm")`, `bq_scan_pii()`. A script to
+check it against real BigQuery, in the free sandbox, is in
+[`examples/bigquery/`](examples/bigquery/).
 
 ## Large data
 
@@ -253,6 +265,7 @@ command line:
 | Arrow, pandas | Series, arrays, tables, datasets | arrays, tables, datasets |
 | Other databases | - | any DBI database via dbplyr |
 | Spark | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) |
+| BigQuery | `credgate.bigquery.pii_inventory()`, `inventory_dataset()` | `bq_pii_inventory()`, `bq_inventory_dataset()` |
 
 ```sh
 credgate scan calls.parquet

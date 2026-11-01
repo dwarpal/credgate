@@ -301,3 +301,19 @@ def test_inventory_file_written_by_both(tmp_path):
     expected = credgate.spec_path() / "conformance" / spec["path"]
     assert inv.write(tmp_path / "inv.csv").read_bytes() == expected.read_bytes()
     assert credgate.read_inventory(expected) == inv
+
+
+@pytest.mark.parametrize("case", conformance("bigquery.yaml")["cases"], ids=lambda c: c["id"])
+def test_bigquery_query(case):
+    from credgate.bigquery import sample_query
+
+    fields = [(f["name"], f["type"], f.get("mode", "NULLABLE")) for f in case["fields"]]
+    got = sample_query(
+        case["table"],
+        case["kind"],
+        case["rows"],
+        fields,
+        case.get("sample", 10000),
+        case.get("sampling", "tablesample"),
+    )
+    assert got == (case["sql"], case["read"], case["sample_method"])

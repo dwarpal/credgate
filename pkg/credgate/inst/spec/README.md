@@ -231,6 +231,44 @@ the column scan, as Spark tables have no stable row order:
 The same data, partitioning and seed give the same sample in PySpark and
 sparklyr, as both use Spark's own sampling.
 
+**BigQuery tables** are sampled by BigQuery; only the sample is
+downloaded. BigQuery bills by the bytes of the columns a query reads, so
+credgate reads only the columns it can scan and checks the cost first:
+
+1. `n` is the table's row count from its metadata, or `SELECT COUNT(*)`
+   when the metadata has none; `n_rows = n`.
+2. Columns read (`INTEGER` and `FLOAT`, the API's older names, are the
+   same as `INT64` and `FLOAT64`): `STRING`; `INT64` as text; `NUMERIC` and `BIGNUMERIC` as
+   text when whole, otherwise not at all; `FLOAT64` as it is. Repeated
+   columns and all other types (records, bytes, dates, JSON, geography,
+   ...) are not read and are recorded with `n_sampled = 0`. With no column
+   to read, no query is run.
+3. The query, with identifiers in backticks (inner backticks escaped with
+   a backslash) and the table as `` `project.dataset.table` ``:
+   - `n <= sample`: all rows; `sample_method` is `all`.
+   - otherwise, with fraction `f = max(0.000001, min(1, 1.2 * sample / n))`:
+     - `sampling = "tablesample"` (the default, for tables): BigQuery's
+       block sampling, `TABLESAMPLE SYSTEM (p PERCENT)` with `p = 100 * f`,
+       then `LIMIT sample`; only the sampled blocks are billed.
+       `sample_method` is `bigquery-tablesample`.
+     - `sampling = "rand"`: `WHERE RAND() < f LIMIT sample`, which reads
+       (and bills) the whole columns. `sample_method` is `bigquery-rand`.
+       Only tables can use `TABLESAMPLE`, so views and external tables
+       always use this.
+   - `p` and `f` are written with up to 6 decimal places, trailing zeros
+     removed (e.g. `0.012`, `1.2`, `100`).
+4. **Cost limit.** Before each query (the count too: counting a view runs
+   it), a dry run estimates the bytes it would process; if the estimate
+   exceeds `max_bytes` (default 10^9, 1 GB) nothing runs and it is an
+   error that names the estimate. Each query is also sent with
+   `maximumBytesBilled = max_bytes`, which BigQuery enforces.
+5. The column-scan rules then apply to the downloaded rows, without
+   further sampling.
+
+BigQuery's samples are random and not reproducible. The query for each
+case is in `conformance/bigquery.yaml`; implementations must build exactly
+these queries.
+
 **Inventory files** are CSV, written identically by every implementation so
 that files can be compared and diffed:
 

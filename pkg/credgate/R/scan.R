@@ -55,10 +55,12 @@ scan_table <- function(data, sample, min_rate, detectors, seed = 42L) {
   }
   method <- NULL
   if (inherits(data, "tbl_spark")) {
-    spark <- spark_sample(data, sample, seed)
-    data <- spark$rows
-    n_rows <- spark$n_rows
-    method <- spark$method
+    data <- spark_sample(data, sample, seed)
+  }
+  if (inherits(data, "cg_sampled")) {
+    n_rows <- data$n_rows
+    method <- data$method
+    data <- data$rows
   } else {
     n_rows <- table_rows(data)
   }
@@ -114,12 +116,21 @@ spark_sample <- function(data, sample, seed) {
   if (is.null(rows)) {
     rows <- data.frame(row.names = integer())
   }
+  sampled_rows(rows, names, n, method)
+}
+
+# Rows already sampled by an engine (Spark, BigQuery), with every column of
+# the table: those not read are all missing, so they are covered but empty.
+sampled_rows <- function(rows, names, n_rows, method) {
   out <- lapply(stats::setNames(names, names), function(name) {
-    if (name %in% read) rows[[name]] else rep(NA_character_, nrow(rows))
+    if (name %in% names(rows)) rows[[name]] else rep(NA_character_, nrow(rows))
   })
-  list(
-    rows = as.data.frame(out, check.names = FALSE, optional = TRUE),
-    n_rows = n, method = method
+  structure(
+    list(
+      rows = as.data.frame(out, check.names = FALSE, optional = TRUE),
+      n_rows = n_rows, method = method
+    ),
+    class = "cg_sampled"
   )
 }
 

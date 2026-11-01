@@ -324,3 +324,20 @@ test_that("inventory file is written identically by R and Python", {
   expect_identical(readBin(path, "raw", 1e5), readBin(expected, "raw", 1e5))
   expect_equal(as.data.frame(read_inventory(expected)), as.data.frame(inv))
 })
+
+for (case in conformance("bigquery.yaml")$cases) {
+  test_that(paste("bigquery query:", case$id), {
+    fields <- data.frame(
+      name = vapply(case$fields, function(f) f$name, ""),
+      type = vapply(case$fields, function(f) f$type, ""),
+      mode = vapply(case$fields, function(f) f$mode %||% "NULLABLE", "")
+    )
+    got <- credgate:::bq_sample_query(
+      case$table, case$kind, case$rows, fields,
+      case[["sample"]] %||% 10000L, case[["sampling"]] %||% "tablesample"
+    )
+    expect_identical(got$sql, case$sql)
+    expect_identical(got$read, as.character(unlist(case$read)))
+    expect_identical(got$method, case$sample_method)
+  })
+}
