@@ -82,6 +82,10 @@
           };
         in
         {
+          # The slow-to-build R packages on their own (nixpkgs' public cache
+          # lacks some of them), so CI can keep them in its Nix store cache.
+          r-integration-deps = pkgs.linkFarmFromDrvs "credgate-r-integration-deps" available;
+
           r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
             nativeBuildInputs = [ rTest pkgs.postgresql ];
             LC_ALL = "C";
