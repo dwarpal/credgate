@@ -266,8 +266,13 @@ credgate reads only the columns it can scan and checks the cost first:
 4. **Cost limit.** Before each query (the count too: counting a view runs
    it), a dry run estimates the bytes it would process; if the estimate
    exceeds `max_bytes` (default 10^9, 1 GB) nothing runs and it is an
-   error that names the estimate. Each query is also sent with
-   `maximumBytesBilled = max_bytes`, which BigQuery enforces.
+   error that names the estimate. Queries without `TABLESAMPLE` are also
+   sent with `maximumBytesBilled = max_bytes`, which BigQuery enforces.
+   `TABLESAMPLE` queries are not: BigQuery checks that limit against the
+   whole table, though it bills only the sampled blocks, which the dry
+   run estimates to within about 1 MB (measured on a 3.2 GB table: a 1%
+   sample was estimated at 32.0 MB and billed 32.5 MB; see
+   `benchmark/bigquery_tablesample_cost.py`).
 5. The column-scan rules then apply to the downloaded rows, without
    further sampling.
 

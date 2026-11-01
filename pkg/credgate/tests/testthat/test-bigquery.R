@@ -21,17 +21,19 @@ info <- function(n = 4, kind = "TABLE") {
 
 fake_bigquery <- function(n = 4, kind = "TABLE", bytes = 1000, env = parent.frame()) {
   queries <- character()
+  limits <- list()
   local_mocked_bindings(
     bq_table_info = function(table) info(n, kind),
     bq_dry_run = function(sql, billing) bytes,
     bq_fetch = function(sql, billing, max_bytes) {
       queries <<- c(queries, sql)
+      limits[length(queries)] <<- list(max_bytes)
       if (startsWith(sql, "SELECT COUNT(*)")) data.frame(f0_ = 4) else customers
     },
     bq_list_tables = function(dataset) list("test.crm.customers", "test.crm.customers"),
     .env = env
   )
-  function() queries
+  structure(function() queries, limits = function() limits)
 }
 
 test_that("small tables are read whole and match the in-memory inventory", {
@@ -54,6 +56,8 @@ test_that("large tables are sampled by BigQuery; views use RAND()", {
   expect_identical(unique(inv$sample_method), "bigquery-tablesample")
   expect_identical(unique(inv$n_rows), 1000000L)
   expect_match(queries(), "TABLESAMPLE SYSTEM \\(0.12 PERCENT\\) LIMIT 1000$")
+  # BigQuery would check its own limit against the whole table: not sent.
+  expect_null(attr(queries, "limits")()[[1]])
 })
 
 test_that("views use RAND(), and a missing row count is counted", {
@@ -62,6 +66,7 @@ test_that("views use RAND(), and a missing row count is counted", {
   expect_identical(unique(inv$sample_method), "bigquery-rand")
   expect_match(queries()[1], "^SELECT COUNT\\(\\*\\) FROM `test.crm.customers`$")
   expect_match(queries()[2], "WHERE RAND\\(\\) < 0.6 LIMIT 2$")
+  expect_identical(attr(queries, "limits")(), list(1e9, 1e9))
 })
 
 test_that("the cost limit stops before anything runs", {
