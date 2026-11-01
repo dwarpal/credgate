@@ -14,7 +14,7 @@ detection rules, so both languages find exactly the same matches.
 > **Status: early development (pre-alpha).** PII detection, column
 > scanning (`scan_pii()`), redaction (`redact()`, `preview()`) and
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file) work today. Policies, the audit log, proxy mode and the IDE
+> vault file) and policies work today. The audit log, proxy mode and the IDE
 > assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
@@ -147,6 +147,38 @@ git diff --cached | credgate detect --fail     # non-zero exit if PII is found
 
 Values are masked whenever results are printed; the real values are only
 available programmatically (`x$value`, `span.value`) or with `--reveal`.
+
+## Policies
+
+A policy says, per destination, what happens to each kind of identifier:
+let it through, redact it, tokenise it, or block the whole request. It is a
+YAML file owned by InfoSec and compliance, and the same file works in R and
+Python. It is also the register of model endpoints: each has a tier -
+`local` (the analyst's machine), `internal` (open models the organisation
+runs, such as vLLM or SGLang) or `frontier` (Claude, OpenAI, Gemini, also
+through the organisation's own gateway) - a provider and URL, and can be
+`blocked`; an endpoint that is not listed receives nothing. Rules can target
+tiers or particular endpoints. See
+[`examples/policies/bank-default.yaml`](examples/policies/bank-default.yaml):
+in-house models may see customer data (but not government IDs on the shared
+GPU server), frontier models may not, a card number with its CVV and expiry
+is never sent to a frontier model, card verification codes never leave, and
+Copilot is blocked.
+
+```python
+policy = credgate.Policy.load("bank-default.yaml")
+decision = policy.apply(messages, "claude")   # destination named in the policy
+if decision.allowed:
+    send(decision.texts)
+else:
+    print(decision.blocked_by)                # e.g. ('card-with-cvv-and-expiry',)
+```
+
+In R: `policy_apply(cg_policy("bank-default.yaml"), messages, "claude")`.
+Everything is checked when the policy is loaded - an unknown field, tier,
+action or identifier type is an error, never a silent "allow" - and every
+decision names the policy revision and the rule behind each action, ready
+for the audit log. The format is specified in [spec/README.md](spec/README.md#policies-policy).
 
 ## Large data
 

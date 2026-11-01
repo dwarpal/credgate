@@ -176,3 +176,34 @@ def test_vault_file(case):
     else:
         with pytest.raises(credgate.VaultFileError, match="numbered"):
             credgate.Vault.open(path, passphrase=case["passphrase"], key=VAULT_SPEC["other_key"])
+
+
+POLICY_SPEC = conformance("policy.yaml")
+
+
+def _policy(p):
+    return credgate.Policy.from_dict(POLICY_SPEC["policies"][p] if isinstance(p, str) else p)
+
+
+@pytest.mark.parametrize("case", POLICY_SPEC["cases"], ids=[c["id"] for c in POLICY_SPEC["cases"]])
+def test_policy(case):
+    d = _policy(case["policy"]).apply(case["texts"], case["destination"], vault=credgate.Vault())
+    assert d.allowed == case["allowed"]
+    assert [[m.span.type, m.action, m.rule] for m in d.matches] == case["matches"]
+    assert list(d.blocked_by) == case.get("blocked_by", [])
+    assert d.texts == (case["output"] if case["allowed"] else None)
+
+
+@pytest.mark.parametrize(
+    "case", POLICY_SPEC["invalid"], ids=[c["id"] for c in POLICY_SPEC["invalid"]]
+)
+def test_invalid_policy(case):
+    with pytest.raises(credgate.PolicyError) as err:
+        credgate.Policy.from_dict(case["policy"])
+    assert case["error"].lower() in str(err.value).lower()
+
+
+def test_policy_unknown_destination():
+    u = POLICY_SPEC["unknown_destination"]
+    with pytest.raises(credgate.PolicyError, match="Unknown destination"):
+        _policy(u["policy"]).decide("PAN ABCPE1234F", u["destination"])

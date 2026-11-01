@@ -317,6 +317,89 @@ Fixtures written by each implementation are in `conformance/vaults/`, listed
 with their passphrase and expected entries in `conformance/vault.yaml`; every
 implementation must open all of them.
 
+## Policies (`policy`)
+
+A policy decides, for one request to one destination, what happens to each
+identifier found in it: let it through, redact it, tokenise it, or block the
+whole request. Policies are YAML files, read the same way by every
+implementation; they are written by InfoSec and compliance, not in code.
+
+**Format**:
+
+```yaml
+policy: credgate-policy        # required marker
+version: 1                     # format version
+id: bank-default               # name of this policy
+revision: 3                    # whole number, raised on every change
+description: free text         # optional
+destinations:                  # the endpoints InfoSec has set up
+  ollama-local: {tier: local, provider: ollama, url: 'http://localhost:11434/v1'}
+  vllm-gpu: {tier: internal, provider: vllm, url: 'https://llm.bank.internal/v1'}
+  claude-gateway: {tier: frontier, provider: anthropic, url: 'https://ai-gw.bank.internal/claude'}
+  copilot: {tier: frontier, provider: github, blocked: true}
+min_confidence: 0.5            # optional, default 0
+rules:
+  - id: card-with-cvv-and-expiry
+    description: free text     # optional
+    when: {tiers: [frontier], all_of: [card, card_cvv, card_expiry]}
+    action: block
+  - id: no-personal-data-to-frontier
+    when: {tiers: [frontier], classes: [identity_strong, financial]}
+    action: redact
+default_action: redact
+```
+
+- **Destinations** are the endpoints requests may go to. Each has a `tier`;
+  optionally `provider` and `url` (recorded with decisions; the proxy routes
+  by `url`), a `description`, and `blocked: true` to refuse every request to
+  it while keeping it on record.
+- **Tiers** say where the data ends up: `local` (the same machine),
+  `internal` (models the organisation runs itself, such as open models on
+  vLLM or SGLang in its data centre), `frontier` (an external model
+  provider - also when reached through the organisation's own gateway,
+  since the data still reaches the provider). No others.
+- **Actions**: `allow`, `redact`, `tokenise`, `block`.
+- **Conditions** in `when`, all optional; a rule matches an identifier when
+  every condition given holds:
+  - `destinations`: the destination is one of these (names from
+    `destinations`), for rules about particular models;
+  - `tiers`: the destination's tier is one of these;
+  - `types`: the identifier's type is one of these;
+  - `classes`: the identifier's data class is one of these;
+  - `all_of`: every one of these types was found somewhere in the request.
+- A destination that is not listed cannot receive anything: requests to it
+  are refused. To stop a model getting a kind of data, add a rule for it;
+  to stop it getting anything, leave it out.
+- Rule ids are unique. Unknown fields, destinations, tiers, actions, types
+  and classes, a
+  missing required field, or a `revision` that is not a positive whole number
+  are errors when the policy is loaded: a policy that cannot be read
+  correctly is never applied.
+
+**Deciding** (`decide(policy, texts, destination)`), for a request made of
+one or more texts (for example the messages of a chat):
+
+1. An unknown `destination` is an error.
+2. Detect in all texts, keeping matches with confidence at least
+   `min_confidence`.
+3. For each match, in document then position order, the first rule that
+   matches decides its action; with no matching rule, `default_action`.
+4. If the destination is `blocked`, or any match's action is `block`, the
+   request is **blocked**: nothing may be sent. The decision lists what
+   blocked it: `destination-blocked` first, then every rule.
+
+The decision reports the policy id and revision, the destination and its
+tier, whether the request is allowed, and for each match its type, class,
+span, action and deciding rule (or `default`). Implementations must also
+block, not send, if detection itself fails.
+
+**Applying** (`apply`): if the decision allows the request, each text is
+rewritten as for redaction, replacing each match by its placeholder
+(`redact`), its token (`tokenise`, which needs a vault) or nothing (`allow`).
+A blocked request has no output texts.
+
+Conformance cases are in `conformance/policy.yaml`.
+
 ## Evaluation (`evaluate`)
 
 Measures detection against labelled text.
