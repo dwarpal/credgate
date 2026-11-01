@@ -86,9 +86,14 @@ The comparison is independent and not affiliated with Microsoft.
 ## Installation
 
 CRAN submission of 0.1.0 is under review. Until it is accepted, install
-from GitHub (this also gets the development version):
+the development version from R-universe or GitHub:
 
 ```r
+# Development version, prebuilt for Windows, macOS and Linux (R-universe):
+install.packages("credgate",
+  repos = c("https://dwarpal.r-universe.dev", "https://cloud.r-project.org"))
+
+# or from GitHub (needs build tools on Windows and macOS):
 # install.packages("remotes")
 remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
 ```

@@ -151,7 +151,7 @@ available programmatically (`x$value`, `span.value`) or with `--reveal`.
 ## Installation
 
 **Python** is on PyPI; the **R** package is under CRAN review, so install it
-from GitHub for now.
+from [R-universe](https://dwarpal.r-universe.dev) or GitHub for now.
 
 **Nix** (recommended; works offline once built):
 
@@ -164,6 +164,11 @@ nix develop github:dwarpal/credgate             # R + Python dev shell
 **R**
 
 ```r
+# Development version, prebuilt for Windows, macOS and Linux (R-universe):
+install.packages("credgate",
+  repos = c("https://dwarpal.r-universe.dev", "https://cloud.r-project.org"))
+
+# or from GitHub (needs build tools on Windows and macOS):
 # install.packages("remotes")
 remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
 ```
