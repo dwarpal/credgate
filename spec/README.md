@@ -185,9 +185,51 @@ Irreversible masking of a text before it is shared:
 
 `preview` shows the redacted text together with the spans that caused each
 replacement (values masked), without sending anything. Reversible
-tokenisation (`[PAN_1]` restored later) builds on the same spans.
+tokenisation (`[PAN_1]` restored later, see below) builds on the same spans.
 
 Conformance cases are in `conformance/redact.yaml`.
+
+## Tokenisation (`tokenise`, `restore`)
+
+Reversible masking: identifiers become numbered tokens that a model can
+reason about ("[PAN_1] and [PAN_2] are different customers"), and the real
+values are put back into its answer. The mapping is kept in a **vault**.
+
+**Vault.** An ordered list of entries `(token, type, canonical, value)`,
+starting empty. `token` is `[` + upper-cased type + `_` + n + `]`, where n
+counts entries of that type from 1 in order of creation (`[PAN_1]`,
+`[PAN_2]`, `[MOBILE_IN_1]`). `value` is the original text of the first
+occurrence.
+
+**tokenise(texts, vault)**:
+
+1. Detect with the given options, as for redaction.
+2. Visit spans by document, then position. Look up `(type, canonical)` in
+   the vault; if absent, append a new entry. The same identifier therefore
+   gets the same token however it is written (`ABCPE1234F` and
+   `abcpe1234f`; `+91 98765 43210` and `9876543210`), across documents and
+   across calls with the same vault.
+3. Replace each span by its token; everything else is kept exactly.
+
+**restore(text, vault, strict)** puts values back, tolerating how models
+copy tokens:
+
+1. Find token candidates, left to right, without overlap, ignoring case:
+   - bracketed: `\[\s*T_N\s*\]`;
+   - bare: `(?<![\p{L}\p{N}_])T_N(?![\p{L}\p{N}_])`;
+
+   where `T` is `[A-Za-z]+(?:_[A-Za-z]+)*` and `N` is `[0-9]+`; bracketed
+   form first at each position.
+2. Upper-case `T_N`; if the vault has the token `[T_N]`, replace the whole
+   candidate by its `value`. Otherwise leave it unchanged.
+3. With `strict`, it is an error if any **bracketed** candidate is not in
+   the vault (a token the model invented or altered). Bare unknown
+   candidates are ordinary text (`file_2`) and never an error.
+
+Restoring text that was never tokenised changes nothing unless it contains
+token-shaped text that is in the vault.
+
+Conformance cases are in `conformance/tokenise.yaml`.
 
 ## Evaluation (`evaluate`)
 

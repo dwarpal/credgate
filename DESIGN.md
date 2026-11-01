@@ -103,7 +103,7 @@ Names and addresses in Indic scripts and transliteration: phase 1 is rule-based 
 
 ### Transform modes (per data class, set by policy)
 - `redact`: `[PAN]`, irreversible.
-- `tokenise`: `⟦PAN_3⟧`, restorable. The same normalised value gives the same token for the whole session.
+- `tokenise`: `[PAN_3]`, restorable. The same normalised value gives the same token for the whole vault. (Plain brackets, matching `redact()`'s `[PAN]`; models copy them reliably.)
 - `surrogate` (phase 1.5): a format-preserving fake that can be restored. Models reason better over realistic values. Synthetic values are chosen so they *fail* real validation (e.g. an Aadhaar starting with 0/1), so they can never be a real person's number.
 - `block`: refuse the request and log why.
 
@@ -284,7 +284,7 @@ layer.
 | 1 | Accuracy benchmarking | `evaluate()` in both packages; synthetic labelled corpus (dev/test); per-type report in `benchmark/README.md` (test F1 0.947 at 0.5); compared with Presidio (F1 0.949 vs 0.666 India-configured on common types) | Labelled synthetic corpus; per-type precision, recall, F1; published report. Compare with Microsoft Presidio (MIT, has Indian recognisers); verify that other named tools exist, run locally and allow published benchmarks before comparing |
 | 2 | False positives | Checksums, negative context, context-required types, confidence scores | Hard-negative sets (order/invoice/transaction IDs, amounts, product codes); measure, then tighten (bare 12-digit Aadhaar, bare 10-digit mobile, capitalised words after honorifics) |
 | 3 | Multilingual | Devanagari keywords/digits, digits in 11 scripts, names after Hindi honorifics/labels | Keywords for more Indic languages, Hinglish and transliterated cues, optional statistical name detector via the detector hook |
-| 4 | Reversible masking | `redact()` and `preview()` (irreversible placeholders) | Tokenise/restore with a session vault, encrypted persistence, key management, access control on restore, streaming restore |
+| 4 | Reversible masking | `redact()`, `preview()`; `tokenise()`/`restore()` with an in-memory vault, tolerant restore (case, spacing, missing brackets), strict mode | Encrypted vault save/open (passphrase, libsodium, same file in R and Python), key management, access control on restore, expiry/purge, streaming restore |
 | 5 | Policy engine | Designed (section 3) | Presets, data classes, endpoint-specific rules; allow / redact / mask / tokenise / block |
 | 6 | Audit and compliance | Designed (section 3) | Hash-chained records of detections and decisions, no raw PII, DPDP-oriented reports (HTML/CSV) |
 | 7 | Security | Masked output by default, no PII in logs, SHA-pinned CI actions, C-locale tests | Threat model; property-based fuzzing (Unicode, invisible characters, long inputs, regex blow-up); adversarial cases |

@@ -27,6 +27,7 @@ from .normalise import Normalised, normalise
 from .redact import Preview, preview, redact
 from .scan import ColumnFinding, ScanReport, scan_pii
 from .synth import synth_indian_pii
+from .tokenise import UnknownTokenError, Vault, restore, tokenise
 
 __all__ = [
     "ColumnFinding",
@@ -37,6 +38,8 @@ __all__ = [
     "ScanReport",
     "Span",
     "TypeScore",
+    "UnknownTokenError",
+    "Vault",
     "bounded",
     "detect_pii",
     "detectors",
@@ -52,10 +55,12 @@ __all__ = [
     "redact",
     "register_detector",
     "reset_detectors",
+    "restore",
     "scan_pii",
     "set_mask",
     "spec_path",
     "synth_indian_pii",
+    "tokenise",
     "verhoeff_check_digit",
     "verhoeff_valid",
 ]

@@ -1,0 +1,86 @@
+# Tokenisation conformance cases (see README.md, "Tokenisation"). Each case
+# runs its steps in order against one vault that starts empty.
+#
+# Step kinds:
+#   tokenise   list of input texts (one call); optional min_confidence,
+#              context; `expect` is the list of outputs
+#   restore    one text; optional `strict` (default false); `expect` is the
+#              output, or `error: true` when strict restoring must fail
+#   vault      `expect` lists the vault entries in order, as [token, type,
+#              canonical]
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+cases:
+
+  - id: same-identifier-same-token
+    steps:
+      - tokenise: ['PAN ABCPE1234F; mobile +91 98765 43210',
+                   'pan abcpe1234f called from 9876543210']
+        expect: ['PAN [PAN_1]; mobile [MOBILE_IN_1]',
+                 'pan [PAN_1] called from [MOBILE_IN_1]']
+      - vault:
+        expect:
+          - ['[PAN_1]', pan, ABCPE1234F]
+          - ['[MOBILE_IN_1]', mobile_in, '9876543210']
+
+  - id: numbering-per-type-in-order
+    steps:
+      - tokenise: ['PAN ABCPE1234F, PAN AAACR5055K, mobile 9876543210, PAN ABCPE1234F']
+        expect: ['PAN [PAN_1], PAN [PAN_2], mobile [MOBILE_IN_1], PAN [PAN_1]']
+
+  - id: later-calls-continue-the-vault
+    steps:
+      - tokenise: ['PAN ABCPE1234F']
+        expect: ['PAN [PAN_1]']
+      - tokenise: ['PAN XYZPQ9876R and ABCPE1234F']
+        expect: ['PAN [PAN_2] and [PAN_1]']
+
+  - id: restore-uses-first-original-form
+    steps:
+      - tokenise: ['Shri Ramesh Kumar, UID 9481 8614 4308', 'Aadhaar 948186144308']
+        expect: ['Shri [PERSON_NAME_1], UID [AADHAAR_1]', 'Aadhaar [AADHAAR_1]']
+      - restore: '[PERSON_NAME_1] has Aadhaar [AADHAAR_1].'
+        expect: 'Ramesh Kumar has Aadhaar 9481 8614 4308.'
+
+  - id: restore-tolerates-case-spacing-and-missing-brackets
+    steps:
+      - tokenise: ['PAN ABCPE1234F, name: Priya Nair']
+        expect: ['PAN [PAN_1], name: [PERSON_NAME_1]']
+      - restore: '[ pan_1 ] belongs to PERSON_NAME_1; see [Pan_1].'
+        expect: 'ABCPE1234F belongs to Priya Nair; see ABCPE1234F.'
+
+  - id: restore-leaves-unknown-tokens
+    steps:
+      - tokenise: ['PAN ABCPE1234F']
+        expect: ['PAN [PAN_1]']
+      - restore: '[PAN_1], [PAN_2], file_2 and [PAN]'
+        expect: 'ABCPE1234F, [PAN_2], file_2 and [PAN]'
+      - restore: '[PAN_1] and file_2'
+        strict: true
+        expect: 'ABCPE1234F and file_2'
+      - restore: '[PAN_1] and [PAN_2]'
+        strict: true
+        error: true
+
+  - id: restore-does-not-join-words
+    steps:
+      - tokenise: ['PAN ABCPE1234F']
+        expect: ['PAN [PAN_1]']
+      - restore: 'XPAN_1 PAN_10 PAN_1x PAN_1'
+        expect: 'XPAN_1 PAN_10 PAN_1x ABCPE1234F'
+
+  - id: min-confidence-applies
+    steps:
+      - tokenise: ['order no 878245671885, Aadhaar 542229371182']
+        min_confidence: 0.5
+        expect: ['order no 878245671885, Aadhaar [AADHAAR_1]']
+
+  - id: text-without-pii-is-unchanged
+    steps:
+      - tokenise: ['No identifiers here.', '']
+        expect: ['No identifiers here.', '']
+      - vault:
+        expect: []
