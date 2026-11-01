@@ -50,6 +50,8 @@ negatives:
   - {id: ms-office-products, text: 'Ms Word and Ms Excel documents'}
   - {id: festival-after-shri, text: 'Shri Ram Navami holiday on 6 April'}
   - {id: temple-trust, text: 'Donation to Shri Ram Mandir Trust'}
+  - {id: festival-in-devanagari-after-shri, text: 'Shri राम नवमी holiday'}
+  - {id: festival-after-devanagari-honorific, text: 'श्री राम नवमी की छुट्टी'}
 
 known_false_positives:
   - id: deity-before-ji

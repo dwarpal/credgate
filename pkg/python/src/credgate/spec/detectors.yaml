@@ -71,13 +71,16 @@ fragments:
   # software ("Ms Word"), festivals ("Shri Ram Navami"), institutions
   # ("Shri Ram Mandir Trust").
   not_a_name: '(?!(?:{{latin_cap_word}}[ ]){0,3}(?i:word|excel|powerpoint|outlook|teams|office|navami|jayanti|ashtami|chaturthi|purnima|puja|pooja|utsav|mahotsav|mandir|temple|trust|ashram|sansthan|samiti|vidyalaya|school|college|hospital|foundation)(?![\p{L}]))'
+  not_a_name_indic: '(?!(?:{{indic_word}}[ ]){0,2}(?:नवमी|जयंती|अष्टमी|चतुर्थी|पूर्णिमा|पूजा|उत्सव|महोत्सव|मंदिर|ट्रस्ट|आश्रम|संस्थान|समिति|विद्यालय)(?![\p{L}\p{M}]))'
   indic_word: '[\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gujarati}\p{Script=Gurmukhi}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Oriya}]+'
   # Capitalised Latin word ("Ramesh", "RAMESH"), or an initial with a full
   # stop when another word follows ("R. K. Sharma"). A full word never takes
   # the full stop, so a name does not run into the next sentence.
-  latin_cap_word: '\p{Lu}(?:\.(?=\s\p{L})|[\p{L}'']*)'
+  latin_cap_word: '\p{Lu}(?:\.(?=\s\p{L})|[\p{Script=Latin}'']*)'
   # Any-case Latin word; used only after an explicit label or relation.
-  latin_any_word: '\p{L}(?:\.(?=\s\p{L})|[\p{L}'']*)'
+  # Latin script only, so a Devanagari name after a Latin label is read as an
+  # Indic name, not cut at its first vowel sign.
+  latin_any_word: '\p{Script=Latin}(?:\.(?=\s\p{L})|[\p{Script=Latin}'']*)'
   latin_name_cap: '{{name_stop_latin}}{{latin_cap_word}}(?:[ ]{{name_stop_latin}}{{latin_cap_word}}){0,3}'
   latin_name_any: '{{name_stop_latin}}{{latin_any_word}}(?:[ ]{{name_stop_latin}}{{latin_any_word}}){0,3}'
   indic_name: '{{name_stop_indic}}{{indic_word}}(?:[ ]{{name_stop_indic}}{{indic_word}}){0,2}'
@@ -315,7 +318,14 @@ detectors:
       - '(?<![\p{L}]){{not_a_name}}(?<value>{{latin_name_cap}})\s(?i:ji)(?![\p{L}])'
       - '{{relation_latin}}(?<value>{{latin_name_any}})'
       - '{{label_latin}}(?<value>{{latin_name_any}})'
-      - '{{honorific_indic}}(?<value>{{indic_name}})'
+      # Mixed scripts: a Latin cue before an Indic name ("Smt. सुनीता देवी")
+      # and an Indic cue before a Latin name ("श्री Ramesh Kumar").
+      - '{{honorific_latin}}{{not_a_name_indic}}(?<value>{{indic_name}})'
+      - '{{relation_latin}}(?<value>{{indic_name}})'
+      - '{{label_latin}}(?<value>{{indic_name}})'
+      - '{{honorific_indic}}{{not_a_name}}(?<value>{{latin_name_cap}})'
+      - '{{label_indic}}(?<value>{{latin_name_any}})'
+      - '{{honorific_indic}}{{not_a_name_indic}}(?<value>{{indic_name}})'
       - '(?<![\p{L}\p{M}])(?<value>{{indic_name}})\s?जी(?![\p{L}\p{M}])'
       - '{{label_indic}}(?<value>{{indic_name}})'
     capture: value

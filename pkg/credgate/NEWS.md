@@ -1,5 +1,10 @@
 # credgate (development version)
 
+* Names in mixed scripts: a Latin honorific, relation or label before a
+  Devanagari name ("Smt. सुनीता देवी", "S/o रामेश्वर प्रसाद") and a Devanagari
+  one before a Latin name ("श्री Ramesh Kumar") are found. Fixes "Name:"
+  followed by a Devanagari name being cut after its first letter, and
+  festivals after "श्री" ("श्री राम नवमी") being taken as names.
 * `vault_save()` and `vault_open()` save a token vault to a file encrypted
   with a passphrase (libsodium via the sodium package: scrypt and
   XSalsa20-Poly1305) and open it again, in R or in Python. The file reveals
