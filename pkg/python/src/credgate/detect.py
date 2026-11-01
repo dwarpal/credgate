@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from bisect import bisect_right
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -87,13 +88,57 @@ def detect_pii(
         window = engine()["scoring"]["context_window"]
 
     norms = [normalise(t) for t in docs]
+    joined = _join(norms)
     spans: list[Span] = []
     for det in get_detectors(detectors):
-        spans.extend(_run_detector(det, docs, norms, contexts, window))
+        spans.extend(_run_detector(det, docs, norms, contexts, window, joined))
     spans = _resolve_overlaps(spans)
     spans = [s for s in spans if s.confidence >= min_confidence]
     spans.sort(key=lambda s: (s.doc, s.start))
     return spans
+
+
+# Documents are searched together, joined by a separator no pattern can
+# cross (a pattern that would is searched per document instead), so each
+# pattern runs once rather than once per document. Results are identical.
+_SEPARATOR = "\n\x00\n"
+
+
+def _join(norms: list[Normalised]) -> tuple[str, list[int]] | None:
+    if len(norms) < 2 or any("\x00" in n.text for n in norms):
+        return None
+    starts, pos = [], 0
+    for n in norms:
+        starts.append(pos)
+        pos += len(n.text) + len(_SEPARATOR)
+    return _SEPARATOR.join(n.text for n in norms), starts
+
+
+def _locate(
+    pattern: regex.Pattern[str],
+    capture: str | None,
+    norms: list[Normalised],
+    joined: tuple[str, list[int]] | None,
+) -> Iterator[tuple[int, int, int]]:
+    """(document, start, end) of each match, in document then position order."""
+    if joined is not None:
+        text, starts = joined
+        found = []
+        for m in pattern.finditer(text):
+            doc = bisect_right(starts, m.start()) - 1
+            if m.end() > starts[doc] + len(norms[doc].text):
+                break  # crosses into the next document: search one by one
+            s, e = m.span(capture) if capture else m.span()
+            if s >= 0:
+                found.append((doc, s - starts[doc], e - starts[doc]))
+        else:
+            yield from found
+            return
+    for doc, norm in enumerate(norms):
+        for m in pattern.finditer(norm.text):
+            s, e = m.span(capture) if capture else m.span()
+            if s >= 0:
+                yield doc, s, e
 
 
 def _run_detector(
@@ -102,60 +147,59 @@ def _run_detector(
     norms: list[Normalised],
     contexts: list[str],
     window: int,
+    joined: tuple[str, list[int]] | None = None,
 ) -> list[Span]:
     patterns, context_re, negative_re = det._compiled
     scoring = engine()["scoring"]
-    out: list[Span] = []
-    for doc, (original, norm) in enumerate(zip(docs, norms, strict=True)):
-        ntext = norm.text
-        for pattern in patterns:
-            for m in pattern.finditer(ntext):
-                s, e = m.span(det.capture) if det.capture else m.span()
-                if s < 0:
-                    continue
-                matched = ntext[s:e]
-                if det.validate is not None and not det.validate(matched):
-                    continue
+    out: list[tuple[int, int, Span]] = []
+    for p, pattern in enumerate(patterns):
+        for doc, s, e in _locate(pattern, det.capture, norms, joined):
+            original, norm = docs[doc], norms[doc]
+            ntext = norm.text
+            matched = ntext[s:e]
+            if det.validate is not None and not det.validate(matched):
+                continue
 
-                before = ntext[max(0, s - window) : s]
-                after = ntext[e : e + window]
-                ctx_hit = _nearest_keyword(context_re, before, after, contexts[doc])
-                neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc])
-                if det.context_required and ctx_hit is None:
-                    continue
-                # The stronger cue wins: one before the match (where labels
-                # go) beats one after it; on the same side, the nearer wins.
-                neg_ignored = (
-                    ctx_hit is not None and neg_hit is not None and neg_hit[1:] > ctx_hit[1:]
-                )
+            before = ntext[max(0, s - window) : s]
+            after = ntext[e : e + window]
+            ctx_hit = _nearest_keyword(context_re, before, after, contexts[doc])
+            neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc])
+            if det.context_required and ctx_hit is None:
+                continue
+            # The stronger cue wins: one before the match (where labels
+            # go) beats one after it; on the same side, the nearer wins.
+            neg_ignored = ctx_hit is not None and neg_hit is not None and neg_hit[1:] > ctx_hit[1:]
 
-                if ctx_hit is None and det.base_without_context is not None:
-                    score = det.base_without_context
+            if ctx_hit is None and det.base_without_context is not None:
+                score = det.base_without_context
+            else:
+                score = det.base(matched) if callable(det.base) else det.base
+            if ctx_hit is not None:
+                score += (1 - score) * scoring["context_boost"]
+            if neg_hit is not None and not neg_ignored:
+                score *= scoring["negative_factor"]
+
+            reasons = f"matched {det.label} pattern"
+            if det.checks:
+                reasons += f"; {det.checks}"
+            if ctx_hit is not None:
+                reasons += f"; context '{ctx_hit[0]}'"
+            if neg_hit is not None:
+                if neg_ignored:
+                    reasons += f"; farther negative context '{neg_hit[0]}' ignored"
                 else:
-                    score = det.base(matched) if callable(det.base) else det.base
-                if ctx_hit is not None:
-                    score += (1 - score) * scoring["context_boost"]
-                if neg_hit is not None and not neg_ignored:
-                    score *= scoring["negative_factor"]
+                    reasons += f"; negative context '{neg_hit[0]}'"
+            if det.describe is not None:
+                reasons += f"; {det.describe(matched)}"
 
-                reasons = f"matched {det.label} pattern"
-                if det.checks:
-                    reasons += f"; {det.checks}"
-                if ctx_hit is not None:
-                    reasons += f"; context '{ctx_hit[0]}'"
-                if neg_hit is not None:
-                    if neg_ignored:
-                        reasons += f"; farther negative context '{neg_hit[0]}' ignored"
-                    else:
-                        reasons += f"; negative context '{neg_hit[0]}'"
-                if det.describe is not None:
-                    reasons += f"; {det.describe(matched)}"
-
-                if norm.map is None:
-                    start, end = s, e
-                else:
-                    start, end = norm.map[s], norm.map[e - 1] + 1
-                out.append(
+            if norm.map is None:
+                start, end = s, e
+            else:
+                start, end = norm.map[s], norm.map[e - 1] + 1
+            out.append(
+                (
+                    doc,
+                    p,
                     Span(
                         doc=doc,
                         start=start,
@@ -166,9 +210,12 @@ def _run_detector(
                         canonical=det.canonical(matched),
                         confidence=round(score, scoring["digits"]),
                         reasons=reasons,
-                    )
+                    ),
                 )
-    return out
+            )
+    # Document, then pattern, then position order, as when searching each
+    # document separately (ties in overlap resolution keep this order).
+    return [span for _, _, span in sorted(out, key=lambda t: (t[0], t[1]))]
 
 
 _WORD_END = regex.compile(r"[\p{L}\p{M}]*")

@@ -19,17 +19,24 @@ redact <- function(text, detectors = NULL, context = NULL, min_confidence = 0) {
 }
 
 apply_redaction <- function(text, spans) {
-  out <- text
-  for (d in unique(spans$doc)) {
-    s <- spans[spans$doc == d, , drop = FALSE]
-    s <- s[order(s$start, decreasing = TRUE), , drop = FALSE]
-    value <- out[[d]]
-    for (i in seq_len(nrow(s))) {
-      stringi::stri_sub(value, s$start[i], s$end[i]) <- placeholder(s$type[i])
-    }
-    out[[d]] <- value
+  replace_spans(text, spans, placeholder(spans$type))
+}
+
+# Replace each span in `text` by the matching element of `value`, all at
+# once; positions refer to the original text.
+replace_spans <- function(text, spans, value) {
+  if (nrow(spans) == 0) {
+    return(text)
   }
-  out
+  docs <- unique(spans$doc)
+  by_doc <- split(seq_len(nrow(spans)), factor(spans$doc, levels = docs))
+  text[docs] <- stringi::stri_sub_replace_all(
+    text[docs],
+    from = lapply(by_doc, function(i) spans$start[i]),
+    to = lapply(by_doc, function(i) spans$end[i]),
+    value = lapply(by_doc, function(i) value[i])
+  )
+  text
 }
 
 placeholder <- function(type) paste0("[", toupper(type), "]")

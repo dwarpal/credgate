@@ -58,16 +58,8 @@ tokenise <- function(text, vault, detectors = NULL, context = NULL, min_confiden
   if (nrow(spans) == 0) {
     return(text)
   }
-  tokens <- vapply(seq_len(nrow(spans)), function(i) token_for(vault, spans[i, ]), character(1))
-  out <- docs
-  for (i in order(spans$doc, -spans$start)) {
-    d <- spans$doc[i]
-    out[d] <- paste0(
-      stringi::stri_sub(out[d], 1L, spans$start[i] - 1L),
-      tokens[i],
-      stringi::stri_sub(out[d], spans$end[i] + 1L)
-    )
-  }
+  tokens <- tokens_for(vault, spans)
+  out <- replace_spans(docs, spans, tokens)
   out[is.na(text)] <- NA_character_
   out
 }
@@ -134,19 +126,24 @@ restore <- function(text, vault, strict = FALSE) {
   out
 }
 
-token_for <- function(vault, span) {
+# Tokens for spans (in document, then position order), adding new entries
+# to the vault in that order.
+tokens_for <- function(vault, spans) {
   entries <- vault$entries
-  hit <- which(entries$type == span$type & entries$canonical == span$canonical)
-  if (length(hit) > 0) {
-    return(entries$token[hit[1]])
+  key <- paste(spans$type, spans$canonical, sep = "\r")
+  known <- paste(entries$type, entries$canonical, sep = "\r")
+  new <- !duplicated(key) & !key %in% known
+  if (any(new)) {
+    type <- spans$type[new]
+    n <- as.vector(table(factor(entries$type, levels = unique(type)))[type]) +
+      stats::ave(seq_along(type), type, FUN = seq_along)
+    vault$entries <- rbind(entries, data.frame(
+      token = paste0("[", toupper(type), "_", n, "]"), type = type,
+      class = spans$class[new], canonical = spans$canonical[new], value = spans$value[new]
+    ))
   }
-  n <- sum(entries$type == span$type) + 1L
-  token <- paste0("[", toupper(span$type), "_", n, "]")
-  vault$entries <- rbind(entries, data.frame(
-    token = token, type = span$type, class = span$class,
-    canonical = span$canonical, value = span$value
-  ))
-  token
+  entries <- vault$entries
+  entries$token[match(key, paste(entries$type, entries$canonical, sep = "\r"))]
 }
 
 check_vault <- function(vault) {

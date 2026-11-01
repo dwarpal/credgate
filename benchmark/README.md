@@ -135,7 +135,36 @@ To evaluate on your own labelled data, use the same JSON Lines format
 | negative | 100 | - | - | - |
 | record | 80 | 1.000 | 0.909 | 0.952 |
 
-## Comparison with Microsoft Presidio
+## Throughput
+
+How fast credgate processes text on **one CPU core** of a 2019 laptop (Intel
+Core i5-8257U, 1.4 GHz); a server core is faster. Inputs are built from the
+synthetic corpus by [`throughput.py`](throughput.py) and
+[`throughput.R`](throughput.R): `field` is one identifier per value (a
+structured column), `note` one corpus document, `long` 12 documents joined
+(~900 characters), `clean` the documents without PII. Values per second for
+`detect_pii`:
+
+| Input | Python before | Python after | R before | R after |
+|---|---:|---:|---:|---:|
+| field (14 characters) | 18,548 | 26,909 | 5,398 | 6,678 |
+| note (75 characters) | 5,411 | 5,822 | 1,695 | 2,734 |
+| long (913 characters) | 429 | 433 | 152 | 293 |
+| clean (71 characters) | 7,439 | 9,248 | 1,905 | 2,203 |
+
+"Before" is 0.4.0; "after" is this version. `redact()` runs at the same
+speed as detection; R's `tokenise()` went from 538 to 2,672 notes per second
+(the vault no longer grows one row at a time). `scan_pii()` on 8 columns x
+20,000 rows: 4.6 s to 3.0 s in Python.
+
+**What limits it.** About 0.4 MB of text per second per core in Python
+(0.2 in R). In Python, about 60% of the time is the regular-expression engine
+itself - the name patterns most - and most of the rest is building results.
+Detection is independent per text, so it scales with cores and machines;
+running it on Spark, DuckDB, Polars and Arrow is planned, and a compiled
+matching engine (such as PCRE2 with its JIT compiler) is being considered.
+
+
 
 [Presidio](https://github.com/microsoft/presidio) (MIT) is the most widely
 used open-source PII detector and ships recognisers for Indian identifiers,

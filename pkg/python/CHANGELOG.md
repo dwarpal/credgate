@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Faster: all documents in a call are searched in one pass per pattern,
+  and text whose characters each normalise to one character skips the
+  position map. Detection is 1.1-1.5x faster depending on text length
+  (short values gain most); results are identical, which a new test checks
+  against searching each document on its own. `normalise()` now also
+  returns `map=None` when positions are unchanged (not only when the text
+  is unchanged).
+
 ## 0.4.0 (2026-11-01)
 
 Reversible tokenisation with encrypted vault files, fuller masking, and
