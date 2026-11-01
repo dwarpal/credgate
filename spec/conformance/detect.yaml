@@ -448,3 +448,39 @@ cases:
       - {type: card_cvv, value: '777'}
       - {type: card_cvv, value: '905'}
 
+
+  # --- Column labels: a column name labels values that are only the code ---
+  - id: column-labels-cvv
+    text: '123'
+    context: card cvv
+    expect:
+      - {type: card_cvv, value: '123', confidence: 0.98, reason: "context 'cvv'"}
+  - id: column-labels-cvc2-four-digits
+    text: '4821'
+    context: cvc2
+    expect:
+      - {type: card_cvv, value: '4821', confidence: 0.98}
+  - id: column-labels-cvv-hindi
+    text: '123'
+    context: सीवीवी
+    expect:
+      - {type: card_cvv, value: '123', confidence: 0.98}
+  - id: column-label-cid-is-not-cvv
+    text: '123'
+    context: cid
+    expect: []
+  - id: column-label-needs-the-whole-value
+    text: '123 ok'
+    context: card cvv
+    expect: []
+  - id: column-labels-ration-card
+    text: 'MH1234567890'
+    context: ration card no
+    expect:
+      - {type: ration_card, value: 'MH1234567890', confidence: 0.98, reason: "context 'ration'"}
+  - id: column-labelled-ration-card-not-aadhaar
+    # 12 digits with a valid Verhoeff check digit: Aadhaar without the label.
+    text: '542229371182'
+    context: ration card
+    expect:
+      - {type: ration_card, value: '542229371182', confidence: 0.98}

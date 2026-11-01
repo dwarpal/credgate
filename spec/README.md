@@ -52,7 +52,10 @@ For a vector of documents:
    `bounded: true`, each pattern is wrapped as
    `boundary.before (?:pattern) boundary.after`. With `capture: value`, the
    reported span is the named group, not the whole match. Matches of all
-   patterns are combined.
+   patterns are combined. With `column_label`, in each document whose extra
+   context (step 4) matches `column_label.label`, the `column_label.patterns`
+   also find candidates, reporting the whole match and coming after the
+   detector's own patterns in pattern order.
 3. **Validate**: every entry of `validate` must pass on the matched text:
    - `verhoeff`, `luhn`: checksum over the digits after removing `separators`.
    - `gstin`: upper-cased; structure, state code in list `gst_state_codes`,
@@ -69,6 +72,8 @@ For a vector of documents:
    - otherwise in `after` (side 1): the first match; distance = code points
      between the match and the start of the word containing it;
    - otherwise in `extra` (side 2): the first match; distance 0.
+   For a candidate of `column_label.patterns`, the context keyword is the
+   label's match in `extra` (side 2, distance 0).
    With `context_required: true`, drop matches without context.
 5. **Score**: start from `base` - a number, or `{default, rules}` where the
    first rule whose `match` regex matches the matched text sets the value -
@@ -119,6 +124,7 @@ Conformance compares `type`, `value`, and when given `confidence`,
 | `base_without_context` | no | Confidence instead of `base` when no context keyword is found; needs `context`, excludes `context_required` |
 | `describe` | no | Extra reason per match |
 | `canonical` | no | Canonical form (default `strip_upper`) |
+| `column_label` | no | `{label, patterns}`: when `label` (a regex, case-insensitive) matches the caller's extra context, such as a column name, `patterns` also find candidates (see the detection algorithm). For detectors whose `patterns` need a label in the text, so that a column named `card_cvv` labels its values |
 
 Unknown fields are an error, so a typo cannot silently disable a rule.
 

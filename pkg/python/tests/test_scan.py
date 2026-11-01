@@ -62,3 +62,24 @@ def test_cli_scan(tmp_path, capsys):
     assert main(["scan", str(f), "--json"]) == 0
     lines = capsys.readouterr().out.strip().splitlines()
     assert len(lines) == 2
+
+
+def test_custom_detector_with_column_label():
+    det = credgate.Detector(
+        id="staff_pin",
+        data_class="sensitive_auth",
+        label="Staff PIN",
+        patterns=[r"(?i:staff pin)\s*(?<value>[0-9]{4})"],
+        capture="value",
+        base=0.9,
+        column_label=r"\bstaff pin\b",
+        column_patterns=[r"^[0-9]{4}$"],
+    )
+    credgate.register_detector(det)
+    try:
+        found = credgate.scan_pii({"staff_pin": ["4821", "0912"], "other": ["4821", "0912"]})
+        assert [(f.column, f.type, f.n_full) for f in found] == [("staff_pin", "staff_pin", 2)]
+    finally:
+        credgate.reset_detectors()
+    with pytest.raises(ValueError, match="go together"):
+        credgate.Detector(id="x", data_class="c", label="x", patterns=["x"], column_label="x")

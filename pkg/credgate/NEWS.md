@@ -1,5 +1,13 @@
 # credgate (development version)
 
+* Column names count as labels for card verification codes and ration card
+  numbers, which are otherwise found only after a label in the text: in a
+  scan, a column named `card_cvv`, `cvv` or `cvc2` reports values that are
+  only a 3-4 digit code, and a column named for ration cards reports values
+  that are only the number - instead of nothing, or of reading 12-digit
+  ration card numbers as Aadhaar numbers. A new detector field,
+  `column_label`, defines this (shared spec, R and Python). Found by running
+  the inventory against real BigQuery data.
 * BigQuery: `bq_scan_pii()`, `bq_pii_inventory()` and
   `bq_inventory_dataset()` (every table in a dataset), through bigrquery.
   BigQuery samples the table (`TABLESAMPLE`, billing only the sampled

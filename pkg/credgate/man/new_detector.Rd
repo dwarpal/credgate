@@ -19,7 +19,9 @@ new_detector(
   context_required = FALSE,
   canonical = NULL,
   describe = NULL,
-  ignore_case = FALSE
+  ignore_case = FALSE,
+  column_label = NULL,
+  column_pattern = NULL
 )
 }
 \arguments{
@@ -70,6 +72,14 @@ hyphens and upper-casing.}
 (e.g. the PAN holder type).}
 
 \item{ignore_case}{Match the pattern case-insensitively.}
+
+\item{column_label}{Regex (case-insensitive) that, when it matches the
+caller's extra context (a column name), makes that context the label for
+\code{column_pattern}, or \code{NULL}. For detectors whose \code{pattern} needs a label
+in the text, so that a column named \code{card_cvv} labels its values.}
+
+\item{column_pattern}{Patterns used, reporting the whole match, only when
+\code{column_label} matches the extra context.}
 }
 \value{
 An object of class \code{cg_detector}.

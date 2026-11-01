@@ -46,3 +46,20 @@ test_that("a subset of a scan report still prints", {
   expect_true(any(grepl("pan", out)))
 })
 
+
+test_that("custom detectors can use a column label", {
+  det <- new_detector(
+    id = "staff_pin", class = "sensitive_auth", label = "Staff PIN",
+    pattern = "(?i:staff pin)\\s*([0-9]{4})", base = 0.9,
+    column_label = "\\bstaff pin\\b", column_pattern = "^[0-9]{4}$"
+  )
+  register_detector(det)
+  withr::defer(credgate:::register_builtin_detectors())
+  found <- scan_pii(data.frame(staff_pin = c("4821", "0912"), other = c("4821", "0912")))
+  expect_identical(found$column, "staff_pin")
+  expect_identical(found$n_full, 2L)
+  expect_error(
+    new_detector(id = "x", class = "c", label = "x", pattern = "x", column_label = "x"),
+    "go together"
+  )
+})

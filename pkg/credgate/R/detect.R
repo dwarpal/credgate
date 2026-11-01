@@ -48,33 +48,57 @@ detect_pii <- function(text, detectors = NULL, context = NULL,
 }
 
 run_detector <- function(det, text, norm, ntext, context, window) {
-  locs <- lapply(det$pattern, function(pattern) {
+  locate <- function(pattern, capture = NULL) {
     loc <- stringi::stri_locate_all_regex(
       ntext, pattern,
       omit_no_match = TRUE,
-      capture_groups = !is.null(det$capture),
+      capture_groups = !is.null(capture),
       opts_regex = stringi::stri_opts_regex(case_insensitive = det$ignore_case)
     )
-    if (!is.null(det$capture)) {
-      loc <- lapply(loc, function(m) attr(m, "capture_groups")[[det$capture]])
+    if (!is.null(capture)) {
+      loc <- lapply(loc, function(m) attr(m, "capture_groups")[[capture]])
     }
     loc
-  })
-  loc <- Reduce(function(a, b) Map(rbind, a, b), locs)
-  counts <- vapply(loc, nrow, integer(1))
-  if (sum(counts) == 0) {
+  }
+  locs <- lapply(det$pattern, locate, capture = det$capture)
+  labelled_pattern <- rep(FALSE, length(locs))
+  # Column labels: where the extra context (a column name) matches
+  # `column_label`, the column patterns also find candidates, after the
+  # detector's own patterns.
+  if (!is.null(det$column_label) && !is.null(context)) {
+    labelled_docs <- stringi::stri_detect_regex(
+      context, det$column_label,
+      opts_regex = stringi::stri_opts_regex(case_insensitive = TRUE)
+    )
+    if (any(labelled_docs)) {
+      for (pattern in det$column_pattern) {
+        loc <- locate(pattern)
+        loc[!labelled_docs] <- list(matrix(integer(), 0, 2))
+        locs[[length(locs) + 1]] <- loc
+        labelled_pattern <- c(labelled_pattern, TRUE)
+      }
+    }
+  }
+  # Candidates in document, then pattern, then position order.
+  counts <- lapply(locs, function(loc) vapply(loc, nrow, integer(1)))
+  if (sum(unlist(counts)) == 0) {
     return(NULL)
   }
-  doc <- rep(seq_along(ntext), counts)
-  m <- do.call(rbind, loc)
-  s <- m[, 1]
-  e <- m[, 2]
+  doc <- unlist(lapply(counts, function(n) rep(seq_along(ntext), n)))
+  pat <- rep(seq_along(locs), vapply(counts, sum, integer(1)))
+  m <- do.call(rbind, lapply(locs, function(loc) do.call(rbind, c(list(matrix(integer(), 0, 2)), loc))))
+  ord <- order(doc, pat)
+  doc <- doc[ord]
+  s <- m[ord, 1]
+  e <- m[ord, 2]
+  labelled <- labelled_pattern[pat[ord]]
   matched <- stringi::stri_sub(ntext[doc], s, e)
 
   ok <- det$validate(matched)
   doc <- doc[ok]
   s <- s[ok]
   e <- e[ok]
+  labelled <- labelled[ok]
   matched <- matched[ok]
   if (length(doc) == 0) {
     return(NULL)
@@ -85,6 +109,15 @@ run_detector <- function(det, text, norm, ntext, context, window) {
   after <- stringi::stri_sub(ntext[doc], e + 1L, pmin(n, e + window))
   extra <- if (is.null(context)) rep("", length(doc)) else context[doc]
   ctx <- nearest_keyword(det$context, before, after, extra)
+  if (any(labelled)) {
+    # For column-pattern candidates the context is the column label.
+    ctx$hit[labelled] <- stringi::stri_extract_first_regex(
+      extra[labelled], det$column_label,
+      opts_regex = stringi::stri_opts_regex(case_insensitive = TRUE)
+    )
+    ctx$side[labelled] <- 2L
+    ctx$distance[labelled] <- 0L
+  }
   neg <- nearest_keyword(det$negative, before, after, extra)
 
   if (det$context_required) {

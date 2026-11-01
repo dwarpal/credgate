@@ -6,7 +6,7 @@ spec_version_supported <- 1L
 detector_fields <- c(
   "id", "class", "label", "patterns", "bounded", "capture", "ignore_case",
   "validate", "checks", "base", "base_without_context", "context", "negative",
-  "context_required", "describe", "canonical"
+  "context_required", "describe", "canonical", "column_label"
 )
 
 #' Path to the detection spec shipped with the package
@@ -104,6 +104,10 @@ compile_detector <- function(def) {
   if (isTRUE(def$bounded)) {
     patterns <- bounded(patterns)
   }
+  column <- def$column_label
+  if (length(setdiff(names(column), c("label", "patterns"))) > 0) {
+    rlang::abort(paste0("Detector `", def$id, "`: `column_label` has `label` and `patterns`."))
+  }
   new_detector(
     id = def$id,
     class = def$class,
@@ -119,7 +123,11 @@ compile_detector <- function(def) {
     context_required = isTRUE(def$context_required),
     canonical = compile_canonical(def$canonical),
     describe = compile_describe(def$describe),
-    ignore_case = isTRUE(def$ignore_case)
+    ignore_case = isTRUE(def$ignore_case),
+    column_label = expand_fragments(column$label),
+    column_pattern = if (!is.null(column)) {
+      vapply(unlist(column$patterns), expand_fragments, character(1), USE.NAMES = FALSE)
+    }
   )
 }
 

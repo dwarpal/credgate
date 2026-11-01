@@ -152,73 +152,99 @@ def _run_detector(
     window: int,
     joined: tuple[str, list[int]] | None = None,
 ) -> list[Span]:
-    patterns, context_re, negative_re = det._compiled
+    patterns, context_re, negative_re, column_re, column_patterns = det._compiled
     scoring = engine()["scoring"]
     out: list[tuple[int, int, Span]] = []
-    for p, pattern in enumerate(patterns):
-        for doc, s, e in _locate(pattern, det.capture, norms, joined):
-            original, norm = docs[doc], norms[doc]
-            ntext = norm.text
-            matched = ntext[s:e]
-            if det.validate is not None and not det.validate(matched):
-                continue
+    candidates = _candidates(det, patterns, column_re, column_patterns, norms, contexts, joined)
+    for p, doc, s, e, label in candidates:
+        original, norm = docs[doc], norms[doc]
+        ntext = norm.text
+        matched = ntext[s:e]
+        if det.validate is not None and not det.validate(matched):
+            continue
 
-            before = ntext[max(0, s - window) : s]
-            after = ntext[e : e + window]
-            ctx_hit = _nearest_keyword(context_re, before, after, contexts[doc])
-            neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc])
-            if det.context_required and ctx_hit is None:
-                continue
-            # The stronger cue wins: one before the match (where labels
-            # go) beats one after it; on the same side, the nearer wins.
-            neg_ignored = ctx_hit is not None and neg_hit is not None and neg_hit[1:] > ctx_hit[1:]
+        before = ntext[max(0, s - window) : s]
+        after = ntext[e : e + window]
+        ctx_hit = label or _nearest_keyword(context_re, before, after, contexts[doc])
+        neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc])
+        if det.context_required and ctx_hit is None:
+            continue
+        # The stronger cue wins: one before the match (where labels
+        # go) beats one after it; on the same side, the nearer wins.
+        neg_ignored = ctx_hit is not None and neg_hit is not None and neg_hit[1:] > ctx_hit[1:]
 
-            if ctx_hit is None and det.base_without_context is not None:
-                score = det.base_without_context
+        if ctx_hit is None and det.base_without_context is not None:
+            score = det.base_without_context
+        else:
+            score = det.base(matched) if callable(det.base) else det.base
+        if ctx_hit is not None:
+            score += (1 - score) * scoring["context_boost"]
+        if neg_hit is not None and not neg_ignored:
+            score *= scoring["negative_factor"]
+
+        reasons = f"matched {det.label} pattern"
+        if det.checks:
+            reasons += f"; {det.checks}"
+        if ctx_hit is not None:
+            reasons += f"; context '{ctx_hit[0]}'"
+        if neg_hit is not None:
+            if neg_ignored:
+                reasons += f"; farther negative context '{neg_hit[0]}' ignored"
             else:
-                score = det.base(matched) if callable(det.base) else det.base
-            if ctx_hit is not None:
-                score += (1 - score) * scoring["context_boost"]
-            if neg_hit is not None and not neg_ignored:
-                score *= scoring["negative_factor"]
+                reasons += f"; negative context '{neg_hit[0]}'"
+        if det.describe is not None:
+            reasons += f"; {det.describe(matched)}"
 
-            reasons = f"matched {det.label} pattern"
-            if det.checks:
-                reasons += f"; {det.checks}"
-            if ctx_hit is not None:
-                reasons += f"; context '{ctx_hit[0]}'"
-            if neg_hit is not None:
-                if neg_ignored:
-                    reasons += f"; farther negative context '{neg_hit[0]}' ignored"
-                else:
-                    reasons += f"; negative context '{neg_hit[0]}'"
-            if det.describe is not None:
-                reasons += f"; {det.describe(matched)}"
-
-            if norm.map is None:
-                start, end = s, e
-            else:
-                start, end = norm.map[s], norm.map[e - 1] + 1
-            out.append(
-                (
-                    doc,
-                    p,
-                    Span(
-                        doc=doc,
-                        start=start,
-                        end=end,
-                        type=det.id,
-                        data_class=det.data_class,
-                        value=original[start:end],
-                        canonical=det.canonical(matched),
-                        confidence=round(score, scoring["digits"]),
-                        reasons=reasons,
-                    ),
-                )
+        if norm.map is None:
+            start, end = s, e
+        else:
+            start, end = norm.map[s], norm.map[e - 1] + 1
+        out.append(
+            (
+                doc,
+                p,
+                Span(
+                    doc=doc,
+                    start=start,
+                    end=end,
+                    type=det.id,
+                    data_class=det.data_class,
+                    value=original[start:end],
+                    canonical=det.canonical(matched),
+                    confidence=round(score, scoring["digits"]),
+                    reasons=reasons,
+                ),
             )
+        )
     # Document, then pattern, then position order, as when searching each
     # document separately (ties in overlap resolution keep this order).
     return [span for _, _, span in sorted(out, key=lambda t: (t[0], t[1]))]
+
+
+def _candidates(
+    det: Detector,
+    patterns: tuple[regex.Pattern[str], ...],
+    column_re: regex.Pattern[str] | None,
+    column_patterns: tuple[regex.Pattern[str], ...],
+    norms: list[Normalised],
+    contexts: list[str],
+    joined: tuple[str, list[int]] | None,
+) -> Iterator[tuple[int, int, int, int, tuple[str, int, int] | None]]:
+    """(pattern, document, start, end, label) of each candidate. ``label`` is
+    the column label keyword for matches of the column patterns, which are
+    used only in documents whose extra context matches ``column_label``."""
+    for p, pattern in enumerate(patterns):
+        for doc, s, e in _locate(pattern, det.capture, norms, joined):
+            yield p, doc, s, e, None
+    if column_re is None:
+        return
+    for doc, norm in enumerate(norms):
+        m = column_re.search(contexts[doc])
+        if m is None:
+            continue
+        for i, pattern in enumerate(column_patterns):
+            for c in pattern.finditer(norm.text):
+                yield len(patterns) + i, doc, c.start(), c.end(), (m.group(0), 2, 0)
 
 
 _WORD_END = regex.compile(r"[\p{L}\p{M}]*")

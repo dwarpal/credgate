@@ -43,6 +43,12 @@ the$detectors <- list()
 #' @param describe Optional function returning extra reasons per match
 #'   (e.g. the PAN holder type).
 #' @param ignore_case Match the pattern case-insensitively.
+#' @param column_label Regex (case-insensitive) that, when it matches the
+#'   caller's extra context (a column name), makes that context the label for
+#'   `column_pattern`, or `NULL`. For detectors whose `pattern` needs a label
+#'   in the text, so that a column named `card_cvv` labels its values.
+#' @param column_pattern Patterns used, reporting the whole match, only when
+#'   `column_label` matches the extra context.
 #' @return An object of class `cg_detector`.
 #' @export
 #' @examples
@@ -63,7 +69,9 @@ new_detector <- function(id, class, label, pattern,
                          context_required = FALSE,
                          canonical = NULL,
                          describe = NULL,
-                         ignore_case = FALSE) {
+                         ignore_case = FALSE,
+                         column_label = NULL,
+                         column_pattern = NULL) {
   stopifnot(
     rlang::is_string(id), rlang::is_string(class), rlang::is_string(label),
     is.character(pattern), length(pattern) >= 1, !anyNA(pattern),
@@ -78,6 +86,9 @@ new_detector <- function(id, class, label, pattern,
   if (!is.null(base_without_context) && is.null(context)) {
     rlang::abort("`base_without_context` needs `context`.")
   }
+  if (is.null(column_label) != (length(column_pattern) == 0)) {
+    rlang::abort("`column_label` and `column_pattern` go together.")
+  }
   structure(
     list(
       id = id, class = class, label = label, pattern = pattern, capture = capture,
@@ -87,7 +98,8 @@ new_detector <- function(id, class, label, pattern,
       context = context, negative = negative,
       context_required = context_required,
       canonical = canonical %||% canonical_default,
-      describe = describe, ignore_case = ignore_case
+      describe = describe, ignore_case = ignore_case,
+      column_label = column_label, column_pattern = column_pattern
     ),
     class = "cg_detector"
   )
