@@ -190,6 +190,25 @@ Names and addresses are found only next to a cue: an honorific (Shri, Smt,
 house/village keyword followed by a PIN code. A bare 12-digit number may pass
 the Aadhaar checksum by chance and is reported with lower confidence.
 
+## Citing credgate
+
+If you use credgate in your work, please cite it, with the version you
+used (`credgate.__version__`):
+
+Sikka B, Bais A (2026). *credgate: Detect Indian Personal Data Before It
+Reaches Language Models.* Python package version 0.3.1.
+https://github.com/dwarpal/credgate
+
+```bibtex
+@Manual{credgate,
+  title  = {{credgate}: Detect Indian Personal Data Before It Reaches Language Models},
+  author = {Bharat Sikka and Aishwarya Bais},
+  year   = {2026},
+  note   = {Python package version 0.3.1},
+  url    = {https://github.com/dwarpal/credgate},
+}
+```
+
 ## Licence
 
 Apache License 2.0.
