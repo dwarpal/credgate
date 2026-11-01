@@ -75,7 +75,7 @@
       # packages nixpkgs cannot build (Arrow on Intel macOS) are left out.
       legacyPackages = forAll (pkgs:
         let
-          wanted = with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr RSQLite ];
+          wanted = with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr RSQLite RPostgres ];
           available = builtins.filter (p: (builtins.tryEval p.drvPath).success) wanted;
           rTest = pkgs.rWrapper.override {
             packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr ]) ++ available;
@@ -83,11 +83,21 @@
         in
         {
           r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
-            nativeBuildInputs = [ rTest ];
+            nativeBuildInputs = [ rTest pkgs.postgresql ];
             LC_ALL = "C";
             REQUIRE_ALL = if pkgs.stdenv.isLinux then "1" else "";
           } ''
             export HOME=$TMPDIR  # DuckDB keeps extension settings under HOME
+
+            # A private Postgres server for the RPostgres tests: Unix socket
+            # in the build directory only, no TCP.
+            export PGDATA=$TMPDIR/pgdata PGHOST=$TMPDIR PGUSER=credgate PGDATABASE=credgate
+            initdb --username=credgate --auth=trust --no-instructions > /dev/null
+            pg_ctl start --wait --log=$TMPDIR/postgres.log \
+              --options="-c listen_addresses= -k $TMPDIR" > /dev/null
+            createdb credgate
+            trap 'pg_ctl stop --mode=fast > /dev/null' EXIT
+
             cp -r ${./pkg/credgate/tests} tests
             chmod -R u+w tests
             cd tests/testthat

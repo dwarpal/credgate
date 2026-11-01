@@ -5,7 +5,8 @@
   reading one column at a time in chunks with the same sample as in memory.
   New `redact_parquet()` redacts a Parquet file batch by batch, and
   `redact_query()` redacts a query's result into a database table in
-  chunks. `redact()`, `tokenise()` and `detect_pii()` accept Arrow arrays.
+  chunks; with one connection on Postgres or SQLite it writes after reading,
+  in one transaction. Tested on DuckDB, SQLite and Postgres. `redact()`, `tokenise()` and `detect_pii()` accept Arrow arrays.
   The packages are optional (Suggests). New vignette "Large data".
 * Faster: context keywords, replacements and new vault entries are handled
   for all matches at once rather than one by one. Detection is 1.2-1.9x

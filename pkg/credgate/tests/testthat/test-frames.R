@@ -44,7 +44,7 @@ test_that("scan_pii rejects unsupported input", {
 
 # --- databases (DBI, dbplyr) ------------------------------------------------
 
-for (driver in c("RSQLite", "duckdb")) {
+for (driver in c("RSQLite", "duckdb", "RPostgres")) {
   test_that(paste("database tables:", driver), {
     skip_if_not_installed(driver)
     skip_if_not_installed("DBI")
@@ -54,6 +54,19 @@ for (driver in c("RSQLite", "duckdb")) {
       con <- DBI::dbConnect(duckdb::duckdb())
       writer <- con
       withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+    } else if (driver == "RPostgres") {
+      # A server named by the standard PG* environment variables (the Nix
+      # integration build starts one; see flake.nix).
+      skip_if(!nzchar(Sys.getenv("PGHOST")), "no Postgres server (set PGHOST)")
+      con <- DBI::dbConnect(RPostgres::Postgres())
+      writer <- DBI::dbConnect(RPostgres::Postgres())
+      for (table in c("t", "calls", "calls_safe", "empty_safe", "big", "one_con")) {
+        DBI::dbExecute(con, paste("DROP TABLE IF EXISTS", table))
+      }
+      withr::defer({
+        DBI::dbDisconnect(writer)
+        DBI::dbDisconnect(con)
+      })
     } else {
       # SQLite cannot write while a result is open on the same connection.
       file <- withr::local_tempfile(fileext = ".sqlite")
@@ -99,6 +112,14 @@ for (driver in c("RSQLite", "duckdb")) {
     expect_identical(sort(all), c(rep("ABCPE1234F", 4), rep("[PAN]", 4)))
     redact_query(con, "SELECT * FROM calls WHERE id > 99", "empty_safe", to_con = writer)
     expect_true(DBI::dbExistsTable(con, "empty_safe"))
+
+    # One connection, as most people call it.
+    DBI::dbExecute(con, "DROP TABLE IF EXISTS one_con")
+    big <- data.frame(id = 1:2500, notes = rep(notes, length.out = 2500))
+    DBI::dbWriteTable(con, "big", big, overwrite = TRUE)
+    expect_equal(redact_query(con, "SELECT * FROM big ORDER BY id", "one_con", chunk_size = 1000), 2500)
+    got <- DBI::dbGetQuery(con, "SELECT * FROM one_con ORDER BY id")
+    expect_identical(got$notes, rep(redacted, length.out = 2500))
   })
 }
 

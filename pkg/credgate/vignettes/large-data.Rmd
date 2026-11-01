@@ -127,12 +127,14 @@ scan_pii(dplyr::tbl(con, "loan_notes"))                     # needs dbplyr
 redact_query(con, "SELECT id, notes FROM loan_notes", "loan_notes_safe")
 ```
 
-credgate is tested with DuckDB and SQLite. `scan_pii()` reads each column
-twice (to count, then to sample), so its sample matches the in-memory one
-only if the database returns rows in the same order both times, as DuckDB
-and SQLite do for plain tables. SQLite cannot write while a query is open on
-the same connection: pass a second connection as `to_con` (see
-`?redact_query`).
+credgate is tested with DuckDB, SQLite and Postgres. `scan_pii()` reads each
+column twice (to count, then to sample), so its sample matches the in-memory
+one only if the database returns rows in the same order both times, as these
+do for plain tables. Postgres and SQLite cannot write on a connection while
+a query is open on it, so with one connection `redact_query()` keeps the
+redacted chunks in temporary files until the query has been read, then
+writes them in one transaction; pass a second connection as `to_con` to
+write as it reads.
 
 ## Sizes and speed
 

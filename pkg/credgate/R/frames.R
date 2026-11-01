@@ -91,10 +91,13 @@ arrow_text_columns <- function(schema, columns) {
 #' @param columns Columns to redact; `NULL` redacts every text column.
 #' @param chunk_size Rows fetched at a time.
 #' @param append Append to an existing table `to` instead of creating it.
-#' @param to_con Connection to write `to` with; by default `con`, which works
-#'   with DuckDB. SQLite cannot write while a query result is open: pass a
-#'   second connection to the same database file, opened in WAL mode
-#'   (`PRAGMA journal_mode = WAL`), or a connection to another database.
+#' @param to_con Connection to write `to` with; by default `con`. Most
+#'   databases (Postgres, SQLite) cannot write on a connection while a query
+#'   result is open on it, so with one connection the redacted chunks are kept
+#'   in temporary files until the query has been read, then written in one
+#'   transaction. With DuckDB, or with a second connection here, each chunk is
+#'   written as it is read. (For SQLite, a second connection to the same file
+#'   needs WAL mode: `PRAGMA journal_mode = WAL`.)
 #' @param ... Passed to [redact()]: `detectors`, `min_confidence`.
 #' @return The number of rows written, invisibly.
 #' @export
@@ -111,12 +114,33 @@ redact_query <- function(con, query, to, columns = NULL, chunk_size = 10000L,
   if (!append && DBI::dbExistsTable(to_con, to)) {
     rlang::abort(paste0("Table `", to, "` exists; use `append = TRUE` to add to it."))
   }
+  # Most drivers (Postgres, SQLite) cannot write on a connection while a
+  # query result is open on it: then redacted chunks wait in temporary files
+  # until the query is finished, and are written in one transaction. DuckDB,
+  # or a separate `to_con`, can take each chunk as it comes.
+  stream <- !identical(to_con, con) || inherits(con, "duckdb_connection")
+  spill <- if (stream) NULL else tempfile("credgate-redact-")
+  if (!stream) {
+    dir.create(spill)
+    on.exit(unlink(spill, recursive = TRUE), add = TRUE)
+  }
+
   res <- DBI::dbSendQuery(con, query)
-  on.exit(DBI::dbClearResult(res), add = TRUE)
+  open <- TRUE
+  on.exit(if (open) DBI::dbClearResult(res), add = TRUE)
+  write <- function(chunk, first) {
+    if (first && !append) {
+      DBI::dbCreateTable(to_con, to, chunk)
+    }
+    if (nrow(chunk) > 0) {
+      DBI::dbAppendTable(to_con, to, chunk)
+    }
+  }
   rows <- 0
-  first <- TRUE
+  n_chunks <- 0
   repeat {
     chunk <- DBI::dbFetch(res, n = chunk_size)
+    first <- n_chunks == 0
     if (first) {
       text <- names(chunk)[vapply(chunk, is.character, logical(1))]
       columns <- columns %||% text
@@ -131,17 +155,26 @@ redact_query <- function(con, query, to, columns = NULL, chunk_size = 10000L,
     for (col in columns) {
       chunk[[col]] <- redact(as.character(chunk[[col]]), ...)
     }
-    if (first && !append) {
-      DBI::dbCreateTable(to_con, to, chunk)
-    }
-    if (nrow(chunk) > 0) {
-      DBI::dbAppendTable(to_con, to, chunk)
+    n_chunks <- n_chunks + 1
+    if (stream) {
+      write(chunk, first)
+    } else {
+      saveRDS(chunk, file.path(spill, sprintf("%09d.rds", n_chunks)))
     }
     rows <- rows + nrow(chunk)
-    first <- FALSE
     if (DBI::dbHasCompleted(res)) {
       break
     }
+  }
+  DBI::dbClearResult(res)
+  open <- FALSE
+
+  if (!stream) {
+    DBI::dbWithTransaction(to_con, {
+      for (k in seq_len(n_chunks)) {
+        write(readRDS(file.path(spill, sprintf("%09d.rds", k))), k == 1)
+      }
+    })
   }
   invisible(rows)
 }

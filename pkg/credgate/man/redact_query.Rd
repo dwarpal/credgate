@@ -28,10 +28,13 @@ redact_query(
 
 \item{append}{Append to an existing table \code{to} instead of creating it.}
 
-\item{to_con}{Connection to write \code{to} with; by default \code{con}, which works
-with DuckDB. SQLite cannot write while a query result is open: pass a
-second connection to the same database file, opened in WAL mode
-(\verb{PRAGMA journal_mode = WAL}), or a connection to another database.}
+\item{to_con}{Connection to write \code{to} with; by default \code{con}. Most
+databases (Postgres, SQLite) cannot write on a connection while a query
+result is open on it, so with one connection the redacted chunks are kept
+in temporary files until the query has been read, then written in one
+transaction. With DuckDB, or with a second connection here, each chunk is
+written as it is read. (For SQLite, a second connection to the same file
+needs WAL mode: \verb{PRAGMA journal_mode = WAL}.)}
 
 \item{...}{Passed to \code{\link[=redact]{redact()}}: \code{detectors}, \code{min_confidence}.}
 }
