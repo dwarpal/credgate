@@ -96,12 +96,23 @@
 
           r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
             nativeBuildInputs = [ rTest pkgs.postgresql pkgs.jdk17_headless ];
-            SPARK_HOME = "${pyspark}/${pkgs.python3.sitePackages}/pyspark";
+            sparkDist = "${pyspark}/${pkgs.python3.sitePackages}/pyspark";
             SPARK_LOCAL_IP = "127.0.0.1";
             LC_ALL = "C";
             REQUIRE_ALL = if pkgs.stdenv.isLinux then "1" else "";
           } ''
             export HOME=$TMPDIR  # DuckDB keeps extension settings under HOME
+
+            # Spark's launch scripts start with #!/usr/bin/env, which the
+            # sandbox lacks: use a copy of bin/ with fixed interpreter paths.
+            export SPARK_HOME=$TMPDIR/spark
+            mkdir -p $SPARK_HOME
+            for entry in $sparkDist/*; do
+              [ "$(basename $entry)" = bin ] || ln -s $entry $SPARK_HOME/
+            done
+            cp -r $sparkDist/bin $SPARK_HOME/bin
+            chmod -R u+w $SPARK_HOME/bin
+            patchShebangs $SPARK_HOME/bin
 
             # A private Postgres server for the RPostgres tests: Unix socket
             # in the build directory only, no TCP.
