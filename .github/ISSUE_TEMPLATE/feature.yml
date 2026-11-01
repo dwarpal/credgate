@@ -1,0 +1,23 @@
+name: Feature request
+description: A new identifier, integration or capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need, and why?
+      description: The situation you are in (for example the data platform, the model endpoint, the regulation) matters more than a proposed solution.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: For a new identifier, its format and synthetic examples with the words around them; for an integration, how you would use it.
+  - type: checkboxes
+    id: synthetic
+    attributes:
+      label: Data
+      options:
+        - label: The request contains no real personal data.
+          required: true

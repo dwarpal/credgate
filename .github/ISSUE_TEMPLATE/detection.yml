@@ -1,0 +1,51 @@
+name: Detection problem
+description: Something was missed (false negative) or wrongly flagged (false positive)
+labels: [detection]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste real personal data** - no real Aadhaar, PAN, account or card
+        numbers, names, addresses or screenshots of production systems. Replace every
+        value with a synthetic one of the same shape (`synth_indian_pii()` in R or
+        Python makes them) and keep the surrounding words, which is what detection
+        depends on.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong?
+      options:
+        - Missed (personal data was not detected)
+        - Wrongly flagged (something that is not personal data was detected)
+        - Wrong type or confidence
+    validations:
+      required: true
+  - type: textarea
+    id: text
+    attributes:
+      label: Synthetic example text
+      description: The smallest text that shows the problem, with synthetic values only.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What credgate reported, and what you expected
+      description: For example the output of `detect_pii()` / `preview()`.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and language
+      placeholder: e.g. Python 0.5.0, or R 0.1.0.9000
+    validations:
+      required: true
+  - type: checkboxes
+    id: synthetic
+    attributes:
+      label: Data
+      options:
+        - label: The example contains no real personal data.
+          required: true

@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work as documented (other than detection accuracy)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste real personal data**, keys, passphrases or audit logs from real
+        systems. Use synthetic examples. Security issues go to the private
+        "Report a vulnerability" form instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Minimal code or commands, with synthetic data.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version, language and platform
+      placeholder: e.g. Python 0.5.0 on Linux, R 0.1.0.9000 on macOS, Nix bundle
+    validations:
+      required: true
+  - type: checkboxes
+    id: synthetic
+    attributes:
+      label: Data
+      options:
+        - label: The report contains no real personal data, keys or passphrases.
+          required: true
