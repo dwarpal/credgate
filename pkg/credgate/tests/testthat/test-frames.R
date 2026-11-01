@@ -50,12 +50,21 @@ for (driver in c("RSQLite", "duckdb")) {
     skip_if_not_installed("DBI")
     skip_if_not_installed("dbplyr")
     skip_if_not_installed("dplyr")
-    con <- if (driver == "duckdb") {
-      DBI::dbConnect(duckdb::duckdb())
+    if (driver == "duckdb") {
+      con <- DBI::dbConnect(duckdb::duckdb())
+      writer <- con
+      withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
     } else {
-      DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+      # SQLite cannot write while a result is open on the same connection.
+      file <- withr::local_tempfile(fileext = ".sqlite")
+      con <- DBI::dbConnect(RSQLite::SQLite(), file)
+      DBI::dbExecute(con, "PRAGMA journal_mode = WAL") # a reader and a writer at once
+      writer <- DBI::dbConnect(RSQLite::SQLite(), file)
+      withr::defer({
+        DBI::dbDisconnect(writer)
+        DBI::dbDisconnect(con)
+      })
     }
-    withr::defer(DBI::dbDisconnect(con))
 
     df <- table_columns()
     DBI::dbWriteTable(con, "t", df)
@@ -71,20 +80,24 @@ for (driver in c("RSQLite", "duckdb")) {
 
     DBI::dbWriteTable(con, "calls", data.frame(id = 1:4, notes = notes, pan = "ABCPE1234F"))
     n <- redact_query(con, "SELECT * FROM calls ORDER BY id", "calls_safe",
-      columns = "notes", chunk_size = 3
+      columns = "notes", chunk_size = 3, to_con = writer
     )
     expect_equal(n, 4)
     out <- DBI::dbGetQuery(con, "SELECT * FROM calls_safe ORDER BY id")
     expect_identical(out$notes, redacted)
     expect_identical(out$pan, rep("ABCPE1234F", 4))
-    expect_error(redact_query(con, "SELECT * FROM calls", "calls_safe"), "append = TRUE")
-    redact_query(con, "SELECT * FROM calls", "calls_safe", append = TRUE)
-    expect_equal(DBI::dbGetQuery(con, "SELECT count(*) AS n FROM calls_safe")$n, 8)
-    expect_identical(
-      DBI::dbGetQuery(con, "SELECT pan FROM calls_safe LIMIT 1")$pan,
-      "[PAN]"
+    expect_error(
+      redact_query(con, "SELECT * FROM calls", "calls_safe", to_con = writer),
+      "append = TRUE"
     )
-    redact_query(con, "SELECT * FROM calls WHERE id > 99", "empty_safe")
+    # All text columns by default; appended after the first four rows.
+    redact_query(con, "SELECT * FROM calls ORDER BY id", "calls_safe",
+      append = TRUE, to_con = writer
+    )
+    all <- DBI::dbGetQuery(con, "SELECT pan FROM calls_safe")$pan
+    expect_equal(length(all), 8)
+    expect_identical(sort(all), c(rep("ABCPE1234F", 4), rep("[PAN]", 4)))
+    redact_query(con, "SELECT * FROM calls WHERE id > 99", "empty_safe", to_con = writer)
     expect_true(DBI::dbExistsTable(con, "empty_safe"))
   })
 }

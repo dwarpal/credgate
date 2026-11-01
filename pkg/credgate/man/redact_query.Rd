@@ -11,6 +11,7 @@ redact_query(
   columns = NULL,
   chunk_size = 10000L,
   append = FALSE,
+  to_con = con,
   ...
 )
 }
@@ -26,6 +27,11 @@ redact_query(
 \item{chunk_size}{Rows fetched at a time.}
 
 \item{append}{Append to an existing table \code{to} instead of creating it.}
+
+\item{to_con}{Connection to write \code{to} with; by default \code{con}, which works
+with DuckDB. SQLite cannot write while a query result is open: pass a
+second connection to the same database file, opened in WAL mode
+(\verb{PRAGMA journal_mode = WAL}), or a connection to another database.}
 
 \item{...}{Passed to \code{\link[=redact]{redact()}}: \code{detectors}, \code{min_confidence}.}
 }

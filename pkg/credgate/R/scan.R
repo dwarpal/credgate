@@ -101,6 +101,12 @@ empty_scan <- function() {
 #' @export
 print.cg_scan <- function(x, ...) {
   n_columns <- attr(x, "n_columns")
+  needed <- c("column", "type", "rate", "n_matched", "n_sampled", "n_full", "mean_confidence", "example")
+  if (is.null(n_columns) || !all(needed %in% names(x))) {
+    # A subset such as report[1:2, 1:3]: print it as a plain data frame.
+    print(as.data.frame(unclass(x)), ...)
+    return(invisible(x))
+  }
   found <- unique(x$column)
   if (nrow(x) == 0) {
     cli::cli_text("Scanned {n_columns} column{?s}: no PII found.")

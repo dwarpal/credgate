@@ -87,6 +87,7 @@
             LC_ALL = "C";
             REQUIRE_ALL = if pkgs.stdenv.isLinux then "1" else "";
           } ''
+            export HOME=$TMPDIR  # DuckDB keeps extension settings under HOME
             cp -r ${./pkg/credgate/tests} tests
             chmod -R u+w tests
             cd tests/testthat

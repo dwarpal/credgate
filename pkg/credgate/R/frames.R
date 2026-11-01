@@ -91,6 +91,10 @@ arrow_text_columns <- function(schema, columns) {
 #' @param columns Columns to redact; `NULL` redacts every text column.
 #' @param chunk_size Rows fetched at a time.
 #' @param append Append to an existing table `to` instead of creating it.
+#' @param to_con Connection to write `to` with; by default `con`, which works
+#'   with DuckDB. SQLite cannot write while a query result is open: pass a
+#'   second connection to the same database file, opened in WAL mode
+#'   (`PRAGMA journal_mode = WAL`), or a connection to another database.
 #' @param ... Passed to [redact()]: `detectors`, `min_confidence`.
 #' @return The number of rows written, invisibly.
 #' @export
@@ -101,10 +105,10 @@ arrow_text_columns <- function(schema, columns) {
 #' DBI::dbReadTable(con, "calls_redacted")
 #' DBI::dbDisconnect(con, shutdown = TRUE)
 redact_query <- function(con, query, to, columns = NULL, chunk_size = 10000L,
-                         append = FALSE, ...) {
+                         append = FALSE, to_con = con, ...) {
   check_installed("DBI")
   stopifnot(rlang::is_string(query), rlang::is_string(to))
-  if (!append && DBI::dbExistsTable(con, to)) {
+  if (!append && DBI::dbExistsTable(to_con, to)) {
     rlang::abort(paste0("Table `", to, "` exists; use `append = TRUE` to add to it."))
   }
   res <- DBI::dbSendQuery(con, query)
@@ -128,10 +132,10 @@ redact_query <- function(con, query, to, columns = NULL, chunk_size = 10000L,
       chunk[[col]] <- redact(as.character(chunk[[col]]), ...)
     }
     if (first && !append) {
-      DBI::dbCreateTable(con, to, chunk)
+      DBI::dbCreateTable(to_con, to, chunk)
     }
     if (nrow(chunk) > 0) {
-      DBI::dbAppendTable(con, to, chunk)
+      DBI::dbAppendTable(to_con, to, chunk)
     }
     rows <- rows + nrow(chunk)
     first <- FALSE

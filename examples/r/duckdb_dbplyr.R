@@ -22,5 +22,6 @@ redact_query(con, "SELECT call_id, amount, notes FROM calls", "calls_safe", min_
 print(DBI::dbGetQuery(con, "SELECT * FROM calls_safe LIMIT 3"))
 
 # 3. Write it back out as Parquet.
-DBI::dbExecute(con, "COPY calls_safe TO 'examples/data/calls_redacted_duckdb_r.parquet' (FORMAT parquet)")
+n <- DBI::dbExecute(con, "COPY calls_safe TO 'examples/data/calls_redacted_duckdb_r.parquet' (FORMAT parquet)")
+cat(format(n, big.mark = ","), "rows written to examples/data/calls_redacted_duckdb_r.parquet\n")
 DBI::dbDisconnect(con, shutdown = TRUE)
