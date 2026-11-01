@@ -255,6 +255,27 @@ real personal data.
 - Bharat Sikka ([@bharatsikka](https://github.com/bharatsikka))
 - Aishwarya Bais ([@aishwaryabais](https://github.com/aishwaryabais))
 
+## Citing credgate
+
+If you use credgate in your work, please cite it, and say which package
+(R or Python) and version you used. GitHub's **Cite this repository**
+button (from [CITATION.cff](CITATION.cff)) gives APA and BibTeX; in R,
+`citation("credgate")` prints the reference.
+
+Sikka B, Bais A (2026). *credgate: Detect Indian Personal Data Before It
+Reaches Language Models.* Python package version 0.3.1.
+https://github.com/dwarpal/credgate
+
+```bibtex
+@Manual{credgate,
+  title  = {{credgate}: Detect Indian Personal Data Before It Reaches Language Models},
+  author = {Bharat Sikka and Aishwarya Bais},
+  year   = {2026},
+  note   = {Python package version 0.3.1},
+  url    = {https://github.com/dwarpal/credgate},
+}
+```
+
 ## Licence
 
 Apache License 2.0; see [LICENSE](LICENSE).

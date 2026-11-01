@@ -1,0 +1,34 @@
+# How to cite credgate. GitHub shows this as "Cite this repository".
+# Validate after editing: nix run --inputs-from . nixpkgs#cffconvert -- --validate
+cff-version: 1.2.0
+message: >-
+  If you use credgate in your work, please cite it as below, and mention
+  which package (R or Python) and version you used.
+type: software
+title: "credgate: Detect Indian Personal Data Before It Reaches Language Models"
+authors:
+  - given-names: Bharat
+    family-names: Sikka
+    email: bharat8sikka@gmail.com
+  - given-names: Aishwarya
+    family-names: Bais
+    email: aishwarya.bais00@gmail.com
+abstract: >-
+  credgate detects and redacts personal data in text and data frames before
+  it is sent to a large language model, with Indian identifiers built in
+  (Aadhaar, PAN, GSTIN, voter ID, UPI IDs, bank and card numbers, ABHA,
+  names and addresses in Latin and Indic scripts). Detection is
+  deterministic: candidates are validated with checksums and scored from
+  surrounding context, using a language-neutral specification shared by the
+  R and Python packages.
+repository-code: https://github.com/dwarpal/credgate
+url: https://github.com/dwarpal/credgate
+license: Apache-2.0
+keywords:
+  - personal data
+  - PII detection
+  - redaction
+  - large language models
+  - India
+  - DPDP Act
+  - data governance

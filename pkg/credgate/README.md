@@ -204,6 +204,14 @@ Names and addresses are found only next to a cue: an honorific (Shri, Smt,
 house/village keyword followed by a PIN code. A bare 12-digit number may pass
 the Aadhaar checksum by chance and is reported with lower confidence.
 
+## Citing credgate
+
+If you use credgate in your work, please cite it. In R:
+
+```r
+citation("credgate")
+```
+
 ## Licence
 
 Apache License 2.0.
