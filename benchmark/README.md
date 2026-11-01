@@ -188,6 +188,28 @@ it runs inside DuckDB, Polars and Arrow pipelines (see
 compiled matching engine (such as PCRE2 with its JIT compiler) is being
 considered.
 
+## BigQuery sampling cost
+
+[`bigquery_tablesample_cost.py`](bigquery_tablesample_cost.py) measures
+what BigQuery bills for credgate's sampling queries, on a 3.2 GB synthetic
+table (30 million rows) created inside BigQuery. Measured 2026-11-02 in the
+BigQuery sandbox, 10,000 rows of one text column:
+
+| Query | Dry-run estimate | Billed |
+|---|---:|---:|
+| `TABLESAMPLE SYSTEM (1 PERCENT)` | 32.0 MB | 32.5 MB |
+| `TABLESAMPLE SYSTEM (10 PERCENT)` | 319.9 MB | 320.9 MB |
+| `WHERE RAND() < 0.001` | 3.20 GB | 3.20 GB |
+
+Block sampling bills only the sampled blocks (about 1% of the table at
+least), and the dry run estimates it to within about 1 MB, so credgate's
+cost check uses the dry run. BigQuery's own `maximumBytesBilled`, however,
+checks `TABLESAMPLE` queries against the whole table: with a 200 MB limit
+it refused the 1% sample ("3199205376 or higher required"). credgate
+therefore does not send that limit with `TABLESAMPLE` queries. Tables
+smaller than about 1 GB are a single block, so sampling them reads the
+whole table.
+
 ## Comparison with Microsoft Presidio
 
 [Presidio](https://github.com/microsoft/presidio) (MIT) is the most widely

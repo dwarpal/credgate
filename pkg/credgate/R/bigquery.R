@@ -21,7 +21,8 @@
 #'   sampled blocks are billed) or `"rand"` (reads and bills whole columns).
 #'   Views and external tables always use `"rand"`.
 #' @param max_bytes Refuse any query estimated to process more bytes than
-#'   this (default 1 GB); also sent to BigQuery as the billing limit.
+#'   this (default 1 GB). Also sent to BigQuery as the billing limit, except
+#'   with TABLESAMPLE, where BigQuery would check it against the whole table.
 #' @return `bq_scan_pii()` a scan report as from [scan_pii()];
 #'   `bq_pii_inventory()` and `bq_inventory_dataset()` an inventory as from
 #'   [pii_inventory()], with the table's row count and `sample_method`
@@ -132,7 +133,10 @@ bq_sample <- function(table, billing, sample, sampling, max_bytes) {
   rows <- if (is.null(query$sql)) {
     data.frame(row.names = integer())
   } else {
-    stats::setNames(as.data.frame(bq_run(query$sql, billing, max_bytes)), query$read)
+    # BigQuery checks maximumBytesBilled against the whole table for
+    # TABLESAMPLE; the dry run's estimate is the accurate one there.
+    enforce <- query$method != "bigquery-tablesample"
+    stats::setNames(as.data.frame(bq_run(query$sql, billing, max_bytes, enforce)), query$read)
   }
   structure(
     sampled_rows(rows, info$fields$name, n, query$method),
@@ -140,8 +144,9 @@ bq_sample <- function(table, billing, sample, sampling, max_bytes) {
   )
 }
 
-# Runs a query after a dry run shows it stays within `max_bytes`.
-bq_run <- function(sql, billing, max_bytes) {
+# Runs a query after a dry run shows it stays within `max_bytes`; with
+# `enforce`, BigQuery also enforces the limit (maximumBytesBilled).
+bq_run <- function(sql, billing, max_bytes, enforce = TRUE) {
   estimate <- bq_dry_run(sql, billing)
   if (estimate > max_bytes) {
     rlang::abort(
@@ -157,7 +162,7 @@ bq_run <- function(sql, billing, max_bytes) {
       class = "credgate_cost_limit"
     )
   }
-  bq_fetch(sql, billing, max_bytes)
+  bq_fetch(sql, billing, if (enforce) max_bytes)
 }
 
 # --- the only calls to BigQuery (through bigrquery) --------------------------
@@ -184,13 +189,12 @@ bq_dry_run <- function(sql, billing) {
 }
 
 bq_fetch <- function(sql, billing, max_bytes) {
-  job <- bigrquery::bq_project_query(
-    billing, sql,
-    configuration = list(query = list(
+  limit <- if (!is.null(max_bytes)) {
+    list(configuration = list(query = list(
       maximumBytesBilled = jsonlite::unbox(format(max_bytes, scientific = FALSE))
-    )),
-    quiet = TRUE
-  )
+    )))
+  }
+  job <- do.call(bigrquery::bq_project_query, c(list(billing, sql), limit, list(quiet = TRUE)))
   bigrquery::bq_table_download(job, quiet = TRUE)
 }
 
