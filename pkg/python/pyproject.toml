@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "credgate"
-version = "0.5.0"
+version = "0.6.0"
 description = "Governance layer for LLM requests with Indian PII detection"
 readme = "README.md"
 license = "Apache-2.0"

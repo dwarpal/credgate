@@ -11,11 +11,16 @@ fully air-gapped setups.
 It ships as an R package and a Python package (with a CLI) that read the same
 detection rules, so both languages find exactly the same matches.
 
+**Documentation:** <https://dwarpal.github.io/credgate/> - the Python API,
+the [R package site](https://dwarpal.github.io/credgate/r/), guides and the
+shared specification.
+
 > **Status: early development (pre-alpha).** PII detection, column
-> scanning (`scan_pii()`), redaction (`redact()`, `preview()`) and
+> scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file), policies and the audit log work today. Proxy mode and the IDE
-> assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
+> vault file), policies, the audit log and the PII inventory (data frames,
+> Spark, BigQuery) work today. Proxy mode and the IDE assistant are planned;
+> see [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
 
