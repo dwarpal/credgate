@@ -207,3 +207,48 @@ def test_policy_unknown_destination():
     u = POLICY_SPEC["unknown_destination"]
     with pytest.raises(credgate.PolicyError, match="Unknown destination"):
         _policy(u["policy"]).decide("PAN ABCPE1234F", u["destination"])
+
+
+AUDIT_SPEC = conformance("audit.yaml")
+
+
+@pytest.mark.parametrize("case", AUDIT_SPEC["id_hashes"], ids=lambda c: f"{c['type']}-{c['id']}")
+def test_audit_id_hash(case):
+    from credgate.audit import _id_hash
+
+    assert _id_hash(bytes.fromhex(AUDIT_SPEC["key"]), case["type"], case["canonical"]) == case["id"]
+
+
+@pytest.mark.parametrize("case", AUDIT_SPEC["logs"], ids=lambda c: c["file"])
+def test_audit_log_verifies(case):
+    check = credgate.audit_verify(credgate.spec_path() / "conformance" / case["file"])
+    assert check.ok
+    assert check.records == case["records"]
+    assert check.head == case["head"]
+
+
+def _tampered(lines, change, at):
+    lines = list(lines)
+    i = at - 1
+    if change == "edit":
+        lines[i] = lines[i].replace('"actor":"', '"actor":"x', 1)
+    elif change == "delete":
+        del lines[i]
+    elif change == "swap":
+        lines[i], lines[i + 1] = lines[i + 1], lines[i]
+    elif change == "duplicate":
+        lines.insert(i + 1, lines[i])
+    return lines
+
+
+@pytest.mark.parametrize("case", AUDIT_SPEC["tamper"]["cases"], ids=lambda c: c["id"])
+def test_audit_tampering_is_detected(case, tmp_path):
+    source = credgate.spec_path() / "conformance" / AUDIT_SPEC["tamper"]["file"]
+    lines = source.read_text(encoding="utf-8").splitlines()
+    path = tmp_path / "log.jsonl"
+    path.write_text(
+        "\n".join(_tampered(lines, case["change"], case["at"])) + "\n", encoding="utf-8"
+    )
+    check = credgate.audit_verify(path)
+    assert not check.ok
+    assert check.line == case["line"]

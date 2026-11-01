@@ -1,0 +1,36 @@
+# Audit log conformance (see README.md, "Audit log").
+#
+# id_hashes: with `key`, the audit `id` of an identifier of `type` with
+#   `canonical` form must be `id`.
+# logs: must verify as intact, with `records` records and this `head`.
+#   written-by-both.jsonl was written by Python (records 1, 2, 4) and R
+#   (record 3), appending to one file; record 3 includes a card
+#   verification code, which carries no `id`.
+# tamper: each change to a copy of `file` must make verification fail at
+#   `line` (1-based).
+#
+# All identifiers are synthetic; the key is a test value.
+
+spec_version: 1
+
+key: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+
+id_hashes:
+  - {type: pan, canonical: ABCPE1234F, id: 5da3895a3b0c225b}
+  - {type: person_name, canonical: RAMESH KUMAR, id: 4da31fd9368f3b53}
+  - {type: person_name, canonical: सुनीता देवी, id: 64ed4820b4ccc131}
+  - {type: card, canonical: '4111111111111111', id: 0e815cfc1d3c1e6b}
+
+logs:
+  - file: audit/written-by-both.jsonl
+    records: 4
+    head: 478007a74600c784b6da05214bb6c24e1c17469fe30ae514f6d929f439ab5bfe
+
+tamper:
+  file: audit/written-by-both.jsonl
+  cases:
+    - {id: edit-a-record, change: edit, at: 2, line: 3}
+    - {id: delete-a-record, change: delete, at: 2, line: 2}
+    - {id: swap-two-records, change: swap, at: 2, line: 2}
+    - {id: edit-the-first-record, change: edit, at: 1, line: 2}
+    - {id: insert-a-copy, change: duplicate, at: 2, line: 3}

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Audit log: an append-only, hash-chained JSON Lines log of policy
+  decisions - who, when, which endpoint, policy revision, allowed or blocked,
+  and per identifier its type, action and rule; never text or values. With an
+  audit key (`CREDGATE_AUDIT_KEY`), identifiers are recorded as keyed hashes;
+  card verification codes never are. Verification detects edited, deleted,
+  inserted or reordered records and returns the head hash to keep elsewhere.
+  R and Python write and verify the same files. `AuditLog`,
+  `audit_verify()`, `audit_read()`; `Policy.apply(..., audit=log)`.
 - Policies: a YAML policy (the same file in R and Python) decides, per
   destination tier (local, internal, frontier), whether each identifier is
   allowed, redacted or tokenised, or the whole request is blocked; rules can

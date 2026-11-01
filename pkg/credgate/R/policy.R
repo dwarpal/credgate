@@ -214,6 +214,8 @@ parse_policy <- function(x) {
 #' @param destination Name of a destination in the policy; an unknown one is
 #'   an error.
 #' @param vault A vault from [cg_vault()], needed when the policy tokenises.
+#' @param audit An audit log from [cg_audit_log()]: the decision is recorded,
+#'   blocked or not.
 #' @return An object of class `cg_decision`: a list with `policy_id`,
 #'   `policy_revision`, `destination`, `tier`, `provider`, `url`, `allowed`,
 #'   `blocked_by` (`"destination-blocked"` and rule ids), `matches` (a data frame of the identifiers with their `action` and
@@ -259,8 +261,11 @@ policy_decide <- function(policy, text, destination) {
 
 #' @rdname policy_decide
 #' @export
-policy_apply <- function(policy, text, destination, vault = NULL) {
+policy_apply <- function(policy, text, destination, vault = NULL, audit = NULL) {
   decision <- policy_decide(policy, text, destination)
+  if (!is.null(audit)) {
+    audit_record(audit, decision)
+  }
   if (!decision$allowed) {
     return(decision)
   }

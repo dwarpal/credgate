@@ -14,7 +14,7 @@ detection rules, so both languages find exactly the same matches.
 > **Status: early development (pre-alpha).** PII detection, column
 > scanning (`scan_pii()`), redaction (`redact()`, `preview()`) and
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file) and policies work today. The audit log, proxy mode and the IDE
+> vault file), policies and the audit log work today. Proxy mode and the IDE
 > assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
@@ -179,6 +179,29 @@ Everything is checked when the policy is loaded - an unknown field, tier,
 action or identifier type is an error, never a silent "allow" - and every
 decision names the policy revision and the rule behind each action, ready
 for the audit log. The format is specified in [spec/README.md](spec/README.md#policies-policy).
+
+## Audit log
+
+Every policy decision can be recorded in an append-only audit log: who sent
+which kinds of data to which endpoint, under which policy revision and rule,
+allowed or blocked - never the text or the values. Each record holds the
+hash of the one before, so editing, deleting, inserting or reordering
+records is detected; keep copies of the latest hash (the head) elsewhere to
+detect records removed from the end. With an audit key, identifiers are
+recorded as keyed hashes, so an investigator with the key can check whether
+a given PAN went to a given model; card verification codes are never
+recorded in any form.
+
+```python
+log = credgate.AuditLog("audit.jsonl")             # key from CREDGATE_AUDIT_KEY, if set
+policy.apply(messages, "claude", audit=log)       # recorded, allowed or blocked
+credgate.audit_verify("audit.jsonl")              # intact? and the head hash
+```
+
+In R: `log <- cg_audit_log("audit.jsonl")`, `policy_apply(..., audit = log)`,
+`audit_verify()`, `audit_read()`. R and Python write and verify the same
+files. Rotation and retention (default 5 years, at least 1, per the
+[threat model](docs/threat-model.md)) come with the proxy.
 
 ## Large data
 
