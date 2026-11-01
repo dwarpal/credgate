@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Spark: `scan_pii()` and `pii_inventory()` accept PySpark DataFrames. The
+  table is sampled inside the cluster (a seeded random sample of up to
+  `sample` rows, `seed = 42` by default) and only the sample reaches the
+  driver; the row count is recorded and `sample_method` is `spark-sample`.
+  Whole-number columns are cast to text in Spark so long identifiers keep
+  every digit; nested columns are recorded but not read. Tested against a
+  local Spark (no network).
 - PII inventory: `pii_inventory()` scans a table with the `scan_pii()` rules
   and records where PII is - every column, also those where nothing was
   found, with source, table, row count, sample size and method, scan time

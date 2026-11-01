@@ -46,8 +46,13 @@
             # DuckDB are marked broken on x86_64-darwin). Their tests skip
             # without them.
             ++ nixpkgs.lib.optionals (python3Packages.pythonAtLeast "3.13") (
-              builtins.filter (p: (builtins.tryEval p.drvPath).success) (with python3Packages; [ pandas polars pyarrow duckdb ])
+              builtins.filter (p: (builtins.tryEval p.drvPath).success) (with python3Packages; [ pandas polars pyarrow duckdb pyspark ])
+              # Java for the PySpark tests (a local Spark, no network)
+              ++ [ python3Packages.pkgs.jdk17_headless ]
             );
+          preCheck = ''
+            export HOME=$TMPDIR SPARK_LOCAL_IP=127.0.0.1
+          '';
           pythonImportsCheck = [ "credgate" ];
           meta = {
             description = "Governance layer for LLM requests with Indian PII detection";
@@ -67,7 +72,8 @@
         default = credgate;
       });
 
-      # R tests for Arrow, Parquet and databases (DuckDB, SQLite). The
+      # R tests for Arrow, Parquet, databases (DuckDB, SQLite, Postgres) and
+      # Spark (sparklyr, a local Spark without network). The
       # packages are large C++ builds, so this is not in `checks`; CI builds
       # it in a separate job (.github/workflows/integrations.yml):
       #   nix build -L .#legacyPackages.x86_64-linux.r-integration-tests
@@ -75,7 +81,9 @@
       # packages nixpkgs cannot build (Arrow on Intel macOS) are left out.
       legacyPackages = forAll (pkgs:
         let
-          wanted = with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr RSQLite RPostgres ];
+          wanted = with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr RSQLite RPostgres sparklyr ];
+          # sparklyr uses the Spark that comes with PySpark (one Spark version).
+          pyspark = pkgs.python3.withPackages (ps: [ ps.pyspark ]);
           available = builtins.filter (p: (builtins.tryEval p.drvPath).success) wanted;
           rTest = pkgs.rWrapper.override {
             packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr ]) ++ available;
@@ -87,11 +95,24 @@
           r-integration-deps = pkgs.linkFarmFromDrvs "credgate-r-integration-deps" available;
 
           r-integration-tests = pkgs.runCommand "credgate-r-integration-tests" {
-            nativeBuildInputs = [ rTest pkgs.postgresql ];
+            nativeBuildInputs = [ rTest pkgs.postgresql pkgs.jdk17_headless ];
+            sparkDist = "${pyspark}/${pkgs.python3.sitePackages}/pyspark";
+            SPARK_LOCAL_IP = "127.0.0.1";
             LC_ALL = "C";
             REQUIRE_ALL = if pkgs.stdenv.isLinux then "1" else "";
           } ''
             export HOME=$TMPDIR  # DuckDB keeps extension settings under HOME
+
+            # Spark's launch scripts start with #!/usr/bin/env, which the
+            # sandbox lacks: use a copy of bin/ with fixed interpreter paths.
+            export SPARK_HOME=$TMPDIR/spark
+            mkdir -p $SPARK_HOME
+            for entry in $sparkDist/*; do
+              [ "$(basename $entry)" = bin ] || ln -s $entry $SPARK_HOME/
+            done
+            cp -r $sparkDist/bin $SPARK_HOME/bin
+            chmod -R u+w $SPARK_HOME/bin
+            patchShebangs $SPARK_HOME/bin
 
             # A private Postgres server for the RPostgres tests: Unix socket
             # in the build directory only, no TCP.
@@ -107,8 +128,10 @@
             cd tests/testthat
             Rscript -e '
               library(testthat); library(credgate)
-              res <- as.data.frame(test_file("test-frames.R", reporter = "progress",
-                                             package = "credgate", load_package = "installed"))
+              res <- do.call(rbind, lapply(c("test-frames.R", "test-spark.R"), function(f) {
+                as.data.frame(test_file(f, reporter = "progress",
+                                        package = "credgate", load_package = "installed"))
+              }))
               print(res[, c("test", "nb", "failed", "skipped", "error")])
               if (any(res$failed > 0) || any(res$error)) quit(status = 1)
               if (nzchar(Sys.getenv("REQUIRE_ALL")) && any(res$skipped)) {

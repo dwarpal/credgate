@@ -221,8 +221,24 @@ inv.write("inventory.csv")                       # credgate.read_inventory() rea
 
 In R: `pii_inventory(customers, source = "crm", table = "customers")`,
 combined with `rbind()`, saved with `write_inventory()` and read with
-`read_inventory()`. Scanning whole warehouses (Spark, BigQuery, every table
-of a database) builds on this and is in progress.
+`read_inventory()`.
+
+Spark tables work the same way, from PySpark and sparklyr: the table is
+sampled inside the cluster and only the sample reaches the driver, so
+Hadoop and Hive data can be inventoried where it lives.
+
+```python
+df = spark.table("crm.customers")
+inv = credgate.pii_inventory(df, source="hive", table="crm.customers")
+```
+
+```r
+customers <- dplyr::tbl(sc, "customers")              # sc from sparklyr::spark_connect()
+inv <- pii_inventory(customers, source = "hive", table = "crm.customers")
+```
+
+Scanning whole warehouses (BigQuery, every table of a database) builds on
+this and is in progress.
 
 ## Large data
 
@@ -236,6 +252,7 @@ command line:
 | Polars | `pl.col("notes").credgate.redact()` | - |
 | Arrow, pandas | Series, arrays, tables, datasets | arrays, tables, datasets |
 | Other databases | - | any DBI database via dbplyr |
+| Spark | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) |
 
 ```sh
 credgate scan calls.parquet

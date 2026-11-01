@@ -4,7 +4,7 @@
 \alias{scan_pii}
 \title{Scan the columns of a data frame for PII}
 \usage{
-scan_pii(data, sample = 10000L, min_rate = 0, detectors = NULL)
+scan_pii(data, sample = 10000L, min_rate = 0, detectors = NULL, seed = 42L)
 }
 \arguments{
 \item{data}{A data frame, an Arrow \code{Table} or \code{Dataset} (for example from
@@ -13,7 +13,9 @@ scan_pii(data, sample = 10000L, min_rate = 0, detectors = NULL)
 databases). Arrow and database tables are read one column at a time, in
 chunks, so they may be larger than memory; the sample is the same as for
 the table in memory. For a database, rows must come back in the same order
-on each read (DuckDB and SQLite do for a plain table).}
+on each read (DuckDB and SQLite do for a plain table).
+A Spark table from sparklyr is sampled inside the cluster (up to
+\code{sample} rows, randomly with \code{seed}) and only the sample is collected.}
 
 \item{sample}{Maximum number of values checked per column.}
 
@@ -21,6 +23,8 @@ on each read (DuckDB and SQLite do for a plain table).}
 sampled values (0 reports every type found).}
 
 \item{detectors}{Detector ids to run; \code{NULL} runs all registered ones.}
+
+\item{seed}{Random seed for sampling Spark tables; ignored otherwise.}
 }
 \value{
 A data frame of class \code{cg_scan} with one row per column and type:

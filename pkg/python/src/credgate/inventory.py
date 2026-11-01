@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .scan import _n_rows, _scan_columns
+from .scan import _scan_columns
 
 FORMAT_VERSION = 1
 _FIELDS = (
@@ -109,6 +109,7 @@ def pii_inventory(
     sample: int = 10000,
     min_rate: float = 0.0,
     detectors: Sequence[str] | None = None,
+    seed: int = 42,
 ) -> Inventory:
     """Scan a table and record where PII is, for an inventory.
 
@@ -122,7 +123,8 @@ def pii_inventory(
         data: Any table :func:`scan_pii` accepts.
         source: Name of the data source, chosen by you (e.g. ``"bigquery:prod"``).
         table: Name of the table within the source (e.g. ``"crm.customers"``).
-        sample, min_rate, detectors: As for :func:`scan_pii`.
+        sample, min_rate, detectors, seed: As for :func:`scan_pii`. A PySpark
+            DataFrame is sampled inside the cluster; its row count is recorded.
     """
     from . import __version__
 
@@ -130,17 +132,17 @@ def pii_inventory(
         if not isinstance(value, str) or not value:
             raise ValueError(f"`{name}` must be a non-empty string.")
     scanned_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    n_rows = _n_rows(data)
+    columns, info = _scan_columns(data, sample, min_rate, detectors, seed)
     common = {
         "source": source,
         "table": table,
-        "n_rows": n_rows,
+        "n_rows": info.n_rows,
         "scanned_at": scanned_at,
         "credgate": f"python/{__version__}",
     }
     rows = []
-    for col in _scan_columns(data, sample, min_rate, detectors):
-        method = "even" if col.sampled else "all"
+    for col in columns:
+        method = info.sample_method or ("even" if col.sampled else "all")
         if not col.findings:
             rows.append(
                 InventoryRow(

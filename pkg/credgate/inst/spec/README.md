@@ -211,6 +211,26 @@ Rows are in table order, then column order, then `rate` descending, then
 scan (a data frame or an Arrow table), otherwise empty; integrations fill it
 from table metadata.
 
+**Spark tables** (PySpark and sparklyr DataFrames) are sampled inside the
+cluster; only the sampled rows reach the driver. This replaces step 2 of
+the column scan, as Spark tables have no stable row order:
+
+1. `n` is the table's row count; `n_rows = n`.
+2. If `n <= sample`, all rows are used and `sample_method` is `all`.
+   Otherwise a Bernoulli sample without replacement with fraction
+   `min(1, 1.2 * sample / n)` and the given `seed` (default 42), then its
+   first `sample` rows; `sample_method` is `spark-sample`. By chance the
+   sample can have fewer than `sample` rows.
+3. Whole-number columns (byte, short, integer, long, and decimal with
+   scale 0) are cast to text in Spark, so long identifiers keep every
+   digit; other decimals become doubles. Columns of arrays, maps, structs
+   and binary data are not read and are recorded with `n_sampled = 0`.
+4. The column-scan rules (values, context, per-type summary) then apply to
+   the sampled rows, without further sampling.
+
+The same data, partitioning and seed give the same sample in PySpark and
+sparklyr, as both use Spark's own sampling.
+
 **Inventory files** are CSV, written identically by every implementation so
 that files can be compared and diffed:
 

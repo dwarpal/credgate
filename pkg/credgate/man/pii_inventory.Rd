@@ -10,7 +10,8 @@ pii_inventory(
   table,
   sample = 10000L,
   min_rate = 0,
-  detectors = NULL
+  detectors = NULL,
+  seed = 42L
 )
 }
 \arguments{
@@ -20,7 +21,9 @@ pii_inventory(
 databases). Arrow and database tables are read one column at a time, in
 chunks, so they may be larger than memory; the sample is the same as for
 the table in memory. For a database, rows must come back in the same order
-on each read (DuckDB and SQLite do for a plain table).}
+on each read (DuckDB and SQLite do for a plain table).
+A Spark table from sparklyr is sampled inside the cluster (up to
+\code{sample} rows, randomly with \code{seed}) and only the sample is collected.}
 
 \item{source}{Name of the data source, chosen by you (e.g.
 \code{"bigquery:prod"}, \code{"hive"}).}
@@ -34,6 +37,8 @@ or a file path).}
 sampled values (0 reports every type found).}
 
 \item{detectors}{Detector ids to run; \code{NULL} runs all registered ones.}
+
+\item{seed}{Random seed for sampling Spark tables; ignored otherwise.}
 }
 \value{
 A data frame of class \code{cg_inventory} with one row per column and
@@ -41,7 +46,8 @@ PII type found, and one row with \code{type = NA} for each column where none
 was found: \code{v}, \code{source}, \code{table}, \code{column}, \code{type}, \code{class}, \code{n_rows}
 (when known without reading the table), \code{n_sampled}, \code{n_matched},
 \code{n_full}, \code{rate}, \code{mean_confidence}, \code{sample_method} (\code{"all"} or
-\code{"even"}), \code{scanned_at} (UTC) and \code{credgate} (the version that scanned).
+\code{"even"}, or \code{"spark-sample"} for Spark tables), \code{scanned_at} (UTC) and
+\code{credgate} (the version that scanned).
 }
 \description{
 Scans a table with the same rules as \code{\link[=scan_pii]{scan_pii()}}, but records every

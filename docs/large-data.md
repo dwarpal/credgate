@@ -28,14 +28,20 @@ synthetic data; runnable versions are in [`examples/`](../examples/).
 | Parquet larger than memory | `credgate.arrow.redact_parquet()` | `redact_parquet()` | `credgate redact --parquet` |
 | DuckDB | SQL: `cg_redact(notes)`, `cg_has_pii(notes)` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` | - |
 | Other databases (DBI) | - | `redact_query()`, `scan_pii()` on dbplyr tables | - |
+| Spark (scan, inventory) | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) | - |
 | Scan a file | `scan_pii()` | `scan_pii()` | `credgate scan file.parquet` |
 
 Numbered tokens (`[PAN_1]`) are available for in-memory columns. Keyed
 tokens (`Vault(key)` in Python, `cg_vault(key)` in R) give the same token
 for the same identifier in every vault with the same key, so parallel
 workers agree and their vaults can be merged; tokenising inside Polars,
-DuckDB and Spark with them comes with the Spark integration. Until then,
-use redaction inside those engines.
+DuckDB and Spark with them is planned. Until then, use redaction inside
+those engines.
+
+Spark tables are sampled inside the cluster: a seeded random sample of up
+to `sample` rows (Spark has no stable row order, so not evenly spaced), of
+which only the sample reaches the driver. Redacting inside Spark is
+planned.
 
 ## Python
 
@@ -119,4 +125,4 @@ Example: [`parquet_pipeline.sh`](../examples/shell/parquet_pipeline.sh).
 On one core of a 2019 laptop credgate processes about 0.4 MB of text per
 second in Python and 0.2-0.3 MB in R ([throughput](../benchmark/README.md#throughput)).
 Detection is independent per row, so it scales with cores and machines.
-Spark support and faster matching are on the roadmap.
+Redaction inside Spark and faster matching are on the roadmap.
