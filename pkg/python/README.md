@@ -76,7 +76,7 @@ Presidio is broader and more mature:
   field label or "ji"; credgate does not yet.
 - **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
   add custom operators; credgate redacts, or tokenises with an in-memory
-  vault (no hashing or encryption operators, and no saved vault yet).
+  vault that can be saved encrypted (no hashing or encryption operators).
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
@@ -155,8 +155,20 @@ credgate.restore("[PERSON_NAME_1] (PAN [pan_1]) will be called on MOBILE_IN_1.",
 The same identifier gets the same token however it is written, so the model
 can still tell customers apart. `restore()` accepts tokens as models tend to
 copy them (other case, spaces, missing brackets); `strict=True` raises
-`UnknownTokenError` on a token the vault does not know. The vault lives in
-memory and prints with values masked; saving it (encrypted) is planned.
+`UnknownTokenError` on a token the vault does not know. The vault prints
+with values masked.
+
+To restore tokens in a later session - or in R - save the vault to a file
+encrypted with a passphrase (at least 12 characters; from the argument, the
+`CREDGATE_VAULT_PASSPHRASE` environment variable, or a prompt):
+
+```python
+vault.save("loans.cgvault")                    # pip install 'credgate[vault]'
+vault = credgate.Vault.open("loans.cgvault")   # later: same tokens, numbering continues
+```
+
+The passphrase is never stored: without it the file cannot be opened. Keep
+`*.cgvault` files out of version control.
 
 Scan a table (a pandas DataFrame, or a dict of column -> values) to see
 which columns hold PII; column names count as context:

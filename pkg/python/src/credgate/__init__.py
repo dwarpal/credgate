@@ -27,7 +27,7 @@ from .normalise import Normalised, normalise
 from .redact import Preview, preview, redact
 from .scan import ColumnFinding, ScanReport, scan_pii
 from .synth import synth_indian_pii
-from .tokenise import UnknownTokenError, Vault, restore, tokenise
+from .tokenise import UnknownTokenError, Vault, VaultFileError, restore, tokenise
 
 __all__ = [
     "ColumnFinding",
@@ -40,6 +40,7 @@ __all__ = [
     "TypeScore",
     "UnknownTokenError",
     "Vault",
+    "VaultFileError",
     "bounded",
     "detect_pii",
     "detectors",

@@ -148,3 +148,17 @@ def test_tokenise(case):
         else:
             got = [[e.token, e.type, e.canonical] for e in vault._entries]
             assert got == step["expect"]
+
+
+VAULT_SPEC = conformance("vault.yaml")
+
+
+@pytest.mark.parametrize("case", VAULT_SPEC["files"], ids=[f["file"] for f in VAULT_SPEC["files"]])
+def test_vault_file(case):
+    pytest.importorskip("nacl")
+    path = credgate.spec_path() / "conformance" / case["file"]
+    vault = credgate.Vault.open(path, passphrase=case["passphrase"])
+    got = [[e.token, e.type, e.data_class, e.canonical, e.value] for e in vault._entries]
+    assert got == case["entries"]
+    with pytest.raises(credgate.VaultFileError):
+        credgate.Vault.open(path, passphrase=VAULT_SPEC["wrong_passphrase"])

@@ -13,8 +13,8 @@ detection rules, so both languages find exactly the same matches.
 
 > **Status: early development (pre-alpha).** PII detection, column
 > scanning (`scan_pii()`), redaction (`redact()`, `preview()`) and
-> reversible tokenisation (`tokenise()`, `restore()`) work today.
-> Saving the token vault, policies, the audit log, proxy mode and the IDE
+> reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
+> vault file) work today. Policies, the audit log, proxy mode and the IDE
 > assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
@@ -78,8 +78,9 @@ walks through the workflow and why it matters even when the model is local
 > **Check the preview.** Names are found next to an honorific, relation or
 > field label (`Shri`, `S/o`, `Name:`, `नाम:`); a name in running text
 > without such a cue ("Customer Priya Nair called") is not detected yet.
-> The vault lives in memory for now; saving it encrypted, and an automatic
-> proxy that tokenises and restores for you, are next on the roadmap.
+> Save the vault (`vault.save(path)`, R `vault_save()`) to restore tokens in
+> a later session; it is encrypted with a passphrase. An automatic proxy
+> that tokenises and restores for you is next on the roadmap.
 
 ## What it detects
 
@@ -212,7 +213,7 @@ Presidio is broader and more mature:
   field label or "ji"; credgate does not yet.
 - **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
   add custom operators; credgate redacts, or tokenises with an in-memory
-  vault (no hashing or encryption operators, and no saved vault yet).
+  vault that can be saved encrypted (no hashing or encryption operators).
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and

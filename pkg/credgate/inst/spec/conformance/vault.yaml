@@ -1,0 +1,30 @@
+# Saved-vault conformance (see README.md, "Saved vaults"). Every CredGate
+# implementation must open each file below with its passphrase and find
+# exactly these entries, in order, as [token, type, class, canonical, value];
+# and must refuse it with a wrong passphrase.
+#
+# The files were written by the implementation named in their file name.
+# All values are synthetic; the passphrase is a test value.
+
+spec_version: 1
+
+wrong_passphrase: 'not the right passphrase'
+
+files:
+
+  - file: vaults/written-by-python.cgvault
+    passphrase: 'synthetic test passphrase'
+    entries:
+      - ['[PERSON_NAME_1]', person_name, personal, RAMESH KUMAR, Ramesh Kumar]
+      - ['[PAN_1]', pan, identity_strong, ABCPE1234F, ABCPE1234F]
+      - ['[MOBILE_IN_1]', mobile_in, contact, '9876543210', '+91 98765 43210']
+      - ['[AADHAAR_1]', aadhaar, identity_strong, '718467284276', '७१८४ ६७२८ ४२७६']
+      - ['[PERSON_NAME_2]', person_name, personal, पूजा यादव, पूजा यादव]
+
+  - file: vaults/written-by-r.cgvault
+    passphrase: 'synthetic test passphrase'
+    entries:
+      - ['[PERSON_NAME_1]', person_name, personal, PRIYA NAIR, Priya Nair]
+      - ['[PAN_1]', pan, identity_strong, ABCPN1234K, ABCPN1234K]
+      - ['[UPI_ID_1]', upi_id, financial, priya.n@oksbi, priya.n@oksbi]
+      - ['[MOBILE_IN_1]', mobile_in, contact, '9468451273', '9468451273']

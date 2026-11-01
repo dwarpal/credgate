@@ -153,3 +153,21 @@ for (case in conformance("tokenise.yaml")$cases) {
     }
   })
 }
+
+vault_spec <- conformance("vault.yaml")
+for (f in vault_spec$files) {
+  test_that(paste("vault file:", f$file), {
+    skip_if_not_installed("sodium")
+    path <- file.path(cg_spec_path(), "conformance", f$file)
+    vault <- vault_open(path, passphrase = f$passphrase)
+    e <- vault$entries
+    got <- lapply(seq_len(nrow(e)), function(i) {
+      c(e$token[i], e$type[i], e$class[i], e$canonical[i], e$value[i])
+    })
+    expect_identical(got, lapply(f$entries, unlist))
+    expect_error(
+      vault_open(path, passphrase = vault_spec$wrong_passphrase),
+      class = "credgate_vault_file"
+    )
+  })
+}

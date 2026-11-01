@@ -1,5 +1,10 @@
 # credgate (development version)
 
+* `vault_save()` and `vault_open()` save a token vault to a file encrypted
+  with a passphrase (libsodium via the sodium package: scrypt and
+  XSalsa20-Poly1305) and open it again, in R or in Python. The file reveals
+  nothing without the passphrase, is written readable only by its owner,
+  and never replaces a file that is not a vault.
 * New `tokenise()` and `restore()`, with a vault from `cg_vault()`:
   identifiers become numbered tokens (`[PAN_1]`, `[PERSON_NAME_1]`) and the
   real values can be put back into a model's answer. The same identifier

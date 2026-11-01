@@ -173,8 +173,10 @@ cg_evaluate(docs, min_confidence = 0.5)
 
 ## Limits and what comes next
 
-- The vault behind `tokenise()` lives in memory: when the R session ends,
-  the tokens can no longer be restored. Saving it, encrypted, is next.
+- The vault behind `tokenise()` lives in memory until you save it with
+  `vault_save()`; the file is encrypted with a passphrase, and
+  `vault_open()` (or Python's `Vault.open()`) reads it back. Keep
+  `*.cgvault` files out of version control, and the passphrase out of code.
 - You call `redact()` or `tokenise()` yourself. A planned **proxy mode** - a local
   OpenAI-compatible server in front of Ollama or vLLM - will redact,
   restore and audit automatically, so tools you cannot change (Open WebUI,
