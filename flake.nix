@@ -94,7 +94,7 @@
           # its Arrow and DuckDB examples where those packages are available.
           # Published by .github/workflows/docs.yml.
           docsR = pkgs.rWrapper.override {
-            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ pkgdown knitr rmarkdown ])
+            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ pkgdown knitr rmarkdown sodium openssl ])
               ++ builtins.filter (p: (builtins.tryEval p.drvPath).success)
                 (with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr ]);
           };

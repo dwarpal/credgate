@@ -27,6 +27,10 @@ home:
   sidebar:
     html: pkgdown/sidebar.html
 
+news:
+  # Release dates would be looked up on CRAN; the site is built offline.
+  cran_dates: false
+
 reference:
   - title: Detect and scan
     desc: Find PII in text and in the columns of tables.
