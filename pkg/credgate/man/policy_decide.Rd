@@ -21,8 +21,8 @@ an error.}
 }
 \value{
 An object of class \code{cg_decision}: a list with \code{policy_id},
-\code{policy_revision}, \code{destination}, \code{tier}, \code{allowed}, \code{blocked_by} (rule
-ids), \code{matches} (a data frame of the identifiers with their \code{action} and
+\code{policy_revision}, \code{destination}, \code{tier}, \code{provider}, \code{url}, \code{allowed},
+\code{blocked_by} (\code{"destination-blocked"} and rule ids), \code{matches} (a data frame of the identifiers with their \code{action} and
 deciding \code{rule}, \code{"default"} when no rule matched) and \code{text} (the
 rewritten texts, or \code{NULL}).
 }

@@ -130,6 +130,69 @@ cases:
       - [mobile_in, redact, default]
     output: ['PAN [PAN_1] and pan [PAN_1], mobile [MOBILE_IN]']
 
+  - id: rules-for-particular-models
+    policy:
+      policy: credgate-policy
+      version: 1
+      id: per-model
+      revision: 1
+      destinations:
+        ollama-local: {tier: local}
+        vllm-shared: {tier: internal}
+      rules:
+        - {id: aadhaar-nowhere, when: {types: [aadhaar]}, action: block}
+        - {id: shared-server-no-ids, when: {destinations: [vllm-shared], classes: [identity_strong]}, action: redact}
+        - {id: everything-else-allowed, action: allow}
+      default_action: redact
+    texts: ['Name: Priya Nair; PAN ABCPE1234F']
+    destination: vllm-shared
+    allowed: true
+    matches:
+      - [person_name, allow, everything-else-allowed]
+      - [pan, redact, shared-server-no-ids]
+    output: ['Name: Priya Nair; PAN [PAN]']
+
+  - id: same-request-to-own-machine
+    policy:
+      policy: credgate-policy
+      version: 1
+      id: per-model
+      revision: 1
+      destinations:
+        ollama-local: {tier: local}
+        vllm-shared: {tier: internal}
+      rules:
+        - {id: aadhaar-nowhere, when: {types: [aadhaar]}, action: block}
+        - {id: shared-server-no-ids, when: {destinations: [vllm-shared], classes: [identity_strong]}, action: redact}
+        - {id: everything-else-allowed, action: allow}
+      default_action: redact
+    texts: ['Name: Priya Nair; PAN ABCPE1234F; Aadhaar 542229371182']
+    destination: ollama-local
+    allowed: false
+    blocked_by: [aadhaar-nowhere]
+    matches:
+      - [person_name, allow, everything-else-allowed]
+      - [pan, allow, everything-else-allowed]
+      - [aadhaar, block, aadhaar-nowhere]
+
+  - id: blocked-destination-refuses-everything
+    policy:
+      policy: credgate-policy
+      version: 1
+      id: endpoints
+      revision: 1
+      destinations:
+        vllm-gpu: {tier: internal, provider: vllm, url: 'https://llm.bank.internal/v1'}
+        copilot: {tier: frontier, provider: github, blocked: true, description: not approved}
+      rules:
+        - {id: allow-all, action: allow}
+      default_action: redact
+    texts: ['Summarise branch timings for Saturday']
+    destination: copilot
+    allowed: false
+    blocked_by: [destination-blocked]
+    matches: []
+
 invalid:
   - id: unknown-tier
     error: tier
@@ -147,6 +210,14 @@ invalid:
     error: wehn
     policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
              destinations: {m: {tier: local}}, rules: [{id: r, wehn: {}, action: block}], default_action: redact}
+  - id: unknown-destination-in-rule
+    error: copilot
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: local}}, rules: [{id: r, when: {destinations: [copilot]}, action: block}], default_action: redact}
+  - id: blocked-not-a-flag
+    error: blocked
+    policy: {policy: credgate-policy, version: 1, id: x, revision: 1,
+             destinations: {m: {tier: local, blocked: 'no'}}, rules: [], default_action: redact}
   - id: duplicate-rule-id
     error: duplicate
     policy: {policy: credgate-policy, version: 1, id: x, revision: 1,

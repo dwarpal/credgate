@@ -25,10 +25,11 @@ applied.
 Destinations have a tier: \code{local} (this machine), \code{internal} (the
 organisation's own network or hosting) or \code{frontier} (an external model
 provider). Rules are tried in order and the first that matches an
-identifier decides its action; a rule's \code{when} can name \code{tiers}, \code{types},
-\code{classes}, and \code{all_of} - types that must all occur in the request (for
-example a card number with its CVV and expiry date). Any \code{block} blocks
-the whole request.
+identifier decides its action; a rule's \code{when} can name particular
+\code{destinations}, \code{tiers}, \code{types}, \code{classes}, and \code{all_of} - types that must
+all occur in the request (for example a card number with its CVV and expiry
+date). Any \code{block} blocks the whole request. A destination that is not
+listed receives nothing: requests to it are refused.
 }
 \examples{
 policy <- cg_policy(list(

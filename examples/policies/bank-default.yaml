@@ -14,13 +14,43 @@ description: >
   Models inside the organisation may see customer data; frontier models may
   not. Card verification codes never leave the machine.
 
-# Where requests go, and how far they leave the organisation.
+# The endpoints InfoSec has set up. The tier says where the data ends up:
+#   local     models on the analyst's own machine (Ollama, vLLM, SGLang)
+#   internal  models the bank runs itself (open models on vLLM or SGLang in
+#             the data centre, behind the bank's gateway)
+#   frontier  external providers (Claude, OpenAI, Gemini) - also when reached
+#             through the bank's own gateway, since the data reaches them
+# `blocked: true` keeps an endpoint on record but refuses every request to it.
+# An endpoint that is not listed here receives nothing.
 destinations:
-  ollama-local: {tier: local, description: Ollama on the analyst's machine}
-  vllm-gpu: {tier: internal, description: shared vLLM server in the data centre}
-  claude: {tier: frontier, description: "external provider; limited, approved use only"}
-  gemini: {tier: frontier}
-  copilot: {tier: frontier}
+  ollama-local:
+    tier: local
+    provider: ollama
+    url: http://localhost:11434/v1
+    description: Ollama on the analyst's machine
+  vllm-gpu:
+    tier: internal
+    provider: vllm
+    url: https://llm.bank.internal/v1
+    description: shared vLLM server in the data centre (open models)
+  sglang-gpu:
+    tier: internal
+    provider: sglang
+    url: https://sglang.bank.internal/v1
+  claude:
+    tier: frontier
+    provider: anthropic
+    url: https://ai-gateway.bank.internal/anthropic
+    description: Claude through the bank's gateway; limited, approved use only
+  gemini:
+    tier: frontier
+    provider: google
+    url: https://ai-gateway.bank.internal/gemini
+  copilot:
+    tier: frontier
+    provider: github
+    blocked: true
+    description: not approved for credit data
 
 # Matches below this confidence are ignored (for example an order number that
 # passes the Aadhaar checksum by chance scores 0.42).
@@ -43,6 +73,12 @@ rules:
     when:
       tiers: [frontier]
       classes: [identity_strong, financial, health, contact, personal, quasi]
+    action: redact
+
+  # The shared GPU server is used by several teams: no government IDs there.
+  # (Rules can name particular endpoints, not only tiers.)
+  - id: shared-server-no-ids
+    when: {destinations: [vllm-gpu, sglang-gpu], classes: [identity_strong]}
     action: redact
 
   # Models on the analyst's machine or in the data centre may see the rest.

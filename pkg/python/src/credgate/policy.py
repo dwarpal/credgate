@@ -40,8 +40,8 @@ _TOP_FIELDS = {
     "default_action",
 }
 _RULE_FIELDS = {"id", "description", "when", "action"}
-_WHEN_FIELDS = {"tiers", "types", "classes", "all_of"}
-_DESTINATION_FIELDS = {"tier", "description"}
+_WHEN_FIELDS = {"destinations", "tiers", "types", "classes", "all_of"}
+_DESTINATION_FIELDS = {"tier", "provider", "url", "description", "blocked"}
 
 
 class PolicyError(ValueError):
@@ -53,15 +53,17 @@ class PolicyError(ValueError):
 class Rule:
     id: str
     action: str
+    destinations: frozenset[str] | None = None
     tiers: frozenset[str] | None = None
     types: frozenset[str] | None = None
     classes: frozenset[str] | None = None
     all_of: frozenset[str] | None = None
     description: str | None = None
 
-    def matches(self, span: Span, tier: str, found: set[str]) -> bool:
+    def matches(self, span: Span, destination: str, tier: str, found: set[str]) -> bool:
         return (
-            (self.tiers is None or tier in self.tiers)
+            (self.destinations is None or destination in self.destinations)
+            and (self.tiers is None or tier in self.tiers)
             and (self.types is None or span.type in self.types)
             and (self.classes is None or span.data_class in self.classes)
             and (self.all_of is None or self.all_of <= found)
@@ -95,6 +97,8 @@ class Decision:
     blocked_by: tuple[str, ...]
     matches: tuple[PolicyMatch, ...]
     texts: list[str] | None = None
+    provider: str | None = None
+    url: str | None = None
 
     def __str__(self) -> str:
         head = f"Policy {self.policy_id} (revision {self.policy_revision}), "
@@ -109,6 +113,18 @@ class Decision:
         return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class Destination:
+    """An endpoint requests may go to, as set up in the policy."""
+
+    name: str
+    tier: str
+    provider: str | None = None
+    url: str | None = None
+    description: str | None = None
+    blocked: bool = False
+
+
 class Policy:
     """A loaded, validated policy. Use :meth:`load` for a YAML file or
     :meth:`from_dict` for a mapping."""
@@ -117,7 +133,7 @@ class Policy:
         self,
         id: str,
         revision: int,
-        destinations: Mapping[str, str],
+        destinations: Mapping[str, Destination],
         rules: Sequence[Rule],
         default_action: str,
         min_confidence: float = 0.0,
@@ -152,18 +168,21 @@ class Policy:
     def decide(self, text: str | Sequence[str], destination: str) -> Decision:
         """Decide what happens to each identifier in a request to ``destination``,
         without changing the texts."""
-        tier = self._tier(destination)
+        dest = self._destination(destination)
+        tier = dest.tier
         docs = _texts(text)[0]
         spans = detect_pii(docs, min_confidence=self.min_confidence)
         found = {s.type for s in spans}
         matches = []
         for span in spans:
-            rule = next((r for r in self.rules if r.matches(span, tier, found)), None)
+            rule = next((r for r in self.rules if r.matches(span, destination, tier, found)), None)
             if rule is None:
                 matches.append(PolicyMatch(span, self.default_action, "default"))
             else:
                 matches.append(PolicyMatch(span, rule.action, rule.id))
-        blocked = tuple(dict.fromkeys(m.rule for m in matches if m.action == "block"))
+        blocked = (("destination-blocked",) if dest.blocked else ()) + tuple(
+            dict.fromkeys(m.rule for m in matches if m.action == "block")
+        )
         return Decision(
             policy_id=self.id,
             policy_revision=self.revision,
@@ -172,6 +191,8 @@ class Policy:
             allowed=not blocked,
             blocked_by=blocked,
             matches=tuple(matches),
+            provider=dest.provider,
+            url=dest.url,
         )
 
     def apply(
@@ -196,14 +217,14 @@ class Policy:
             out[span.doc] = out[span.doc][: span.start] + new + out[span.doc][span.end :]
         return Decision(**{**decision.__dict__, "texts": out})
 
-    def _tier(self, destination: str) -> str:
-        tier = self.destinations.get(destination)
-        if tier is None:
+    def _destination(self, destination: str) -> Destination:
+        found = self.destinations.get(destination)
+        if found is None:
             known = ", ".join(sorted(self.destinations)) or "none"
             raise PolicyError(
                 f"Unknown destination '{destination}' for policy {self.id}; known: {known}."
             )
-        return tier
+        return found
 
 
 def _parse(data: Any) -> Policy:
@@ -239,7 +260,19 @@ def _parse(data: Any) -> Policy:
                 f"Destination '{name}': unknown tier {spec.get('tier')!r}; "
                 f"tiers are {', '.join(TIERS)}."
             )
-        destinations[str(name)] = spec["tier"]
+        if not isinstance(spec.get("blocked", False), bool):
+            raise PolicyError(f"Destination '{name}': `blocked` must be true or false.")
+        for key in ("provider", "url", "description"):
+            if key in spec and not isinstance(spec[key], str):
+                raise PolicyError(f"Destination '{name}': `{key}` must be text.")
+        destinations[str(name)] = Destination(
+            str(name),
+            spec["tier"],
+            spec.get("provider"),
+            spec.get("url"),
+            spec.get("description"),
+            spec.get("blocked", False),
+        )
 
     types = {d["id"] for d in _detectors()}
     classes = set(CLASSES) | {d["class"] for d in _detectors()}
@@ -267,6 +300,7 @@ def _parse(data: Any) -> Policy:
         _check_fields(when, _WHEN_FIELDS, f"rule '{rid}' `when`")
         cond = {}
         for key, allowed, what in (
+            ("destinations", set(destinations), "destination"),
             ("tiers", set(TIERS), "tier"),
             ("types", types, "type"),
             ("classes", classes, "class"),

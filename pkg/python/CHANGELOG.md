@@ -5,7 +5,9 @@
 - Policies: a YAML policy (the same file in R and Python) decides, per
   destination tier (local, internal, frontier), whether each identifier is
   allowed, redacted or tokenised, or the whole request is blocked; rules can
-  require combinations (card + CVV + expiry). Loading is strict - unknown
+  target particular endpoints and require combinations (card + CVV + expiry).
+  Destinations form the register of model endpoints (tier, provider, URL)
+  and can be `blocked`; endpoints not listed receive nothing. Loading is strict - unknown
   fields, tiers, actions or types are errors - and each decision names the
   policy revision and the rule behind every action. `Policy.load()`,
   `Policy.decide()`, `Policy.apply()`, `PolicyError`.

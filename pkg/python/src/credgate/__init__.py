@@ -24,7 +24,7 @@ from .detect import Span, detect_pii, mask_value, set_mask
 from .detectors import Detector, bounded, detectors, register_detector, reset_detectors
 from .evaluate import EvaluationReport, TypeScore, evaluate, load_corpus
 from .normalise import Normalised, normalise
-from .policy import Decision, Policy, PolicyError, PolicyMatch
+from .policy import Decision, Destination, Policy, PolicyError, PolicyMatch
 from .redact import Preview, preview, redact
 from .scan import ColumnFinding, ScanReport, scan_pii
 from .synth import synth_indian_pii
@@ -42,6 +42,7 @@ from .tokenise import (
 __all__ = [
     "ColumnFinding",
     "Decision",
+    "Destination",
     "Detector",
     "EvaluationReport",
     "Normalised",

@@ -153,10 +153,17 @@ available programmatically (`x$value`, `span.value`) or with `--reveal`.
 A policy says, per destination, what happens to each kind of identifier:
 let it through, redact it, tokenise it, or block the whole request. It is a
 YAML file owned by InfoSec and compliance, and the same file works in R and
-Python. See [`examples/policies/bank-default.yaml`](examples/policies/bank-default.yaml):
-models on the analyst's machine or in the data centre may see customer
-data, frontier models may not, a card number with its CVV and expiry is
-never sent to a frontier model, and card verification codes never leave.
+Python. It is also the register of model endpoints: each has a tier -
+`local` (the analyst's machine), `internal` (open models the organisation
+runs, such as vLLM or SGLang) or `frontier` (Claude, OpenAI, Gemini, also
+through the organisation's own gateway) - a provider and URL, and can be
+`blocked`; an endpoint that is not listed receives nothing. Rules can target
+tiers or particular endpoints. See
+[`examples/policies/bank-default.yaml`](examples/policies/bank-default.yaml):
+in-house models may see customer data (but not government IDs on the shared
+GPU server), frontier models may not, a card number with its CVV and expiry
+is never sent to a frontier model, card verification codes never leave, and
+Copilot is blocked.
 
 ```python
 policy = credgate.Policy.load("bank-default.yaml")

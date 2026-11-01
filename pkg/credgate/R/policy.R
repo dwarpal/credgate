@@ -21,10 +21,11 @@ policy_classes <- c(
 #' Destinations have a tier: `local` (this machine), `internal` (the
 #' organisation's own network or hosting) or `frontier` (an external model
 #' provider). Rules are tried in order and the first that matches an
-#' identifier decides its action; a rule's `when` can name `tiers`, `types`,
-#' `classes`, and `all_of` - types that must all occur in the request (for
-#' example a card number with its CVV and expiry date). Any `block` blocks
-#' the whole request.
+#' identifier decides its action; a rule's `when` can name particular
+#' `destinations`, `tiers`, `types`, `classes`, and `all_of` - types that must
+#' all occur in the request (for example a card number with its CVV and expiry
+#' date). Any `block` blocks the whole request. A destination that is not
+#' listed receives nothing: requests to it are refused.
 #'
 #' @param x Path to a policy file (YAML), or the policy as a list.
 #' @return An object of class `cg_policy`.
@@ -98,20 +99,36 @@ parse_policy <- function(x) {
   if (!is.list(dests) || length(dests) == 0 || is.null(names(dests))) {
     policy_fail("The policy needs at least one destination.")
   }
-  tiers <- vapply(names(dests), function(name) {
+  destinations <- lapply(names(dests), function(name) {
     d <- dests[[name]]
     if (!is.list(d)) {
       policy_fail("Destination '", name, "' must be a mapping with a `tier`.")
     }
-    check_policy_fields(d, c("tier", "description"), paste0("destination '", name, "'"))
+    check_policy_fields(
+      d, c("tier", "provider", "url", "description", "blocked"),
+      paste0("destination '", name, "'")
+    )
     if (!rlang::is_string(d$tier) || !d$tier %in% policy_tiers) {
       policy_fail(
         "Destination '", name, "': unknown tier '", format(d$tier), "'; tiers are ",
         paste(policy_tiers, collapse = ", "), "."
       )
     }
-    d$tier
-  }, character(1))
+    if (!is.null(d$blocked) && !rlang::is_bool(d$blocked)) {
+      policy_fail("Destination '", name, "': `blocked` must be true or false.")
+    }
+    for (key in c("provider", "url", "description")) {
+      if (!is.null(d[[key]]) && !rlang::is_string(d[[key]])) {
+        policy_fail("Destination '", name, "': `", key, "` must be text.")
+      }
+    }
+    list(
+      name = name, tier = d$tier, provider = d$provider, url = d$url,
+      description = d$description, blocked = isTRUE(d$blocked)
+    )
+  })
+  names(destinations) <- names(dests)
+  tiers <- vapply(destinations, `[[`, character(1), "tier")
 
   known_types <- cg_detectors()$id
   known_classes <- union(policy_classes, cg_detectors()$class)
@@ -139,7 +156,10 @@ parse_policy <- function(x) {
     if (!is.list(when)) {
       policy_fail("Rule '", r$id, "': `when` must be a mapping.")
     }
-    check_policy_fields(when, c("tiers", "types", "classes", "all_of"), paste0("rule '", r$id, "' `when`"))
+    check_policy_fields(
+      when, c("destinations", "tiers", "types", "classes", "all_of"),
+      paste0("rule '", r$id, "' `when`")
+    )
     condition <- function(key, allowed, what) {
       if (is.null(when[[key]])) {
         return(NULL)
@@ -156,6 +176,7 @@ parse_policy <- function(x) {
     }
     list(
       id = r$id, action = r$action, description = r$description,
+      destinations = condition("destinations", names(tiers), "destination"),
       tiers = condition("tiers", policy_tiers, "tier"),
       types = condition("types", known_types, "type"),
       classes = condition("classes", known_classes, "class"),
@@ -173,7 +194,7 @@ parse_policy <- function(x) {
   structure(
     list(
       id = x$id, revision = as.integer(rev), description = x$description,
-      destinations = tiers, min_confidence = as.numeric(min_conf),
+      destinations = destinations, min_confidence = as.numeric(min_conf),
       rules = rules, default_action = default
     ),
     class = "cg_policy"
@@ -194,14 +215,15 @@ parse_policy <- function(x) {
 #'   an error.
 #' @param vault A vault from [cg_vault()], needed when the policy tokenises.
 #' @return An object of class `cg_decision`: a list with `policy_id`,
-#'   `policy_revision`, `destination`, `tier`, `allowed`, `blocked_by` (rule
-#'   ids), `matches` (a data frame of the identifiers with their `action` and
+#'   `policy_revision`, `destination`, `tier`, `provider`, `url`, `allowed`,
+#'   `blocked_by` (`"destination-blocked"` and rule ids), `matches` (a data frame of the identifiers with their `action` and
 #'   deciding `rule`, `"default"` when no rule matched) and `text` (the
 #'   rewritten texts, or `NULL`).
 #' @export
 policy_decide <- function(policy, text, destination) {
   check_policy(policy)
-  tier <- policy_tier(policy, destination)
+  dest <- policy_destination(policy, destination)
+  tier <- dest$tier
   text <- from_arrow(text)$text
   docs <- ifelse(is.na(text), "", text)
   spans <- detect_pii(docs, min_confidence = policy$min_confidence)
@@ -210,7 +232,8 @@ policy_decide <- function(policy, text, destination) {
   rule <- rep(NA_character_, nrow(spans))
   for (r in policy$rules) {
     hit <- is.na(action) &
-      (is.null(r$tiers) | tier %in% r$tiers) &
+      (is.null(r$destinations) || destination %in% r$destinations) &
+      (is.null(r$tiers) || tier %in% r$tiers) &
       (if (is.null(r$types)) TRUE else spans$type %in% r$types) &
       (if (is.null(r$classes)) TRUE else spans$class %in% r$classes) &
       (is.null(r$all_of) || all(r$all_of %in% found))
@@ -222,12 +245,12 @@ policy_decide <- function(policy, text, destination) {
   matches <- as.data.frame(unclass(spans))
   matches$action <- action
   matches$rule <- rule
-  blocked <- unique(rule[action == "block"])
+  blocked <- c(if (dest$blocked) "destination-blocked", unique(rule[action == "block"]))
   structure(
     list(
       policy_id = policy$id, policy_revision = policy$revision,
-      destination = destination, tier = tier,
-      allowed = length(blocked) == 0, blocked_by = blocked,
+      destination = destination, tier = tier, provider = dest$provider, url = dest$url,
+      allowed = length(blocked) == 0, blocked_by = as.character(blocked),
       matches = matches, text = NULL
     ),
     class = "cg_decision"
@@ -259,14 +282,14 @@ policy_apply <- function(policy, text, destination, vault = NULL) {
   decision
 }
 
-policy_tier <- function(policy, destination) {
+policy_destination <- function(policy, destination) {
   stopifnot(rlang::is_string(destination))
-  tier <- policy$destinations[destination]
-  if (is.na(tier)) {
+  dest <- policy$destinations[[destination]]
+  if (is.null(dest)) {
     known <- if (length(policy$destinations)) paste(sort(names(policy$destinations)), collapse = ", ") else "none"
     policy_fail("Unknown destination '", destination, "' for policy ", policy$id, "; known: ", known, ".")
   }
-  unname(tier)
+  dest
 }
 
 check_policy <- function(policy) {
