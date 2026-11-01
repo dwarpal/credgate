@@ -6,7 +6,7 @@
 \alias{credgate-package}
 \title{credgate: Detect Indian Personal Data Before It Reaches Language Models}
 \description{
-Detects personal data in text before it is sent to a large language model, with Indian identifiers built in: Aadhaar (validated with the Verhoeff checksum), Aadhaar Virtual ID, PAN, GSTIN, voter ID, passport and driving licence numbers, UPI IDs, IFSC codes, bank account and payment card numbers, mobile numbers and Ayushman Bharat (ABHA) health IDs, plus rule-based detection of names and addresses in Latin and Indic scripts. Candidates are validated with checksums, scored from surrounding context and matched through Indic digits and invisible characters. The rules come from a language-neutral specification shared with the 'Python' package of the same name.
+Detects personal data in text before it is sent to a large language model, with Indian identifiers built in: Aadhaar (validated with the Verhoeff checksum), Aadhaar Virtual ID, PAN, GSTIN, voter ID, passport, driving licence, CKYC, ration card and job card numbers, UPI IDs, IFSC codes, bank account and payment card numbers with expiry dates and verification codes, mobile numbers and Ayushman Bharat (ABHA) health IDs, plus rule-based detection of names and addresses in Latin and Indic scripts. Candidates are validated with checksums, scored from surrounding context and matched through Indic digits and invisible characters. The rules come from a language-neutral specification shared with the 'Python' package of the same name.
 }
 \section{Masking}{
 

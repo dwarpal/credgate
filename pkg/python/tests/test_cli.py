@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+import credgate
 from credgate.cli import main
 
 
@@ -74,7 +75,9 @@ def test_scan_delimiter_sample_and_empty(tmp_path, capsys):
 
 def test_detectors_lists_every_builtin(capsys):
     assert main(["detectors"]) == 0
-    assert len(capsys.readouterr().out.strip().splitlines()) == 19
+    spec = (credgate.spec_path() / "detectors.yaml").read_text(encoding="utf-8")
+    n_spec = sum(line.startswith("  - id: ") for line in spec.splitlines())
+    assert len(capsys.readouterr().out.strip().splitlines()) == n_spec
 
 
 def test_version_flag(capsys):

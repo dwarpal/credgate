@@ -18,7 +18,8 @@ email addresses use the reserved \code{example.com}/\code{example.org} domains.}
 A data frame with columns \code{name}, \code{name_hi} (Devanagari),
 \code{aadhaar}, \code{aadhaar_vid}, \code{pan}, \code{gstin}, \code{card}, \code{voter_epic},
 \code{passport}, \code{driving_licence}, \code{mobile}, \code{email}, \code{upi_id}, \code{ifsc},
-\code{bank_account}, \code{abha_number}, \code{abha_address}, \code{pincode} and \code{address}.
+\code{bank_account}, \code{abha_number}, \code{abha_address}, \code{pincode}, \code{address},
+\code{ckyc}, \code{ration_card}, \code{nrega_job_card}, \code{card_cvv} and \code{card_expiry}.
 }
 \description{
 Produces random identifiers that pass the same structural and checksum

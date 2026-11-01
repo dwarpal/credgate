@@ -9,26 +9,38 @@ address in it is synthetic. Results are for the held-out `test` split; the
 `dev` split was used to find and fix bugs, so `test` was not tuned against.
 The R and Python packages produce identical numbers.
 
-Measured on 2026-11-01 with Python 0.4.0 (R 0.1.0.9000).
+Measured on 2026-11-01 on corpus version 2 (below), with the development
+version after Python 0.5.0 (R 0.1.0.9000).
 
 ## Summary
 
 At the recommended threshold (`min_confidence = 0.5`):
 
-- **Overall: precision 0.999, recall 0.967, F1 0.983** - 1 false positive
+- **Overall: precision 1.000, recall 0.961, F1 0.980** - no false positives
   in 700 documents.
-- 13 of 17 types score F1 1.000 (Aadhaar, mobile, PAN, GSTIN, IFSC, email,
-  UPI, passport, driving licence, ABHA number, ABHA address, postal address,
-  PIN code), bank account and card 0.99.
+- 19 of 22 types score F1 1.000, including the newest: card verification
+  codes, card expiry dates, ration card and NREGA job card numbers.
 - Weakest: **voter ID** (recall 0.51) - a bare `ABC1234567` without a word
   such as "voter" or "EPIC" is reported at 0.3, below the threshold, because
-  the format alone could be a product code; and **names** (recall 0.92) in
-  running text without an honorific, label or "ji".
+  the format alone could be a product code; **CKYC numbers** (recall 0.67) -
+  a bare 14-digit number without a cue such as "CKYC" or "KIN" is not
+  reported at all, by design; and **names** (recall 0.93) in running text
+  without an honorific, label or "ji".
 - Without a threshold, low-confidence matches on order and reference numbers
-  that pass the Aadhaar checksum by chance cut Aadhaar precision to 0.52;
-  they are reported (at 0.42-0.48) so callers can decide.
+  that pass the Aadhaar checksum by chance cut Aadhaar precision; they are
+  reported (at 0.42-0.48) so callers can decide.
 
-### Changes since the first measurement (2026-10-31)
+### Corpus version 2 (2026-11-01)
+
+The corpus now includes the identifiers added after 0.5.0 - CKYC, ration
+card and NREGA job card numbers, card verification codes and expiry dates -
+in KYC forms, card payment notes, call-centre notes and Hinglish chats, a
+bare record (where a CKYC number cannot be recognised without a cue), and a
+negative document with full dates next to "valid till". Adding templates
+changes every generated document, so numbers on version 2 are not directly
+comparable with those in the next section, measured on version 1.
+
+### Changes on corpus version 1 (2026-10-31 to 2026-11-01)
 
 Overall F1 at 0.5 rose from 0.947 to 0.983 (precision 0.997 to 0.999)
 after four rule changes, each found by studying errors on `dev`:
@@ -75,65 +87,75 @@ or in R: `cg_evaluate("benchmark/corpus/test.jsonl", min_confidence = 0.5)`.
 To evaluate on your own labelled data, use the same JSON Lines format
 (see `spec/README.md`, "Evaluation").
 
-## Results: test split: 700 documents, 1260 labelled spans
+## Results: test split: 700 documents, 1320 labelled spans
 
 ### min_confidence = 0.5, exact matching
 
 | Type | TP | FP | FN | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| `aadhaar` | 104 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `abha_address` | 40 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `abha_number` | 80 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `address` | 63 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `bank_account` | 82 | 0 | 1 | 1.000 | 0.988 | 0.994 |
-| `card` | 41 | 1 | 0 | 0.976 | 1.000 | 0.988 |
-| `driving_licence` | 21 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `email` | 62 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `gstin` | 41 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `ifsc` | 62 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `mobile_in` | 186 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `pan` | 83 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `passport` | 21 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `person_name` | 227 | 0 | 21 | 1.000 | 0.915 | 0.956 |
-| `pincode` | 21 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `upi_id` | 63 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `voter_epic` | 21 | 0 | 20 | 1.000 | 0.512 | 0.677 |
-| **overall** | 1218 | 1 | 42 | 0.999 | 0.967 | 0.983 |
+| `aadhaar` | 86 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `abha_address` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `abha_number` | 68 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `address` | 52 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `bank_account` | 68 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `card` | 68 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `card_cvv` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `card_expiry` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `ckyc` | 34 | 0 | 17 | 1.000 | 0.667 | 0.800 |
+| `driving_licence` | 17 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `email` | 52 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `gstin` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `ifsc` | 51 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `mobile_in` | 155 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `nrega_job_card` | 51 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `pan` | 69 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `passport` | 18 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `person_name` | 224 | 0 | 17 | 1.000 | 0.929 | 0.963 |
+| `pincode` | 17 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `ration_card` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `upi_id` | 51 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `voter_epic` | 18 | 0 | 17 | 1.000 | 0.514 | 0.679 |
+| **overall** | 1269 | 0 | 51 | 1.000 | 0.961 | 0.980 |
 
 ### min_confidence = 0.0, exact matching
 
 | Type | TP | FP | FN | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| `aadhaar` | 104 | 97 | 0 | 0.517 | 1.000 | 0.682 |
-| `abha_address` | 40 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `abha_number` | 80 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `address` | 63 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `bank_account` | 82 | 0 | 1 | 1.000 | 0.988 | 0.994 |
-| `card` | 41 | 2 | 0 | 0.954 | 1.000 | 0.976 |
-| `driving_licence` | 21 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `email` | 62 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `gstin` | 41 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `ifsc` | 62 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `mobile_in` | 186 | 8 | 0 | 0.959 | 1.000 | 0.979 |
-| `pan` | 83 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `passport` | 21 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `person_name` | 227 | 0 | 21 | 1.000 | 0.915 | 0.956 |
-| `pincode` | 21 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `upi_id` | 63 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| `voter_epic` | 41 | 0 | 0 | 1.000 | 1.000 | 1.000 |
-| **overall** | 1238 | 107 | 22 | 0.920 | 0.983 | 0.951 |
+| `aadhaar` | 86 | 81 | 0 | 0.515 | 1.000 | 0.680 |
+| `abha_address` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `abha_number` | 68 | 17 | 0 | 0.800 | 1.000 | 0.889 |
+| `address` | 52 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `bank_account` | 68 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `card` | 68 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `card_cvv` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `card_expiry` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `ckyc` | 34 | 0 | 17 | 1.000 | 0.667 | 0.800 |
+| `driving_licence` | 17 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `email` | 52 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `gstin` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `ifsc` | 51 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `mobile_in` | 155 | 5 | 0 | 0.969 | 1.000 | 0.984 |
+| `nrega_job_card` | 51 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `pan` | 69 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `passport` | 18 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `person_name` | 224 | 0 | 17 | 1.000 | 0.929 | 0.963 |
+| `pincode` | 17 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `ration_card` | 34 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `upi_id` | 51 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| `voter_epic` | 35 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+| **overall** | 1286 | 103 | 34 | 0.926 | 0.974 | 0.949 |
 
 ### By category (min_confidence = 0.5)
 
 | Category | Documents | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|
-| bank | 126 | 0.992 | 0.992 | 0.992 |
-| callcentre | 105 | 1.000 | 0.909 | 0.952 |
-| chat | 103 | 1.000 | 1.000 | 1.000 |
-| health | 60 | 1.000 | 1.000 | 1.000 |
-| kyc | 126 | 1.000 | 1.000 | 1.000 |
-| negative | 100 | - | - | - |
-| record | 80 | 1.000 | 0.909 | 0.952 |
+| bank | 119 | 1.000 | 1.000 | 1.000 |
+| callcentre | 102 | 1.000 | 0.929 | 0.963 |
+| chat | 102 | 1.000 | 1.000 | 1.000 |
+| health | 51 | 1.000 | 1.000 | 1.000 |
+| kyc | 139 | 1.000 | 1.000 | 1.000 |
+| negative | 102 | - | - | - |
+| record | 85 | 1.000 | 0.846 | 0.917 |
 
 ## Throughput
 
@@ -160,11 +182,13 @@ speed as detection; R's `tokenise()` went from 538 to 2,672 notes per second
 **What limits it.** About 0.4 MB of text per second per core in Python
 (0.2 in R). In Python, about 60% of the time is the regular-expression engine
 itself - the name patterns most - and most of the rest is building results.
-Detection is independent per text, so it scales with cores and machines;
-running it on Spark, DuckDB, Polars and Arrow is planned, and a compiled
-matching engine (such as PCRE2 with its JIT compiler) is being considered.
+Detection is independent per text, so it scales with cores and machines:
+it runs inside DuckDB, Polars and Arrow pipelines (see
+[docs/large-data.md](../docs/large-data.md)); Spark is planned, and a
+compiled matching engine (such as PCRE2 with its JIT compiler) is being
+considered.
 
-
+## Comparison with Microsoft Presidio
 
 [Presidio](https://github.com/microsoft/presidio) (MIT) is the most widely
 used open-source PII detector and ships recognisers for Indian identifiers,
@@ -190,54 +214,60 @@ is a runnable open-source tool whose licence allows publishing results.
   account). Other Presidio entities (dates, URLs, US identifiers, ...) are
   listed separately, not counted as errors.
 - **Two views.** *Common types* (types both tools have a recogniser for) is
-  the like-for-like comparison; *all 17 types* also counts types Presidio has
-  no recogniser for (UPI, IFSC, ABHA, driving licence, PIN code).
+  the like-for-like comparison; *all 22 types* also counts types Presidio has
+  no recogniser for (UPI, IFSC, ABHA, driving licence, PIN code, CKYC,
+  ration card, NREGA job card, card verification code and expiry).
 
-Versions: credgate 0.4.0; presidio-analyzer 2.2.366, spaCy 3.8.18, en_core_web_lg 3.8.0.
+Versions: credgate 0.5.0 plus the new detectors; presidio-analyzer 2.2.366, spaCy 3.8.18, en_core_web_lg 3.8.0.
 
-Test split: 700 documents, 1260 labelled spans. Thresholds tuned on dev for best overall F1 on the types both tools cover.
+Test split: 700 documents, 1320 labelled spans. Thresholds tuned on dev for best overall F1 on the types both tools cover.
 
 ### Overall
 
-| System | Threshold (tuned on dev) | Common types: P / R / F1 (exact) | Common types: F1 (overlap) | All 17 types: P / R / F1 (exact) | Seconds for dev+test |
+| System | Threshold (tuned on dev) | Common types: P / R / F1 (exact) | Common types: F1 (overlap) | All 22 types: P / R / F1 (exact) | Seconds for dev+test |
 |---|---:|---|---:|---|---:|
-| credgate | 0.5 | 0.999 / 0.957 / **0.977** | 0.977 | 0.999 / 0.967 / 0.983 | 0.2 |
-| Presidio (default) | 0.1 | 0.555 / 0.472 / **0.510** | 0.607 | 0.555 / 0.364 / 0.440 | 11.9 |
-| Presidio (India-configured) | 0.1 | 0.600 / 0.748 / **0.666** | 0.745 | 0.600 / 0.578 / 0.589 | 11.4 |
+| credgate | 0.5 | 1.000 / 0.961 / **0.980** | 0.980 | 1.000 / 0.961 / 0.980 | 0.3 |
+| Presidio (default) | 0.1 | 0.565 / 0.498 / **0.529** | 0.617 | 0.565 / 0.331 / 0.418 | 12.1 |
+| Presidio (India-configured) | 0.1 | 0.609 / 0.754 / **0.674** | 0.747 | 0.609 / 0.501 / 0.550 | 11.6 |
 
 ### F1 per type (exact matching, tuned thresholds)
 
 | Type | Labelled spans | credgate | Presidio (default) | Presidio (India-configured) |
 |---|---:|---:|---:|---:|
-| `aadhaar` | 104 | 1.000 | 0.000 | 0.561 |
-| `abha_address` * | 40 | 1.000 | 0.000 | 0.000 |
-| `abha_number` * | 80 | 1.000 | 0.000 | 0.000 |
-| `address` | 63 | 1.000 | 0.000 | 0.000 |
-| `bank_account` | 83 | 0.994 | 0.388 | 0.388 |
-| `card` | 41 | 0.988 | 0.954 | 0.954 |
-| `driving_licence` * | 21 | 1.000 | 0.000 | 0.000 |
-| `email` | 62 | 1.000 | 1.000 | 1.000 |
-| `gstin` | 41 | 1.000 | 0.000 | 1.000 |
-| `ifsc` * | 62 | 1.000 | 0.000 | 0.000 |
-| `mobile_in` | 186 | 1.000 | 0.855 | 0.875 |
-| `pan` | 83 | 1.000 | 0.000 | 0.897 |
-| `passport` | 21 | 1.000 | 0.000 | 1.000 |
-| `person_name` | 248 | 0.956 | 0.466 | 0.466 |
-| `pincode` * | 21 | 1.000 | 0.000 | 0.000 |
-| `upi_id` * | 63 | 1.000 | 0.000 | 0.000 |
-| `voter_epic` | 41 | 0.677 | 0.000 | 1.000 |
+| `aadhaar` | 86 | 1.000 | 0.000 | 0.566 |
+| `abha_address` * | 34 | 1.000 | 0.000 | 0.000 |
+| `abha_number` * | 68 | 1.000 | 0.000 | 0.000 |
+| `address` | 52 | 1.000 | 0.000 | 0.000 |
+| `bank_account` | 68 | 1.000 | 0.381 | 0.381 |
+| `card` | 68 | 1.000 | 0.978 | 0.978 |
+| `card_cvv` * | 34 | 1.000 | 0.000 | 0.000 |
+| `card_expiry` * | 34 | 1.000 | 0.000 | 0.000 |
+| `ckyc` * | 51 | 0.800 | 0.000 | 0.000 |
+| `driving_licence` * | 17 | 1.000 | 0.000 | 0.000 |
+| `email` | 52 | 1.000 | 1.000 | 1.000 |
+| `gstin` | 34 | 1.000 | 0.000 | 1.000 |
+| `ifsc` * | 51 | 1.000 | 0.000 | 0.000 |
+| `mobile_in` | 155 | 1.000 | 0.814 | 0.847 |
+| `nrega_job_card` * | 51 | 1.000 | 0.000 | 0.000 |
+| `pan` | 69 | 1.000 | 0.000 | 0.902 |
+| `passport` | 18 | 1.000 | 0.000 | 1.000 |
+| `person_name` | 241 | 0.963 | 0.484 | 0.484 |
+| `pincode` * | 17 | 1.000 | 0.000 | 0.000 |
+| `ration_card` * | 34 | 1.000 | 0.000 | 0.000 |
+| `upi_id` * | 51 | 1.000 | 0.000 | 0.000 |
+| `voter_epic` | 35 | 0.679 | 0.000 | 1.000 |
 
 \* No Presidio recogniser for this type.
 
 ### Presidio entities outside the comparison (test split, counts)
 
-- Presidio (default): US_DRIVER_LICENSE 720, DATE_TIME 326, URL 104, UK_NHS 16, US_PASSPORT 8, US_SSN 8, MEDICAL_LICENSE 7, NRP 2
-- Presidio (India-configured): US_DRIVER_LICENSE 720, DATE_TIME 326, URL 104, UK_NHS 16, US_PASSPORT 8, US_SSN 8, MEDICAL_LICENSE 7, NRP 2
+- Presidio (default): US_DRIVER_LICENSE 683, DATE_TIME 325, URL 83, US_PASSPORT 10, US_SSN 10, UK_NHS 10, NRP 5, MEDICAL_LICENSE 3
+- Presidio (India-configured): US_DRIVER_LICENSE 683, DATE_TIME 325, URL 83, US_PASSPORT 10, US_SSN 10, UK_NHS 10, NRP 5, MEDICAL_LICENSE 3
 
 ### Reading the results
 
-- **On this Indian-context corpus, credgate scores higher** (F1 0.977 vs
-  0.666 on common types, India-configured Presidio). The gaps are genuine, not scoring
+- **On this Indian-context corpus, credgate scores higher** (F1 0.980 vs
+  0.674 on common types, India-configured Presidio). The gaps are genuine, not scoring
   artefacts - exact and overlap matching agree except for names and
   addresses, where Presidio's spans are shorter or include the honorific:
   - *Aadhaar*: Presidio misses every Aadhaar written in Devanagari digits and
@@ -249,14 +279,14 @@ Test split: 700 documents, 1260 labelled spans. Thresholds tuned on dev for best
   - *Mobile*: it flags amounts and bank account numbers.
   - *Addresses*: Presidio finds place names, not addresses (`LOCATION`), so
     it scores 0 with exact matching and 0.63 with overlap.
-- **Presidio wins on voter IDs without context** (F1 1.000 vs 0.677). Both
+- **Presidio wins on voter IDs without context** (F1 1.000 vs 0.679). Both
   tools report a bare `ABC1234567` at a low score, but Presidio's score
   passes its tuned threshold (0.1) and credgate's 0.3 is below its 0.5. We
   keep 0.3: the format alone could be a product code, and a threshold low
   enough to count these would also count order numbers that pass the Aadhaar
   checksum by chance.
-- **Speed**: credgate processed both splits (1,400 documents) in about 0.2
-  seconds; Presidio took 11-12 seconds, mostly in spaCy's NER (same machine,
+- **Speed**: credgate processed both splits (1,400 documents) in about 0.3
+  seconds; Presidio took about 12 seconds, mostly in spaCy's NER (same machine,
   single process).
 - **Presidio is general-purpose and extensible.** It can be given custom
   recognisers for UPI, IFSC or ABHA; this comparison is of what it ships.
@@ -308,7 +338,7 @@ PYTHONPATH=pkg/python/src presidio-env/bin/python benchmark/compare_presidio.py
 
 ## Next improvements
 
-1. Names in running text without a cue (21 misses): a names list checked for
+1. Names in running text without a cue (17 misses): a names list checked for
    coverage across regions, and other Hinglish cues ("bhai", "sahab").
 2. Voter IDs without context: cues from record structure, beyond the
    column names `scan_pii` already uses.

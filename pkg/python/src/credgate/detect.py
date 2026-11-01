@@ -280,7 +280,7 @@ _ALNUM = regex.compile(r"[\p{L}\p{N}]")
 
 # Classes whose values are masked in full: the end of a name or an address
 # identifies a person, unlike the last digits of an ID number.
-FULL_MASK_CLASSES = frozenset({"personal"})
+FULL_MASK_CLASSES = frozenset({"personal", "sensitive_auth"})
 MASK_MODES = ("partial", "full")
 _mask_mode: str | None = None
 

@@ -87,6 +87,16 @@ TEMPLATES = [
         "नाम: {name_hi:person_name}; आधार {aadhaar:aadhaar|dev}; मोबाइल {mobile:mobile_in}",
     ),
     ("kyc", "hi", "पता: {address:address}; पिन {pincode:pincode}"),
+    (
+        "kyc",
+        "en",
+        "CKYC No: {ckyc:ckyc}; Name: {name:person_name}; Ration card no: {ration_card:ration_card}",
+    ),
+    (
+        "kyc",
+        "hi",
+        "नाम: {name_hi:person_name}; राशन कार्ड संख्या {ration_card:ration_card}; जॉब कार्ड {nrega_job_card:nrega_job_card}",
+    ),
     # Banking
     (
         "bank",
@@ -106,6 +116,11 @@ TEMPLATES = [
     ),
     ("bank", "en", "GSTIN {gstin:gstin} filed returns; reference {order12:-}; amount {amount:-}."),
     ("bank", "hi", "खाता {bank_account:bank_account} में {amount:-} रुपये जमा हुए"),
+    (
+        "bank",
+        "en",
+        "Card {card:card|spaced} exp {card_expiry:card_expiry} CVV {card_cvv:card_cvv} entered on the payment page for Rs {amount:-}.",
+    ),
     # Call-centre notes (English)
     (
         "callcentre",
@@ -132,6 +147,11 @@ TEMPLATES = [
         "en",
         "Account holder: {name:person_name}, account no {bank_account:bank_account}, branch IFSC {ifsc:ifsc|lower}.",
     ),
+    (
+        "callcentre",
+        "en",
+        "Customer read out card {card:card}, expiry {card_expiry:card_expiry}, security code {card_cvv:card_cvv}; call flagged for PCI.",
+    ),
     # Hinglish chats
     (
         "chat",
@@ -146,6 +166,11 @@ TEMPLATES = [
     ),
     ("chat", "hinglish", "{name:person_name} ji ka number {mobile:mobile_in} hai, kal call karna"),
     ("chat", "hinglish", "Order {order12:-} kab aayega? Amount {amount:-} already pay kiya"),
+    (
+        "chat",
+        "hinglish",
+        "Job card {nrega_job_card:nrega_job_card} pe paisa nahi aaya, CKYC {ckyc:ckyc} bhi diya tha",
+    ),
     # Healthcare
     (
         "health",
@@ -163,6 +188,9 @@ TEMPLATES = [
     ("record", "en", "{voter_epic:voter_epic}|{bank_account:bank_account}|{ifsc:ifsc}"),
     ("record", "en", "{aadhaar:aadhaar};{gstin:gstin};{card:card}"),
     ("record", "en", "{abha_number:abha_number},{abha_address:abha_address},{date:-}"),
+    # Bare: the job card is recognisable by its structure; a CKYC number
+    # without a cue is not (any 14-digit number), so it counts as missed.
+    ("record", "en", "{nrega_job_card:nrega_job_card},{ckyc:ckyc}"),
     # Negatives (no PII at all)
     (
         "negative",
@@ -173,6 +201,7 @@ TEMPLATES = [
     ("negative", "en", "Ticket {ticket:-} raised; tracking AWB {txn:-}; amount {amount:-}."),
     ("negative", "hinglish", "Kal ki meeting {date:-} ko hai, order {order12:-} ready rakhna"),
     ("negative", "hi", "बैठक {date:-} को होगी, राशि {amount:-}"),
+    ("negative", "en", "Offer valid till {date:-} on all cards; helpline for CVV queries."),
 ]
 
 SLOT = re.compile(r"\{(\w+):([\w-]+)(?:\|(\w+))?\}")

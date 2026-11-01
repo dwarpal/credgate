@@ -263,7 +263,7 @@ print.cg_spans <- function(x, ..., reveal = FALSE) {
 # person, unlike the last digits of an ID number.
 # The option `credgate.mask` (or the environment variable `CREDGATE_MASK`)
 # set to "full" keeps nothing for any value; see ?credgate-package.
-full_mask_classes <- "personal"
+full_mask_classes <- c("personal", "sensitive_auth")
 mask_modes <- c("partial", "full")
 
 current_mask <- function() {

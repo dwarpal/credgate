@@ -90,6 +90,11 @@ fragments:
   label_latin: '(?i:\b(?:name|naam|customer name|applicant name|full name|nominee|borrower|co-borrower|insured|policy ?holder|patient(?: name)?|account holder|beneficiary))\s{0,2}[:-]\s{0,3}'
   label_indic: '(?:नाम|पिता का नाम|पति का नाम|माता का नाम)\s{0,2}[:-]\s{0,3}'
 
+  # Labels right before a value; each fragment is one group, so it can be
+  # spliced into a pattern.
+  ration_label: '(?:(?i:\b(?:ration card|ration)(?: card)?\s?(?:no\.?|number|num|#)?)\s{0,2}[:#-]?\s{0,3}|राशन कार्ड(?:\s?(?:संख्या|नंबर|क्रमांक))?\s{0,2}[:-]?\s{0,3})'
+  cvv_label: '(?:(?i:\b(?:cvv2?|cvc2?|cid|cvn|card verification (?:code|value|number)|security code))\s?(?:(?i:no\.?|number|code)\s?)?(?:(?i:is)\s)?[:#-]?\s{0,3}|सीवीवी\s{0,2}[:-]?\s{0,3})'
+
   # --- Addresses ---------------------------------------------------------
   address_label_latin: '(?i:\b(?:address|addr|residential address|permanent address|correspondence address|r/o|resident of)\b)\.?\s{0,2}[:-]?\s{0,3}'
   address_label_indic: '(?:पता|निवासी)\s{0,2}[:-]?\s{0,3}'
@@ -170,6 +175,41 @@ detectors:
     context: 'passport|पासपोर्ट'
     context_required: true
 
+  # Central KYC Identifier Number (KIN), issued by CERSAI: 14 digits. Bare
+  # 14-digit numbers are common, so only with a cue.
+  - id: ckyc
+    class: identity_strong
+    label: CKYC number (KIN)
+    patterns: ['[0-9]{14}']
+    bounded: true
+    base: 0.85
+    context: '\bc-?kyc|\bkin\b|kyc identifi|kyc id\b|central kyc|सीकेवाईसी'
+    context_required: true
+
+  # Ration card numbers have no national format (each state issues its
+  # own), so only right after a ration-card label: 6-20 characters with at
+  # least 6 digits.
+  - id: ration_card
+    class: identity_strong
+    label: Ration card number
+    patterns:
+      - '{{ration_label}}(?<value>(?=(?:[A-Za-z/-]*[0-9]){6})[A-Za-z0-9][A-Za-z0-9/-]{5,19})(?![A-Za-z0-9/-])'
+    capture: value
+    base: 0.9
+
+  # MGNREGA job card: state, district, block, gram panchayat and village
+  # codes, then the household number, as commonly printed
+  # (UP-12-005-021-001/123). Digit counts vary by state.
+  - id: nrega_job_card
+    class: identity_strong
+    label: NREGA job card number
+    patterns: ['[A-Z]{2}-[0-9]{2,3}(?:-[0-9]{2,4}){2,3}/[0-9]{1,6}']
+    bounded: true
+    base: 0.85
+    base_without_context: 0.6
+    context: 'job ?card|\bj\.?c\.? ?no|nrega|narega|जॉब कार्ड|नरेगा|मनरेगा'
+    canonical: collapse_upper
+
   - id: driving_licence
     class: identity_strong
     label: Driving licence number
@@ -208,6 +248,29 @@ detectors:
         - {match: '^[0-9]{2}-[0-9]{4}-[0-9]{4}-[0-9]{4}$', value: 0.5}
     context: 'card|credit|debit|visa|master|rupay|amex|कार्ड'
     negative: '{{id_negative_context}}'
+
+  # Card verification code (CVV/CVC/CID): sensitive authentication data
+  # under PCI DSS, never to be stored. Only right after its label
+  # ("CVV 123", "cvv: 4321", "security code 777"): a nearby mention of CVV
+  # is not enough for a bare 3-digit number.
+  - id: card_cvv
+    class: sensitive_auth
+    label: Card verification code
+    patterns: ['{{cvv_label}}(?<value>[0-9]{3,4})(?![0-9/])']
+    capture: value
+    base: 0.9
+
+  # Card expiry date, MM/YY or MM/YYYY. Only with a cue.
+  - id: card_expiry
+    class: financial
+    label: Card expiry date
+    # Not the month and year of a full date (31/12/2026, 31-12-2026).
+    patterns: ['(?<![0-9][/-])(?:0[1-9]|1[0-2]) ?[/-] ?(?:20[0-9]{2}|[0-9]{2})(?![/-][0-9])']
+    bounded: true
+    base: 0.85
+    context: '\bexp(?:iry|iration|ires|\.)?\b|valid (?:thru|through|till|upto|up to)|\bmm ?/ ?yy|समाप्ति'
+    context_required: true
+    canonical: collapse_upper
 
   - id: upi_id
     class: financial
