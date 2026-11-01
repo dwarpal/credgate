@@ -273,3 +273,54 @@ for (case in audit_spec$tamper$cases) {
     expect_equal(check$line, case$line)
   })
 }
+
+inventory_spec <- conformance("inventory.yaml")
+inventory_case <- function(case) {
+  as_column <- function(v) {
+    if (all(vapply(v, function(x) is.null(x) || is.numeric(x), TRUE))) {
+      return(vapply(v, function(x) if (is.null(x)) NA_real_ else x, 0))
+    }
+    vapply(v, function(x) if (is.null(x)) NA_character_ else x, "")
+  }
+  data <- as.data.frame(lapply(case$columns, as_column), check.names = FALSE)
+  pii_inventory(
+    data,
+    source = case$source, table = case$table,
+    sample = case$sample %||% 10000L, min_rate = case$min_rate %||% 0
+  )
+}
+
+for (case in inventory_spec$cases) {
+  test_that(paste("inventory:", case$id), {
+    got <- inventory_case(case)
+    expect_equal(nrow(got), length(case$expect))
+    fields <- c(
+      "v", "source", "table", "column", "type", "class", "n_rows", "n_sampled",
+      "n_matched", "n_full", "rate", "mean_confidence", "sample_method"
+    )
+    for (i in seq_along(case$expect)) {
+      e <- case$expect[[i]]
+      for (field in fields) {
+        info <- paste("row", i, field)
+        if (is.null(e[[field]])) {
+          expect_true(is.na(got[[field]][i]), info = info)
+        } else {
+          expect_equal(got[[field]][i], e[[field]], info = info)
+        }
+      }
+    }
+  })
+}
+
+test_that("inventory file is written identically by R and Python", {
+  spec <- inventory_spec$file
+  case <- Filter(function(c) c$id == spec$case, inventory_spec$cases)[[1]]
+  inv <- inventory_case(case)
+  inv$scanned_at <- spec$scanned_at
+  inv$credgate <- spec$credgate
+  path <- withr::local_tempfile(fileext = ".csv")
+  write_inventory(inv, path)
+  expected <- file.path(cg_spec_path(), "conformance", spec$path)
+  expect_identical(readBin(path, "raw", 1e5), readBin(expected, "raw", 1e5))
+  expect_equal(as.data.frame(read_inventory(expected)), as.data.frame(inv))
+})

@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* PII inventory: `pii_inventory()` scans a table with the `scan_pii()` rules
+  and records where PII is - every column, also those where nothing was
+  found, with source, table, row count, sample size and method, scan time
+  and credgate version; never values. Inventories combine with `rbind()` and are
+  saved with `write_inventory()` as a CSV file that R and Python write
+  byte for byte the same; `read_inventory()` reads it. The first step of
+  discovery at scale.
 * Audit log: an append-only, hash-chained JSON Lines log of policy
   decisions - who, when, which endpoint, policy revision, allowed or blocked,
   and per identifier its type, action and rule; never text or values. With an

@@ -24,6 +24,7 @@ from .checksums import (
 from .detect import Span, detect_pii, mask_value, set_mask
 from .detectors import Detector, bounded, detectors, register_detector, reset_detectors
 from .evaluate import EvaluationReport, TypeScore, evaluate, load_corpus
+from .inventory import Inventory, InventoryRow, pii_inventory, read_inventory
 from .normalise import Normalised, normalise
 from .policy import Decision, Destination, Policy, PolicyError, PolicyMatch
 from .redact import Preview, preview, redact
@@ -48,6 +49,8 @@ __all__ = [
     "Destination",
     "Detector",
     "EvaluationReport",
+    "Inventory",
+    "InventoryRow",
     "Normalised",
     "Policy",
     "PolicyError",
@@ -75,7 +78,9 @@ __all__ = [
     "mask_value",
     "new_token_key",
     "normalise",
+    "pii_inventory",
     "preview",
+    "read_inventory",
     "redact",
     "register_detector",
     "reset_detectors",

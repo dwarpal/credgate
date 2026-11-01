@@ -252,3 +252,52 @@ def test_audit_tampering_is_detected(case, tmp_path):
     check = credgate.audit_verify(path)
     assert not check.ok
     assert check.line == case["line"]
+
+
+INVENTORY_SPEC = conformance("inventory.yaml")
+INVENTORY_FIELDS = (
+    "v",
+    "source",
+    "table",
+    "column",
+    "type",
+    "class",
+    "n_rows",
+    "n_sampled",
+    "n_matched",
+    "n_full",
+    "rate",
+    "mean_confidence",
+    "sample_method",
+)
+
+
+def _inventory(case):
+    return credgate.pii_inventory(
+        case["columns"],
+        source=case["source"],
+        table=case["table"],
+        sample=case.get("sample", 10000),
+        min_rate=case.get("min_rate", 0),
+    )
+
+
+@pytest.mark.parametrize("case", INVENTORY_SPEC["cases"], ids=lambda c: c["id"])
+def test_inventory(case):
+    got = [{k: r[k] for k in INVENTORY_FIELDS} for r in _inventory(case).to_records()]
+    expect = [{k: e.get(k) for k in INVENTORY_FIELDS} for e in case["expect"]]
+    assert got == expect
+
+
+def test_inventory_file_written_by_both(tmp_path):
+    import dataclasses
+
+    spec = INVENTORY_SPEC["file"]
+    case = next(c for c in INVENTORY_SPEC["cases"] if c["id"] == spec["case"])
+    inv = credgate.Inventory(
+        dataclasses.replace(r, scanned_at=spec["scanned_at"], credgate=spec["credgate"])
+        for r in _inventory(case)
+    )
+    expected = credgate.spec_path() / "conformance" / spec["path"]
+    assert inv.write(tmp_path / "inv.csv").read_bytes() == expected.read_bytes()
+    assert credgate.read_inventory(expected) == inv
