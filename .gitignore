@@ -9,3 +9,6 @@ result-*
 
 # Interview notes and answers stay local, never in the public repo.
 research/
+
+# Outputs of examples/bigquery/sandbox_check.* (run from the repository root)
+credgate_check_*.csv

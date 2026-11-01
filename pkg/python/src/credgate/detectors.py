@@ -21,7 +21,7 @@ from .checksums import gstin_valid, luhn_valid, strip_separators, verhoeff_valid
 _DETECTOR_FIELDS = {
     "id", "class", "label", "patterns", "bounded", "capture", "ignore_case",
     "validate", "checks", "base", "base_without_context", "context", "negative",
-    "context_required", "describe", "canonical",
+    "context_required", "describe", "canonical", "column_label",
 }  # fmt: skip
 
 
@@ -60,6 +60,13 @@ class Detector:
             tokenisation).
         describe: Returns an extra reason for a match.
         ignore_case: Match the patterns case-insensitively.
+        column_label: Regex (case-insensitive) that, when it matches the
+            caller's extra context (a column name), makes that context the
+            label for ``column_patterns``: for detectors whose ``patterns``
+            need a label in the text, so a column named ``card_cvv`` labels
+            its values.
+        column_patterns: Patterns used, reporting the whole match, only when
+            ``column_label`` matches the extra context.
     """
 
     id: str
@@ -77,6 +84,8 @@ class Detector:
     canonical: Callable[[str], str] = canonical_default
     describe: Callable[[str], str] | None = None
     ignore_case: bool = False
+    column_label: str | None = None
+    column_patterns: Sequence[str] = ()
     _compiled: tuple[Any, ...] = field(default=(), init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -93,11 +102,17 @@ class Detector:
                 )
             if not self.context:
                 raise ValueError("`base_without_context` needs `context`.")
+        if isinstance(self.column_patterns, str):
+            object.__setattr__(self, "column_patterns", (self.column_patterns,))
+        if bool(self.column_label) != bool(self.column_patterns):
+            raise ValueError("`column_label` and `column_patterns` go together.")
         flags = regex.IGNORECASE if self.ignore_case else 0
         compiled = (
             tuple(regex.compile(p, flags) for p in self.patterns),
             regex.compile(self.context, regex.IGNORECASE) if self.context else None,
             regex.compile(self.negative, regex.IGNORECASE) if self.negative else None,
+            regex.compile(self.column_label, regex.IGNORECASE) if self.column_label else None,
+            tuple(regex.compile(p, flags) for p in self.column_patterns),
         )
         object.__setattr__(self, "_compiled", compiled)
 
@@ -271,6 +286,9 @@ def compile_detector(spec: dict[str, Any]) -> Detector:
     canonical = spec.get("canonical", "strip_upper")
     if canonical not in _CANONICAL:
         raise ValueError(f"Unknown canonical form `{canonical}`.")
+    column = spec.get("column_label") or {}
+    if set(column) - {"label", "patterns"}:
+        raise ValueError(f"Detector `{spec['id']}`: `column_label` has `label` and `patterns`.")
     return Detector(
         id=spec["id"],
         data_class=spec["class"],
@@ -287,6 +305,8 @@ def compile_detector(spec: dict[str, Any]) -> Detector:
         canonical=_CANONICAL[canonical],
         describe=_compile_describe(spec.get("describe")),
         ignore_case=bool(spec.get("ignore_case", False)),
+        column_label=expand_fragments(column.get("label")),
+        column_patterns=tuple(expand_fragments(p) for p in column.get("patterns", ())),
     )
 
 

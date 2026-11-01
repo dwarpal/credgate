@@ -196,6 +196,10 @@ detectors:
       - '{{ration_label}}(?<value>(?=(?:[A-Za-z/-]*[0-9]){6})[A-Za-z0-9][A-Za-z0-9/-]{5,19})(?![A-Za-z0-9/-])'
     capture: value
     base: 0.9
+    # A column named for ration cards labels values that are only the number.
+    column_label:
+      label: '\bration\b|राशन'
+      patterns: ['^(?=(?:[A-Za-z/-]*[0-9]){6})[A-Za-z0-9][A-Za-z0-9/-]{5,19}$']
 
   # MGNREGA job card: state, district, block, gram panchayat and village
   # codes, then the household number, as commonly printed
@@ -259,6 +263,11 @@ detectors:
     patterns: ['{{cvv_label}}(?<value>[0-9]{3,4})(?![0-9/])']
     capture: value
     base: 0.9
+    # A column named for CVVs labels values that are only the code. Not
+    # `cid`: as a column name it usually means customer id.
+    column_label:
+      label: '\bcvv2?\b|\bcvc2?\b|\bcvn\b|card verification|card security code|सीवीवी'
+      patterns: ['^[0-9]{3,4}$']
 
   # Card expiry date, MM/YY or MM/YYYY. Only with a cue.
   - id: card_expiry

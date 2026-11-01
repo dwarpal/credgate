@@ -78,3 +78,14 @@ cases:
          example: 'XXXXX XX X, XXXXX XXXXX, XXXXXX XXXXXX'}
       - {column: remarks, type: person_name, n_sampled: 3, n_matched: 1, n_full: 0,
          rate: 0.3333, mean_confidence: 0.8, example: XXXXX XXX}
+
+  - id: column-names-label-cvv-and-ration-card
+    columns:
+      card_cvv: ['123', '4821', '907']
+      ration_card: ['MH1234567890', '542229371182', null]
+      cid: ['123', '456', '789']
+    expect:
+      - {column: card_cvv, type: card_cvv, n_sampled: 3, n_matched: 3, n_full: 3,
+         rate: 1.0, mean_confidence: 0.98, example: XXX}
+      - {column: ration_card, type: ration_card, n_sampled: 2, n_matched: 2,
+         n_full: 2, rate: 1.0, mean_confidence: 0.98, example: XXXXXXXX7890}
