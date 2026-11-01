@@ -121,3 +121,30 @@ def test_evaluate(case):
         match=case.get("match", "exact"),
     )
     assert report.to_records() == case["expect"]
+
+
+TOKENISE_CASES = conformance("tokenise.yaml")["cases"]
+
+
+@pytest.mark.parametrize("case", TOKENISE_CASES, ids=[c["id"] for c in TOKENISE_CASES])
+def test_tokenise(case):
+    vault = credgate.Vault()
+    for step in case["steps"]:
+        if "tokenise" in step:
+            got = credgate.tokenise(
+                step["tokenise"],
+                vault,
+                context=step.get("context"),
+                min_confidence=step.get("min_confidence", 0),
+            )
+            assert got == step["expect"]
+        elif "restore" in step:
+            strict = step.get("strict", False)
+            if step.get("error"):
+                with pytest.raises(credgate.UnknownTokenError):
+                    credgate.restore(step["restore"], vault, strict=strict)
+            else:
+                assert credgate.restore(step["restore"], vault, strict=strict) == step["expect"]
+        else:
+            got = [[e.token, e.type, e.canonical] for e in vault._entries]
+            assert got == step["expect"]

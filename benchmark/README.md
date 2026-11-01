@@ -248,7 +248,8 @@ is a broader, more mature tool, and is ahead of credgate in several ways:
   an honorific, field label or "ji"; credgate does not yet (its name recall
   here comes from cues the corpus contains).
 - **Anonymisation options.** Presidio's anonymiser can replace, mask, hash or
-  reversibly encrypt; credgate has irreversible redaction only so far.
+  encrypt with a key, with custom operators; credgate redacts, or tokenises
+  with an in-memory vault (no hashing or encryption, no saved vault yet).
 - **Beyond plain text.** Presidio redacts images (OCR) and structured data,
   and ships a REST service and Docker images.
 - **Languages and extensibility.** Multiple NLP back-ends (spaCy, Stanza,

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- New `tokenise()` and `restore()`, with a `Vault`: identifiers become
+  numbered tokens (`[PAN_1]`, `[PERSON_NAME_1]`) and the real values can be
+  put back into a model's answer. The same identifier gets the same token
+  however it is written; `restore()` accepts tokens with other case, spaces
+  or no brackets, and `strict=True` raises `UnknownTokenError` on unknown
+  ones. The vault lives in memory and prints with values masked.
 - Context scoring: the stronger cue wins. A keyword before a match (where
   labels go) beats one after it, and on the same side the nearer one wins.
   So "Aadhaar 5422... for e-KYC; order 519..." stays an Aadhaar number

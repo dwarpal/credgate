@@ -40,8 +40,8 @@ More runnable examples (ticket classification, RAG ingestion) are in the
 > **Check the preview.** Names are found next to an honorific, relation or
 > field label (`Shri`, `S/o`, `Name:`, `नाम:`); a name in running text
 > without such a cue ("Customer Priya Nair called") is not detected yet.
-> Redaction is irreversible: the model's answer cannot mention the real
-> values (reversible tokenisation and an automatic proxy are on the roadmap).
+> Redaction is irreversible; to get the real values back in the model's
+> answer, tokenise instead (see below). An automatic proxy is on the roadmap.
 
 ## How it compares
 
@@ -74,8 +74,9 @@ Presidio is broader and more mature:
   credgate detects none of these.
 - **Names in running text**: Presidio's NER finds names without an honorific,
   field label or "ji"; credgate does not yet.
-- **Anonymisation**: Presidio can mask, hash or reversibly encrypt;
-  credgate only redacts irreversibly so far.
+- **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
+  add custom operators; credgate redacts, or tokenises with an in-memory
+  vault (no hashing or encryption operators, and no saved vault yet).
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
@@ -107,7 +108,7 @@ import credgate
 spans = credgate.detect_pii("Name: Priya Nair; PAN: ABCPN1234K; UPI: priya.n@oksbi")
 for s in spans:
     print(s)
-# Span(doc=0, start=6, end=16, type='person_name', value='XXXXX Nair', confidence=0.8)
+# Span(doc=0, start=6, end=16, type='person_name', value='XXXXX XXXX', confidence=0.8)
 # Span(doc=0, start=23, end=33, type='pan', value='XXXXXX234K', confidence=0.97)
 # Span(doc=0, start=40, end=53, type='upi_id', value='XXXXX.X@Xksbi', confidence=0.99)
 
@@ -130,10 +131,32 @@ print(credgate.preview("Name: Priya Nair; PAN: ABCPN1234K; order no 878245671885
 # 3 items would be redacted:
 #   Name: [PERSON_NAME]; PAN: [PAN]; order no [AADHAAR]
 #
-#   [PERSON_NAME]  XXXXX Nair    0.80  matched Person name pattern
+#   [PERSON_NAME]  XXXXX XXXX    0.80  matched Person name pattern
 #   [PAN]          XXXXXX234K    0.97  matched PAN pattern; context 'PAN'; ...
 #   [AADHAAR]      XXXXXXXX1885  0.42  ...; negative context 'order'
 ```
+
+Tokenise instead, to get the real values back in a model's answer: the
+vault keeps the mapping, and `restore()` puts the values back:
+
+```python
+vault = credgate.Vault()
+credgate.tokenise([
+    "Shri Ramesh Kumar, PAN ABCPE1234F, mobile +91 98765 43210",
+    "pan abcpe1234f called again from 9876543210",
+], vault)
+# ['Shri [PERSON_NAME_1], PAN [PAN_1], mobile [MOBILE_IN_1]',
+#  'pan [PAN_1] called again from [MOBILE_IN_1]']
+
+credgate.restore("[PERSON_NAME_1] (PAN [pan_1]) will be called on MOBILE_IN_1.", vault)
+# 'Ramesh Kumar (PAN ABCPE1234F) will be called on +91 98765 43210.'
+```
+
+The same identifier gets the same token however it is written, so the model
+can still tell customers apart. `restore()` accepts tokens as models tend to
+copy them (other case, spaces, missing brackets); `strict=True` raises
+`UnknownTokenError` on a token the vault does not know. The vault lives in
+memory and prints with values masked; saving it (encrypted) is planned.
 
 Scan a table (a pandas DataFrame, or a dict of column -> values) to see
 which columns hold PII; column names count as context:

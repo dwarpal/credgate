@@ -99,7 +99,42 @@ The same code works with Ollama's OpenAI-compatible endpoint
 (`base_url = "http://localhost:11434/v1"`), LM Studio, a llama.cpp server or
 an internal gateway.
 
-## 4. Data frames: find the PII, send only what is needed
+## 4. Getting the real values back: tokenise and restore
+
+Redaction is one-way: the model's answer can only say `[PAN]`. When the
+answer should name the customer - a drafted reply, a summary for a case
+file - tokenise instead. Each identifier becomes a numbered token, the
+vault remembers what it stands for, and `restore()` puts the values back:
+
+```{r}
+vault <- cg_vault()
+safe <- tokenise(note, vault, min_confidence = 0.5)
+safe
+```
+
+```{r, eval = FALSE}
+answer <- chat_ollama(model = "gemma3:1b")$chat(
+  paste("Draft a two-line reply to this customer:", safe)
+)
+restore(answer, vault)
+```
+
+Without a model at hand, this is what `restore()` does with a typical
+answer - including tokens the model copied loosely:
+
+```{r}
+restore("Dear [PERSON_NAME_1], we have noted PAN [ pan_1 ] and will call MOBILE_IN_1.", vault)
+```
+
+The same identifier always gets the same token, so the model can still tell
+two customers apart. `restore(strict = TRUE)` stops if the answer contains
+a token the vault does not know. The vault prints with values masked:
+
+```{r}
+vault
+```
+
+## 5. Data frames: find the PII, send only what is needed
 
 ```{r}
 complaints <- data.frame(
@@ -122,7 +157,7 @@ prompts <- paste("Categorise this complaint:", redact(complaints$complaint, min_
 prompts
 ```
 
-## 5. Measure it on your own data
+## 6. Measure it on your own data
 
 If you have labelled examples of your documents, `cg_evaluate()` reports
 precision, recall and F1 per type, so you can decide on a threshold with
@@ -138,10 +173,9 @@ cg_evaluate(docs, min_confidence = 0.5)
 
 ## Limits and what comes next
 
-- Redaction is **irreversible**: the model's answer cannot mention the real
-  values. Reversible tokenisation (`[PAN_1]` restored in the answer) is next
-  on the roadmap.
-- You call `redact()` yourself. A planned **proxy mode** - a local
+- The vault behind `tokenise()` lives in memory: when the R session ends,
+  the tokens can no longer be restored. Saving it, encrypted, is next.
+- You call `redact()` or `tokenise()` yourself. A planned **proxy mode** - a local
   OpenAI-compatible server in front of Ollama or vLLM - will redact,
   restore and audit automatically, so tools you cannot change (Open WebUI,
   Continue, Positron, Jupyter AI) are covered by pointing their base URL at

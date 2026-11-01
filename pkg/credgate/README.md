@@ -35,8 +35,8 @@ Ollama, vLLM, data frames and evaluation; runnable scripts are in the
 > **Check the preview.** Names are found next to an honorific, relation or
 > field label (`Shri`, `S/o`, `Name:`, `नाम:`); a name in running text
 > without such a cue ("Customer Priya Nair called") is not detected yet.
-> Redaction is irreversible: the model's answer cannot mention the real
-> values (reversible tokenisation and an automatic proxy are on the roadmap).
+> Redaction is irreversible; to get the real values back in the model's
+> answer, tokenise instead (see below). An automatic proxy is on the roadmap.
 
 ## How it compares
 
@@ -69,8 +69,9 @@ Presidio is broader and more mature:
   credgate detects none of these.
 - **Names in running text**: Presidio's NER finds names without an honorific,
   field label or "ji"; credgate does not yet.
-- **Anonymisation**: Presidio can mask, hash or reversibly encrypt;
-  credgate only redacts irreversibly so far.
+- **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
+  add custom operators; credgate redacts, or tokenises with an in-memory
+  vault (no hashing or encryption operators, and no saved vault yet).
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
@@ -103,7 +104,7 @@ x <- detect_pii("Name: Priya Nair; PAN: ABCPN1234K; UPI: priya.n@oksbi")
 x
 #> 3 PII matches (values masked; use `x$value` to see them):
 #>  doc start end        type         value confidence
-#>    1     7  16 person_name    XXXXX Nair       0.80
+#>    1     7  16 person_name    XXXXX XXXX       0.80
 #>    1    24  33         pan    XXXXXX234K       0.97
 #>    1    41  53      upi_id XXXXX.X@Xksbi       0.99
 
@@ -150,6 +151,31 @@ followed by a table of each placeholder, the masked value, its confidence
 and the reasons (here the order number scores only 0.42 because of the
 word "order"; use `min_confidence` to leave such matches alone). Both are
 new after 0.1.0: install the GitHub version to use them.
+
+### Tokenising and restoring
+
+Redaction is one-way. To get the real values back in a model's answer,
+`tokenise()` replaces identifiers with numbered tokens and keeps the
+mapping in a vault; `restore()` puts the values back:
+
+```r
+vault <- cg_vault()
+tokenise(c(
+  "Shri Ramesh Kumar, PAN ABCPE1234F, mobile +91 98765 43210",
+  "pan abcpe1234f called again from 9876543210"
+), vault)
+#> [1] "Shri [PERSON_NAME_1], PAN [PAN_1], mobile [MOBILE_IN_1]"
+#> [2] "pan [PAN_1] called again from [MOBILE_IN_1]"
+
+restore("[PERSON_NAME_1] (PAN [pan_1]) will be called on MOBILE_IN_1.", vault)
+#> [1] "Ramesh Kumar (PAN ABCPE1234F) will be called on +91 98765 43210."
+```
+
+The same identifier gets the same token however it is written, so the model
+can still tell customers apart. `restore()` accepts tokens as models tend to
+copy them (other case, spaces, missing brackets); `strict = TRUE` stops on a
+token the vault does not know. The vault lives in memory and prints with
+values masked; saving it (encrypted) is planned.
 
 ### Scanning data frames
 

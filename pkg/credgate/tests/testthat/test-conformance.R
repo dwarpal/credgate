@@ -126,3 +126,30 @@ for (case in conformance("evaluate.yaml")$cases) {
     }
   })
 }
+
+for (case in conformance("tokenise.yaml")$cases) {
+  test_that(paste("tokenise:", case$id), {
+    vault <- cg_vault()
+    for (step in case$steps) {
+      if (!is.null(step$tokenise)) {
+        got <- tokenise(unlist(step$tokenise), vault,
+          context = step$context, min_confidence = step$min_confidence %||% 0
+        )
+        expect_identical(got, unlist(step$expect))
+      } else if (!is.null(step$restore)) {
+        strict <- isTRUE(step$strict)
+        if (isTRUE(step$error)) {
+          expect_error(restore(step$restore, vault, strict = strict), class = "credgate_unknown_token")
+        } else {
+          expect_identical(restore(step$restore, vault, strict = strict), step$expect)
+        }
+      } else {
+        entries <- vault$entries
+        got <- lapply(seq_len(nrow(entries)), function(i) {
+          c(entries$token[i], entries$type[i], entries$canonical[i])
+        })
+        expect_identical(got, lapply(step$expect, unlist))
+      }
+    }
+  })
+}

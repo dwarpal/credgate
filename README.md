@@ -12,9 +12,9 @@ It ships as an R package and a Python package (with a CLI) that read the same
 detection rules, so both languages find exactly the same matches.
 
 > **Status: early development (pre-alpha).** PII detection, column
-> scanning (`scan_pii()`) and irreversible redaction (`redact()`,
-> `preview()`) work today.
-> Redaction/restore, policies, the audit log, proxy mode and the IDE
+> scanning (`scan_pii()`), redaction (`redact()`, `preview()`) and
+> reversible tokenisation (`tokenise()`, `restore()`) work today.
+> Saving the token vault, policies, the audit log, proxy mode and the IDE
 > assistant are planned; see [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
@@ -56,6 +56,19 @@ chat_ollama(model = "gemma3:1b")$chat(paste("Summarise:", safe))
 
 **Shell**: `credgate redact notes.txt | ollama run gemma3:1b "Summarise:"`
 
+**Need the real values in the answer?** Tokenise instead of redacting: the
+model sees `[PAN_1]`, `[PERSON_NAME_1]`, and `restore()` puts the values back
+into its reply.
+
+```python
+vault = credgate.Vault()
+safe = credgate.tokenise(note, vault, min_confidence=0.5)   # "Customer name: [PERSON_NAME_1]. PAN [PAN_1], ..."
+reply = ollama.chat(model="gemma3:1b", messages=[{"role": "user", "content": f"Draft a reply to: {safe}"}])
+print(credgate.restore(reply.message.content, vault))      # real name and PAN back in the draft
+```
+
+In R: `vault <- cg_vault(); safe <- tokenise(note, vault); restore(answer, vault)`.
+
 Runnable examples (call notes, ticket classification, RAG ingestion, data
 frames, shell pipelines) are in [`examples/`](examples/); the R vignette
 [Using credgate with local LLMs](pkg/credgate/vignettes/local-llms.Rmd)
@@ -65,8 +78,8 @@ walks through the workflow and why it matters even when the model is local
 > **Check the preview.** Names are found next to an honorific, relation or
 > field label (`Shri`, `S/o`, `Name:`, `नाम:`); a name in running text
 > without such a cue ("Customer Priya Nair called") is not detected yet.
-> Redaction is irreversible: the model's answer cannot mention the real
-> values (reversible tokenisation and an automatic proxy are on the roadmap).
+> The vault lives in memory for now; saving it encrypted, and an automatic
+> proxy that tokenises and restores for you, are next on the roadmap.
 
 ## What it detects
 
@@ -94,7 +107,7 @@ x <- detect_pii("Name: Priya Nair; PAN: ABCPN1234K; UPI: priya.n@oksbi")
 x
 #> 3 PII matches (values masked; use `x$value` to see them):
 #>  doc start end        type         value confidence
-#>    1     7  16 person_name    XXXXX Nair       0.80
+#>    1     7  16 person_name    XXXXX XXXX       0.80
 #>    1    24  33         pan    XXXXXX234K       0.97
 #>    1    41  53      upi_id XXXXX.X@Xksbi       0.99
 ```
@@ -197,8 +210,9 @@ Presidio is broader and more mature:
   credgate detects none of these.
 - **Names in running text**: Presidio's NER finds names without an honorific,
   field label or "ji"; credgate does not yet.
-- **Anonymisation**: Presidio can mask, hash or reversibly encrypt;
-  credgate only redacts irreversibly so far.
+- **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
+  add custom operators; credgate redacts, or tokenises with an in-memory
+  vault (no hashing or encryption operators, and no saved vault yet).
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
