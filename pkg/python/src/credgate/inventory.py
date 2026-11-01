@@ -123,8 +123,11 @@ def pii_inventory(
         data: Any table :func:`scan_pii` accepts.
         source: Name of the data source, chosen by you (e.g. ``"bigquery:prod"``).
         table: Name of the table within the source (e.g. ``"crm.customers"``).
-        sample, min_rate, detectors, seed: As for :func:`scan_pii`. A PySpark
-            DataFrame is sampled inside the cluster; its row count is recorded.
+        sample: As for :func:`scan_pii`.
+        min_rate: As for :func:`scan_pii`.
+        detectors: As for :func:`scan_pii`.
+        seed: As for :func:`scan_pii`. A PySpark DataFrame is sampled inside
+            the cluster; its row count is recorded.
     """
     from . import __version__
 

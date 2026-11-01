@@ -32,6 +32,7 @@ dependencies = ["regex>=2023.0", "PyYAML>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/dwarpal/credgate"
+Documentation = "https://dwarpal.github.io/credgate/python/"
 Issues = "https://github.com/dwarpal/credgate/issues"
 Changelog = "https://github.com/dwarpal/credgate/blob/main/pkg/python/CHANGELOG.md"
 
