@@ -62,23 +62,23 @@ For a vector of documents:
    match (`before`) and after it (`after`) in the normalised text, and the
    caller's extra context (`extra`, e.g. a column name). Search each,
    case-insensitively, for `context` and for `negative`, and keep the
-   **nearest** keyword of each kind with its distance:
-   - in `before`: the last match; distance = code points between the end of
-     the word containing it (extended over following letters and marks,
-     `[\p{L}\p{M}]`) and the match;
-   - in `after`: the first match; distance = code points between the match
-     and the start of the word containing it;
-   - in `extra`: the first match; distance = `context_window`, so cues in the
-     text always count as nearer.
-   Ties go to the earlier source in the order `before`, `after`, `extra`.
+   **strongest** keyword of each kind, with its side and distance:
+   - in `before` (side 0): the last match; distance = code points between
+     the end of the word containing it (extended over following letters and
+     marks, `[\p{L}\p{M}]`) and the match;
+   - otherwise in `after` (side 1): the first match; distance = code points
+     between the match and the start of the word containing it;
+   - otherwise in `extra` (side 2): the first match; distance 0.
    With `context_required: true`, drop matches without context.
 5. **Score**: start from `base` - a number, or `{default, rules}` where the
    first rule whose `match` regex matches the matched text sets the value -
    or from `base_without_context` when it is set and no context keyword was
    found. With context: `score + (1 - score) * context_boost`. With negative
-   context: `score * negative_factor`, **unless** a context keyword is
-   strictly nearer than the negative one (the closer cue wins: "Aadhaar
-   5422... for e-KYC; order 519..." is an Aadhaar number). Round to
+   context: `score * negative_factor`, **unless** the context keyword is
+   stronger: on a lower side, or on the same side and strictly nearer.
+   Labels come before values, so "Aadhaar 5422... for e-KYC; order 519..."
+   is an Aadhaar number, while in "order no 8782..., Aadhaar 5422..." the
+   first number keeps its negative context. Round to
    `scoring.digits` decimal places.
 6. **Reasons** (free text, for people): `matched <label> pattern`, then
    `checks` if set, `context '<keyword>'`, then `negative context

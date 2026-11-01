@@ -2,10 +2,12 @@
 
 ## Unreleased
 
-- Context scoring: the closer cue wins. A negative word ("order", "ticket") is ignored when a
-  supporting keyword is nearer the match, so "Aadhaar 5422... for e-KYC;
-  order 519..." stays an Aadhaar number (confidence 0.97, with the reason
-  "farther negative context 'order' ignored").
+- Context scoring: the stronger cue wins. A keyword before a match (where
+  labels go) beats one after it, and on the same side the nearer one wins.
+  So "Aadhaar 5422... for e-KYC; order 519..." stays an Aadhaar number
+  (confidence 0.97, reason "farther negative context 'order' ignored"),
+  while in "order no 8782..., Aadhaar 5422..." the first number keeps its
+  negative context.
 - A voter ID format (3 letters, 7 digits) without a nearby keyword is now
   reported at confidence 0.3 instead of dropped; with "voter" or "EPIC"
   nearby it still scores 0.97. New `Detector` field `base_without_context`

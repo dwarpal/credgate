@@ -325,7 +325,7 @@ cases:
       - {type: mobile_in, value: '9468451273', confidence: 0.93}
       - {type: address, value: 'मकान 185, शिवाजी पार्क, इंदौर 452001'}
 
-  # --- Context: the closer cue wins ----------------------------------------
+  # --- Context: the stronger cue wins -------------------------------------
   - id: nearer-context-beats-farther-negative
     text: 'Caller gave Aadhaar 542229371182 for e-KYC; order 51966'
     expect:
@@ -336,6 +336,13 @@ cases:
     expect:
       - {type: aadhaar, value: '542229371182', confidence: 0.48,
          reason: "negative context 'order'"}
+  - id: label-before-value-beats-label-of-next-item
+    # "Aadhaar" labels the second number, not the first.
+    text: 'order no 878245671885, Aadhaar 542229371182'
+    expect:
+      - {type: aadhaar, value: '878245671885', confidence: 0.48,
+         reason: "negative context 'order'"}
+      - {type: aadhaar, value: '542229371182', confidence: 0.97}
   - id: context-distance-counts-from-whole-word
     text: 'Verified mobile 08355376125. Ticket B81742.'
     expect:

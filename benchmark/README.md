@@ -34,8 +34,10 @@ At the recommended threshold (`min_confidence = 0.5`):
 Overall F1 at 0.5 rose from 0.947 to 0.983 (precision 0.997 to 0.999)
 after four rule changes, each found by studying errors on `dev`:
 
-- the closer cue wins: "Aadhaar ... for e-KYC; order ..." keeps the Aadhaar
-  (Aadhaar recall 0.80 to 1.00, mobile 0.89 to 1.00);
+- the stronger cue wins - a keyword before a match (where labels go) beats
+  one after it, and on the same side the nearer one wins: "Aadhaar ... for
+  e-KYC; order ..." keeps the Aadhaar (Aadhaar recall 0.80 to 1.00, mobile
+  0.89 to 1.00);
 - an IFSC next to a number is evidence of a bank account (recall 0.75 to
   0.99), and phone words count against it;
 - "ji" after a name is a name cue (name recall 0.84 to 0.92);

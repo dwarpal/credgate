@@ -119,14 +119,14 @@ def _run_detector(
 
                 before = ntext[max(0, s - window) : s]
                 after = ntext[e : e + window]
-                ctx_hit = _nearest_keyword(context_re, before, after, contexts[doc], window)
-                neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc], window)
+                ctx_hit = _nearest_keyword(context_re, before, after, contexts[doc])
+                neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc])
                 if det.context_required and ctx_hit is None:
                     continue
-                # The closer cue wins: a negative keyword farther away than a
-                # supporting one is ignored.
+                # The stronger cue wins: one before the match (where labels
+                # go) beats one after it; on the same side, the nearer wins.
                 neg_ignored = (
-                    ctx_hit is not None and neg_hit is not None and neg_hit[1] > ctx_hit[1]
+                    ctx_hit is not None and neg_hit is not None and neg_hit[1:] > ctx_hit[1:]
                 )
 
                 if ctx_hit is None and det.base_without_context is not None:
@@ -176,28 +176,27 @@ _WORD_START = regex.compile(r"[\p{L}\p{M}]*$")
 
 
 def _nearest_keyword(
-    pattern: regex.Pattern[str] | None, before: str, after: str, extra: str, window: int
-) -> tuple[str, int] | None:
-    """The keyword nearest the match and its distance: the characters between
-    the match and the word containing the keyword. Keywords in the caller's
-    extra context count as `window` away, farther than any in the text."""
+    pattern: regex.Pattern[str] | None, before: str, after: str, extra: str
+) -> tuple[str, int, int] | None:
+    """The strongest keyword for a match as (keyword, side, distance): side 0
+    (before the match) beats 1 (after it), which beats 2 (the caller's extra
+    context); on the same side, the smaller distance - the characters between
+    the match and the word containing the keyword - wins."""
     if pattern is None:
         return None
-    hits: list[tuple[str, int]] = []
     last = None
     for m in pattern.finditer(before):
         last = m
     if last is not None:
         word_end = _WORD_END.match(before, last.end()).end()
-        hits.append((last.group(0), len(before) - word_end))
+        return (last.group(0), 0, len(before) - word_end)
     m = pattern.search(after)
     if m is not None:
-        word_start = _WORD_START.search(after[: m.start()]).start()
-        hits.append((m.group(0), word_start))
+        return (m.group(0), 1, _WORD_START.search(after[: m.start()]).start())
     m = pattern.search(extra)
     if m is not None:
-        hits.append((m.group(0), window))
-    return min(hits, key=lambda h: h[1]) if hits else None
+        return (m.group(0), 2, 0)
+    return None
 
 
 def _resolve_overlaps(spans: list[Span]) -> list[Span]:
