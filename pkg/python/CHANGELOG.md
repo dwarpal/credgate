@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Names and addresses are now masked in full wherever values are shown
+  (`repr` and `to_dict()` of spans, `preview()`, `scan_pii()` examples, the
+  command line); before, their last 4 characters were kept, which could show
+  part of a surname or a PIN code. Identifiers still keep their last 4
+  characters, within UIDAI's and PCI DSS's display limits.
+- New `set_mask("full")` (or environment variable `CREDGATE_MASK=full`)
+  masks every value in full; `mask_value()` takes the value's class and an
+  optional mode.
+
 ## 0.3.1 (2026-10-31)
 
 - Documentation only: the README (shown on PyPI) lists where Microsoft

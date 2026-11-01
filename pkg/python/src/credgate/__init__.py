@@ -20,7 +20,7 @@ from .checksums import (
     verhoeff_check_digit,
     verhoeff_valid,
 )
-from .detect import Span, detect_pii, mask_value
+from .detect import Span, detect_pii, mask_value, set_mask
 from .detectors import Detector, bounded, detectors, register_detector, reset_detectors
 from .evaluate import EvaluationReport, TypeScore, evaluate, load_corpus
 from .normalise import Normalised, normalise
@@ -53,6 +53,7 @@ __all__ = [
     "register_detector",
     "reset_detectors",
     "scan_pii",
+    "set_mask",
     "spec_path",
     "synth_indian_pii",
     "verhoeff_check_digit",

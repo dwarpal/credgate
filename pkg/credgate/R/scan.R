@@ -86,7 +86,7 @@ summarise_type <- function(spans, values, column) {
     n_full = length(unique(spans$doc[full])),
     rate = round(nrow(first) / n_sampled, 4),
     mean_confidence = round(mean(first$confidence), 2),
-    example = mask_value(first$value[1])
+    example = mask_value(first$value[1], first$class[1])
   )
 }
 

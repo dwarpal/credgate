@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* Names and addresses are now masked in full wherever values are shown
+  (printed spans, `preview()`, `scan_pii()` examples); before, their last
+  4 characters were kept, which could show part of a surname or a PIN code.
+  Identifiers still keep their last 4 characters, within UIDAI's and PCI
+  DSS's display limits.
+* New option `credgate.mask = "full"` (or environment variable
+  `CREDGATE_MASK=full`) masks every value in full. See `?credgate`.
 * New vignette "Using credgate with local LLMs (Ollama, vLLM)", with
   runnable R, Python and shell examples in the repository's `examples/`.
 * New `scan_pii()` reports, per column of a data frame, which PII types

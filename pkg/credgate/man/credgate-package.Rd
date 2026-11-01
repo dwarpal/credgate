@@ -8,6 +8,20 @@
 \description{
 Detects personal data in text before it is sent to a large language model, with Indian identifiers built in: Aadhaar (validated with the Verhoeff checksum), Aadhaar Virtual ID, PAN, GSTIN, voter ID, passport and driving licence numbers, UPI IDs, IFSC codes, bank account and payment card numbers, mobile numbers and Ayushman Bharat (ABHA) health IDs, plus rule-based detection of names and addresses in Latin and Indic scripts. Candidates are validated with checksums, scored from surrounding context and matched through Indic digits and invisible characters. The rules come from a language-neutral specification shared with the 'Python' package of the same name.
 }
+\section{Masking}{
+
+Wherever credgate shows a detected value - printed spans, \code{\link[=preview]{preview()}},
+the examples in \code{\link[=scan_pii]{scan_pii()}} - it masks letters and digits with \code{X}.
+Identifiers keep their last 4 characters (2 for values shorter than 8),
+as in UIDAI's masked Aadhaar, so you can tell which value matched. Names
+and addresses are masked in full.
+
+To mask every value in full, for policies that allow no part of a value
+to be shown, set \code{options(credgate.mask = "full")} or the environment
+variable \code{CREDGATE_MASK=full} (the option wins). The default is
+\code{"partial"}. Masking never changes the detected values themselves.
+}
+
 \seealso{
 Useful links:
 \itemize{

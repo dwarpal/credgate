@@ -105,6 +105,26 @@ Conformance compares `type`, `value`, and when given `confidence`,
 
 Unknown fields are an error, so a typo cannot silently disable a rule.
 
+## Masking
+
+Wherever an implementation shows a detected value (printed spans, previews,
+column-scan examples, command-line output), it masks it:
+
+- **`partial`** (default): replace every letter and digit with `X`, except
+  the last 4 characters (the last 2 for values shorter than 8), the same
+  convention as UIDAI's masked Aadhaar. Values of the `personal` class
+  (names, addresses) keep nothing: their end identifies a person, unlike the
+  last digits of an identifier.
+- **`full`**: replace every letter and digit of every value with `X`.
+
+Other characters (spaces, `.`, `@`, `-`, `+`) are kept, so the shape stays
+readable. The mode is chosen by the environment variable `CREDGATE_MASK`
+(`partial` or `full`), which an implementation may let users override in
+its own way; any other value is an error. Masking applies to display only,
+never to detected values. Keeping the last 4 characters stays within the
+display limits of UIDAI (Aadhaar) and PCI DSS 4.0.1 requirement 3.4.1
+(cards); use `full` where a policy allows no part of a value to be shown.
+
 ## Column scan (`scan_pii`)
 
 Reports, per column of a table, which PII types occur and how often. Defaults:

@@ -107,6 +107,43 @@ test_that("printing masks values", {
   expect_true(any(grepl("XXXXXX234F", out, fixed = TRUE)))
 })
 
+test_that("names and addresses are masked in full", {
+  expect_equal(credgate:::mask_value("Mohan Lal", "personal"), "XXXXX XXX")
+  spans <- detect_pii("Shri Mohan Lal, House No 7, Civil Lines, Jaipur 302006")
+  expect_true(all(spans$class == "personal"))
+  out <- suppressMessages(capture.output(print(spans), type = "output"))
+  expect_false(any(grepl("Lal|Jaipur|302006|2006", out)))
+  out <- capture.output(print(preview("Shri Mohan Lal, PAN ABCPE1234F")))
+  expect_false(any(grepl("Lal", out, fixed = TRUE)))
+  expect_true(any(grepl("XXXXXX234F", out, fixed = TRUE)))
+  report <- scan_pii(data.frame(remarks = "Shri Mohan Lal called"))
+  expect_equal(report$example, "XXXXX XXX")
+})
+
+test_that("the full mask mode hides every character", {
+  withr::local_options(credgate.mask = "full")
+  expect_equal(credgate:::mask_value("ABCPE1234F"), "XXXXXXXXXX")
+  out <- suppressMessages(capture.output(print(detect_pii("PAN ABCPE1234F")), type = "output"))
+  expect_false(any(grepl("234F", out, fixed = TRUE)))
+  out <- capture.output(print(preview("PAN ABCPE1234F")))
+  expect_false(any(grepl("234F", out, fixed = TRUE)))
+  expect_equal(scan_pii(data.frame(cust_pan = "ABCPE1234F"))$example, "XXXXXXXXXX")
+  expect_equal(detect_pii("PAN ABCPE1234F")$value, "ABCPE1234F")
+})
+
+test_that("the mask mode comes from the option, then CREDGATE_MASK", {
+  withr::local_options(credgate.mask = NULL)
+  withr::local_envvar(CREDGATE_MASK = "full")
+  expect_equal(credgate:::mask_value("ABCPE1234F"), "XXXXXXXXXX")
+  withr::local_options(credgate.mask = "partial")
+  expect_equal(credgate:::mask_value("ABCPE1234F"), "XXXXXX234F")
+  withr::local_options(credgate.mask = "last4")
+  expect_error(credgate:::mask_value("ABCPE1234F"), "partial")
+  withr::local_options(credgate.mask = NULL)
+  withr::local_envvar(CREDGATE_MASK = "")
+  expect_equal(credgate:::mask_value("ABCPE1234F"), "XXXXXX234F")
+})
+
 test_that("user detectors can be registered", {
   withr::defer(credgate:::register_builtin_detectors())
   register_detector(new_detector(

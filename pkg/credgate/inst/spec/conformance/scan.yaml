@@ -65,3 +65,14 @@ cases:
          rate: 0.5, mean_confidence: 0.95, example: XXXXX.X@Xksbi}
       - {column: contact, type: email, n_sampled: 4, n_matched: 1, n_full: 1,
          rate: 0.25, mean_confidence: 0.95, example: XXXXX.XXXX@XXXXXXX.org}
+
+  - id: names-and-addresses-masked-in-full
+    columns:
+      remarks: ['Shri Mohan Lal called about EMI',
+                'Address: House No 7, Civil Lines, Jaipur 302006', 'ok']
+    expect:
+      - {column: remarks, type: address, n_sampled: 3, n_matched: 1, n_full: 0,
+         rate: 0.3333, mean_confidence: 0.97,
+         example: 'XXXXX XX X, XXXXX XXXXX, XXXXXX XXXXXX'}
+      - {column: remarks, type: person_name, n_sampled: 3, n_matched: 1, n_full: 0,
+         rate: 0.3333, mean_confidence: 0.8, example: XXXXX XXX}
