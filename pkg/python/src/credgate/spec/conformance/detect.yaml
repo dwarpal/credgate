@@ -402,3 +402,49 @@ cases:
     expect:
       - {type: person_name, value: Priya Nair}
 
+  # --- CKYC, ration card, NREGA job card -----------------------------------
+  - id: ckyc-with-cue
+    text: 'CKYC No: 50000012345678'
+    expect:
+      - {type: ckyc, value: '50000012345678', confidence: 0.97}
+  - id: ckyc-kin-cue
+    text: 'KIN 50000012345678 verified'
+    expect:
+      - {type: ckyc, value: '50000012345678', confidence: 0.97}
+  - id: ration-card-after-label
+    text: 'Ration card no: MH1234567890'
+    expect:
+      - {type: ration_card, value: MH1234567890, confidence: 0.9}
+  - id: ration-card-hindi-label
+    text: 'राशन कार्ड संख्या 123456789012'
+    expect:
+      - {type: ration_card, value: '123456789012', confidence: 0.9}
+  - id: nrega-job-card-with-cue
+    text: 'Job card UP-12-005-021-001/123'
+    expect:
+      - {type: nrega_job_card, value: UP-12-005-021-001/123, confidence: 0.97}
+  - id: nrega-job-card-without-cue
+    text: 'household KN-05-002-001-001/45 listed'
+    expect:
+      - {type: nrega_job_card, value: KN-05-002-001-001/45, confidence: 0.6}
+
+  # --- Card verification code and expiry -----------------------------------
+  - id: card-with-expiry-and-cvv
+    text: 'Card 4111 1111 1111 1111 exp 12/27 CVV 123'
+    expect:
+      - {type: card, value: '4111 1111 1111 1111'}
+      - {type: card_expiry, value: 12/27, confidence: 0.97}
+      - {type: card_cvv, value: '123', confidence: 0.9}
+  - id: expiry-year-is-not-a-cvv
+    text: 'Visa 4111111111111111, expiry 03/2028, cvv: 4321'
+    expect:
+      - {type: card, value: '4111111111111111'}
+      - {type: card_expiry, value: 03/2028}
+      - {type: card_cvv, value: '4321'}
+  - id: cvv-label-variants
+    text: 'CVV2-482; security code 777; सीवीवी 905'
+    expect:
+      - {type: card_cvv, value: '482'}
+      - {type: card_cvv, value: '777'}
+      - {type: card_cvv, value: '905'}
+

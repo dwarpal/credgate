@@ -104,7 +104,7 @@ Conformance compares `type`, `value`, and when given `confidence`,
 | Field | Required | Meaning |
 |---|---|---|
 | `id` | yes | Unique id, reported as `type` |
-| `class` | yes | Data class used by policies (`identity_strong`, `financial`, `health`, `contact`, `personal`, `quasi`) |
+| `class` | yes | Data class used by policies (`identity_strong`, `financial`, `sensitive_auth`, `health`, `contact`, `personal`, `quasi`). `sensitive_auth` is card verification data, which PCI DSS forbids storing after authorisation: implementations must never write it anywhere, including audit logs |
 | `label` | yes | Human-readable name |
 | `patterns` | yes | List of regexes |
 | `bounded` | no | Wrap patterns with `boundary` (default false) |
@@ -131,7 +131,9 @@ column-scan examples, command-line output), it masks it:
   the last 4 characters (the last 2 for values shorter than 8), the same
   convention as UIDAI's masked Aadhaar. Values of the `personal` class
   (names, addresses) keep nothing: their end identifies a person, unlike the
-  last digits of an identifier.
+  last digits of an identifier. Neither do values of the `sensitive_auth`
+  class (card verification codes), which are short enough that keeping two
+  digits would show most of the code.
 - **`full`**: replace every letter and digit of every value with `X`.
 
 Other characters (spaces, `.`, `@`, `-`, `+`) are kept, so the shape stays

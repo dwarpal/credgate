@@ -52,6 +52,13 @@ negatives:
   - {id: temple-trust, text: 'Donation to Shri Ram Mandir Trust'}
   - {id: festival-in-devanagari-after-shri, text: 'Shri राम नवमी holiday'}
   - {id: festival-after-devanagari-honorific, text: 'श्री राम नवमी की छुट्टी'}
+  - {id: vehicle-registration-certificate, text: 'RC no. MH12AB1234 renewed'}
+  - {id: cvv-mentioned-near-a-number, text: 'Room 123 near the CVV help desk'}
+  - {id: cvv-then-amount, text: 'CVV amount Rs 500'}
+  - {id: date-without-expiry-cue, text: 'Meeting on 12/27 at the branch'}
+  - {id: full-date-near-valid-till, text: 'Offer valid till 05/11/2026 on all cards'}
+  - {id: full-date-with-hyphens-near-valid-till, text: 'Scheme valid till 31-12-2026'}
+  - {id: ration-in-prose, text: 'Ration distributed on 12 May 2026'}
 
 known_false_positives:
   - id: deity-before-ji

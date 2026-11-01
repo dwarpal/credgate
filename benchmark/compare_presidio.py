@@ -210,7 +210,7 @@ def main():
 
     print("### Overall\n")
     print(
-        "| System | Threshold (tuned on dev) | Common types: P / R / F1 (exact) | Common types: F1 (overlap) | All 17 types: P / R / F1 (exact) | Seconds for dev+test |"
+        f"| System | Threshold (tuned on dev) | Common types: P / R / F1 (exact) | Common types: F1 (overlap) | All {len({s['type'] for d in test for s in d['spans']})} types: P / R / F1 (exact) | Seconds for dev+test |"
     )
     print("|---|---:|---|---:|---|---:|")
     for name, r in results.items():

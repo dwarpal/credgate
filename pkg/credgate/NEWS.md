@@ -1,5 +1,18 @@
 # credgate (development version)
 
+* New detectors: card verification codes (`card_cvv`, a new data class
+  `sensitive_auth` that is always masked in full and must never be stored),
+  card expiry dates (`card_expiry`), CKYC numbers (`ckyc`, only with a cue such
+  as "CKYC" or "KIN"), ration card numbers (`ration_card`, after a ration-card
+  label in English or Hindi) and NREGA job card numbers (`nrega_job_card`).
+  Card verification codes are recognised only right after their label; dates
+  such as "valid till 31/12/2026" are not taken as expiry dates; "RC no."
+  (vehicle registration) is not a ration card.
+* `synth_indian_pii()` adds `ckyc`, `ration_card`, `nrega_job_card`,
+  `card_cvv` and `card_expiry`; existing fields keep their values for a given
+  seed.
+* Benchmark corpus version 2 includes the new identifiers (test split: F1
+  0.980, precision 1.000).
 * Keyed tokens: `cg_vault(key)` makes tokens derived from the identifier
   with a secret key (`[PAN_bpg46o6x465d4]`), so the same identifier gets the
   same token in every vault with that key - across sessions, datasets,

@@ -89,7 +89,8 @@ test_that("the shipped spec contains every file", {
     "conformance/checksums.yaml", "conformance/scan.yaml", "conformance/redact.yaml",
     "conformance/negatives.yaml"
   ) %in% files))
-  expect_equal(nrow(cg_detectors()), 19)
+  spec <- readLines(file.path(cg_spec_path(), "detectors.yaml"), encoding = "UTF-8")
+  expect_equal(nrow(cg_detectors()), sum(grepl("^  - id: ", spec)))
 })
 
 test_that("checksums handle edge inputs and Indic digits", {

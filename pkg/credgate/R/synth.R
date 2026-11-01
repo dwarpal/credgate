@@ -15,7 +15,8 @@
 #' @return A data frame with columns `name`, `name_hi` (Devanagari),
 #'   `aadhaar`, `aadhaar_vid`, `pan`, `gstin`, `card`, `voter_epic`,
 #'   `passport`, `driving_licence`, `mobile`, `email`, `upi_id`, `ifsc`,
-#'   `bank_account`, `abha_number`, `abha_address`, `pincode` and `address`.
+#'   `bank_account`, `abha_number`, `abha_address`, `pincode`, `address`,
+#'   `ckyc`, `ration_card`, `nrega_job_card`, `card_cvv` and `card_expiry`.
 #' @export
 #' @examples
 #' synth_indian_pii(3, seed = 1)
@@ -65,8 +66,27 @@ synth_indian_pii <- function(n = 10, seed = NULL) {
       "House No ", sample(1:250, n, replace = TRUE), ", ",
       sample(synth_localities, n, replace = TRUE), ", ",
       sample(synth_cities, n, replace = TRUE), " ", pincode
-    )
+    ),
+    # Added later; generated after the columns above, so those keep their
+    # values for a given seed.
+    ckyc = paste0(sample(1:9, n, replace = TRUE), rand_digits(n, 13)),
+    ration_card = synth_ration_card(n),
+    nrega_job_card = paste0(
+      sample(the$lists$india_state_codes, n, replace = TRUE), "-",
+      sprintf("%02d", sample(1:75, n, replace = TRUE)), "-",
+      sprintf("%03d", sample(1:999, n, replace = TRUE)), "-",
+      sprintf("%03d", sample(1:999, n, replace = TRUE)), "-",
+      sprintf("%03d", sample(1:999, n, replace = TRUE)), "/",
+      sample(1:9999, n, replace = TRUE)
+    ),
+    card_cvv = rand_digits(n, 3),
+    card_expiry = sprintf("%02d/%d", sample(1:12, n, replace = TRUE), sample(27:32, n, replace = TRUE))
   )
+}
+
+synth_ration_card <- function(n) {
+  state <- sample(the$lists$india_state_codes, n, replace = TRUE)
+  ifelse(stats::runif(n) < 0.5, paste0(state, rand_digits(n, 10)), rand_digits(n, 12))
 }
 
 synth_first_names <- c(

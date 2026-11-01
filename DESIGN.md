@@ -292,8 +292,9 @@ are built in dependency order, so nothing is built twice or retrofitted
    value, 64-bit base32 ids, key fingerprints, merging, keyed vault files;
    identical in R and Python. Needed by the audit log, the proxy and
    parallel engines.
-3. **New detectors**: card verification code and expiry (for policies;
-   never stored), CKYC, ration card, NREGA job card numbers.
+3. **New detectors** (done): card verification code (data class
+   `sensitive_auth`, never stored) and expiry, CKYC, ration card, NREGA job
+   card numbers; in the benchmark corpus (version 2).
 4. **Policy engine** in the spec: destinations (local, internal, frontier),
    rules on combinations (card + CVV + expiry -> block), fail closed,
    versioned. Same YAML in R and Python.

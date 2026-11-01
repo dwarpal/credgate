@@ -42,7 +42,25 @@ def synth_indian_pii(n: int = 10, seed: int | None = None) -> list[dict[str, str
     Uses its own random generator; the global ``random`` state is untouched.
     """
     rng = random.Random(seed)
-    return [_record(rng) for _ in range(n)]
+    # Fields added later come from a second generator, so every earlier field
+    # keeps its value for a given seed.
+    extra = random.Random(None if seed is None else f"credgate-synth-extra-{seed}")
+    return [{**_record(rng), **_extra(extra)} for _ in range(n)]
+
+
+def _extra(rng: random.Random) -> dict[str, str]:
+    states = detector_spec()["lists"]["india_state_codes"]
+    state = rng.choice(states)
+    return {
+        "ckyc": str(rng.randint(1, 9)) + _digits(rng, 13),
+        "ration_card": (state + _digits(rng, 10) if rng.random() < 0.5 else _digits(rng, 12)),
+        "nrega_job_card": (
+            f"{state}-{rng.randint(1, 75):02d}-{rng.randint(1, 999):03d}-"
+            f"{rng.randint(1, 999):03d}-{rng.randint(1, 999):03d}/{rng.randint(1, 9999)}"
+        ),
+        "card_cvv": _digits(rng, 3),
+        "card_expiry": f"{rng.randint(1, 12):02d}/{rng.randint(27, 32)}",
+    }
 
 
 def _digits(rng: random.Random, k: int) -> str:
