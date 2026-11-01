@@ -171,5 +171,6 @@ def test_duckdb_scan_matches_in_memory(table_columns, tmp_path):
     ref = _scan_key(credgate.scan_pii(table_columns, sample=500))
     path = tmp_path / "t.parquet"
     pq.write_table(pa.table(table_columns), path, row_group_size=100)
-    rel = duckdb.connect().sql(f"FROM '{path}'")
+    con = duckdb.connect()  # a DuckDB 1.x relation does not keep its connection alive
+    rel = con.sql(f"FROM '{path}'")
     assert _scan_key(credgate.scan_pii(rel, sample=500)) == ref

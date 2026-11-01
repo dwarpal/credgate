@@ -110,7 +110,7 @@ Chunks = Callable[[], Iterator[list[Any]]]
 
 
 def _columns(data: Any) -> list[tuple[str, Chunks]]:
-    module = type(data).__module__.split(".")[0]
+    module = type(data).__module__.split(".")[0].lstrip("_")  # DuckDB 1.x: "_duckdb"
     kind = type(data).__name__
     if module == "pyarrow" and kind == "Table":
         return [
