@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from . import _spark
 from .detect import Span, detect_pii, mask_value
 
 
@@ -63,6 +64,7 @@ def scan_pii(
     sample: int = 10000,
     min_rate: float = 0.0,
     detectors: Sequence[str] | None = None,
+    seed: int = 42,
 ) -> ScanReport:
     """Scan the columns of a table for PII.
 
@@ -77,13 +79,16 @@ def scan_pii(
         data: A pandas or Polars DataFrame, a Polars LazyFrame, an Arrow table
             or dataset, a DuckDB relation, or a mapping of column name to
             values. Lazy frames, datasets and relations are read one column
-            at a time, so the table may be larger than memory.
+            at a time, so the table may be larger than memory. A PySpark
+            DataFrame is sampled inside the cluster (up to ``sample`` rows,
+            randomly with ``seed``) and only the sample is collected.
         sample: Maximum number of values checked per column.
         min_rate: Report a type only if it occurs in at least this share of
             sampled values.
         detectors: Detector ids to run; ``None`` runs all registered ones.
+        seed: Random seed for sampling Spark DataFrames; ignored otherwise.
     """
-    columns = _scan_columns(data, sample, min_rate, detectors)
+    columns, _ = _scan_columns(data, sample, min_rate, detectors, seed)
     findings = [f for c in columns for f in c.findings]
     return ScanReport(findings, n_columns=len(columns))
 
@@ -96,13 +101,25 @@ class _ColumnScan:
     findings: list[ColumnFinding]
 
 
+@dataclass(frozen=True)
+class _TableInfo:
+    n_rows: int | None
+    sample_method: str | None  # None: per column, "all" or "even"
+
+
 def _scan_columns(
-    data: Any, sample: int, min_rate: float, detectors: Sequence[str] | None
-) -> list[_ColumnScan]:
+    data: Any, sample: int, min_rate: float, detectors: Sequence[str] | None, seed: int = 42
+) -> tuple[list[_ColumnScan], _TableInfo]:
     """Every column of ``data``, with the types found in it (see the spec's
-    "Column scan"); columns without usable values have no findings."""
+    "Column scan"); columns without usable values have no findings. Spark
+    DataFrames are sampled in the cluster first ("Spark tables")."""
     if not isinstance(sample, numbers.Integral) or sample < 1:
         raise ValueError("`sample` must be a positive whole number.")
+    if _spark.is_spark(data):
+        data, n_rows, method = _spark.sample_rows(data, sample, seed)
+        info = _TableInfo(n_rows, method)
+    else:
+        info = _TableInfo(_n_rows(data), None)
     out = []
     for name, chunks in _columns(data):
         values, n_usable = _sampled_values(chunks, sample)
@@ -117,7 +134,7 @@ def _scan_columns(
             found = [f for f in found if f.rate >= min_rate]
             found.sort(key=lambda f: (-f.rate, f.type))
         out.append(_ColumnScan(name, len(values), n_usable > sample, found))
-    return out
+    return out, info
 
 
 def _n_rows(data: Any) -> int | None:

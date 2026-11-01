@@ -26,7 +26,8 @@ inventory_optional <- c("type", "class", "n_rows", "mean_confidence")
 #'   was found: `v`, `source`, `table`, `column`, `type`, `class`, `n_rows`
 #'   (when known without reading the table), `n_sampled`, `n_matched`,
 #'   `n_full`, `rate`, `mean_confidence`, `sample_method` (`"all"` or
-#'   `"even"`), `scanned_at` (UTC) and `credgate` (the version that scanned).
+#'   `"even"`, or `"spark-sample"` for Spark tables), `scanned_at` (UTC) and
+#'   `credgate` (the version that scanned).
 #' @export
 #' @examples
 #' customers <- data.frame(
@@ -39,7 +40,8 @@ inventory_optional <- c("type", "class", "n_rows", "mean_confidence")
 #' path <- tempfile(fileext = ".csv")
 #' write_inventory(inv, path)
 #' read_inventory(path)
-pii_inventory <- function(data, source, table, sample = 10000L, min_rate = 0, detectors = NULL) {
+pii_inventory <- function(data, source, table, sample = 10000L, min_rate = 0,
+                          detectors = NULL, seed = 42L) {
   for (arg in c("source", "table")) {
     value <- get(arg)
     if (!rlang::is_string(value) || !nzchar(value)) {
@@ -47,8 +49,10 @@ pii_inventory <- function(data, source, table, sample = 10000L, min_rate = 0, de
     }
   }
   scanned_at <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
-  n_rows <- as.integer(table_rows(data))
-  rows <- lapply(scan_table(data, sample, min_rate, detectors), function(col) {
+  columns <- scan_table(data, sample, min_rate, detectors, seed)
+  n_rows <- as.integer(attr(columns, "n_rows"))
+  method <- attr(columns, "sample_method")
+  rows <- lapply(columns, function(col) {
     found <- col$findings
     if (nrow(found) == 0) {
       found <- data.frame(
@@ -63,7 +67,7 @@ pii_inventory <- function(data, source, table, sample = 10000L, min_rate = 0, de
       n_sampled = as.integer(found$n_sampled), n_matched = as.integer(found$n_matched),
       n_full = as.integer(found$n_full), rate = found$rate,
       mean_confidence = found$mean_confidence,
-      sample_method = if (col$sampled) "even" else "all",
+      sample_method = method %||% if (col$sampled) "even" else "all",
       scanned_at = scanned_at,
       credgate = paste0("r/", utils::packageVersion("credgate"))
     )

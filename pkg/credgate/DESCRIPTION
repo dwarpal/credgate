@@ -43,6 +43,7 @@ Suggests:
     rmarkdown,
     RSQLite,
     sodium,
+    sparklyr,
     testthat (>= 3.0.0),
     withr
 VignetteBuilder: knitr
