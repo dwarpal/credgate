@@ -174,6 +174,62 @@ Reports, per column of a table, which PII types occur and how often. Defaults:
 Conformance cases are in `conformance/scan.yaml`; each lists the complete
 expected result.
 
+## Inventory (`pii_inventory`)
+
+A record of where PII is, across many tables: the result of discovery, kept
+for InfoSec, compliance and the policy editor. It never contains values, not
+even masked ones.
+
+An inventory is a table with one row per **table, column and PII type
+found**, and one row with no type for each scanned column where no type was
+found (or none reached `min_rate`), so that it shows what was covered as
+well as what was found. `pii_inventory(data, source, table)` scans one table
+with the column-scan rules above (same `sample`, `min_rate` and `detectors`)
+and returns its rows; inventories of several tables are combined by
+appending rows.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `v` | integer | inventory format version, `1` |
+| `source` | text | the data source, named by the user (e.g. `bigquery:prod`, `hive`, `lake`) |
+| `table` | text | the table within the source (e.g. `dataset.customers`, or a file path) |
+| `column` | text | column name |
+| `type` | text or empty | PII type; empty when none was found |
+| `class` | text or empty | its data class |
+| `n_rows` | integer or empty | rows in the table, when known without reading it |
+| `n_sampled` | integer | values checked (0 when the column has no usable values) |
+| `n_matched` | integer | values with a match of the type (0 with no type) |
+| `n_full` | integer | values entirely the identifier (0 with no type) |
+| `rate` | number | `n_matched / n_sampled`, 4 decimals (0 with no type) |
+| `mean_confidence` | number or empty | 2 decimals; empty with no type |
+| `sample_method` | text | `all` (every usable value checked), `even` (evenly spaced sample); integrations may add their own (e.g. a database's sampling clause) |
+| `scanned_at` | text | when the scan of this table started, UTC, `YYYY-MM-DDThh:mm:ssZ` |
+| `credgate` | text | the implementation and version that scanned, e.g. `python/0.6.0`, `r/0.2.0` |
+
+Rows are in table order, then column order, then `rate` descending, then
+`type`. `n_rows` is the table's row count when the input knows it without a
+scan (a data frame or an Arrow table), otherwise empty; integrations fill it
+from table metadata.
+
+**Inventory files** are CSV, written identically by every implementation so
+that files can be compared and diffed:
+
+- UTF-8 without byte-order mark, `\n` line endings, a final newline;
+- a header line with the field names in the order above;
+- fields separated by `,`; a field containing `,`, `"`, `\r` or `\n` is
+  enclosed in `"` with inner `"` doubled; no other quoting;
+- empty values as nothing between the separators;
+- integers in plain decimal; `rate` and `mean_confidence` with 4 and 2
+  decimals, then trailing zeros and a trailing `.` removed (`1`, `0.25`,
+  `0.3333`, `0`).
+
+Reading a file checks the header, turns empty fields into missing values and
+numbers into numbers; anything else is an error.
+
+Conformance cases are in `conformance/inventory.yaml`, and
+`conformance/inventory/written-by-both.csv` is the file both
+implementations must write for its case.
+
 ## Redaction (`redact`, `preview`)
 
 Irreversible masking of a text before it is shared:

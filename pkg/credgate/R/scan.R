@@ -35,28 +35,49 @@
 #' )
 #' scan_pii(customers)
 scan_pii <- function(data, sample = 10000L, min_rate = 0, detectors = NULL) {
+  columns <- scan_table(data, sample, min_rate, detectors)
+  out <- do.call(rbind, c(list(empty_scan()), lapply(columns, `[[`, "findings")))
+  rownames(out) <- NULL
+  structure(out, class = c("cg_scan", "data.frame"), n_columns = length(columns))
+}
+
+# Every column of `data` with the types found in it (spec: "Column scan"):
+# a list of list(name, n_sampled, sampled, findings), where `sampled` is TRUE
+# when only a sample of the usable values was checked.
+scan_table <- function(data, sample, min_rate, detectors) {
   if (!rlang::is_scalar_integerish(sample) || sample < 1) {
     rlang::abort("`sample` must be a positive whole number.")
   }
   columns <- scan_columns(data)
-  rows <- list()
-  for (col in names(columns)) {
+  lapply(names(columns), function(col) {
     values <- sampled_values(columns[[col]], sample)
-    if (length(values) == 0) {
-      next
+    rows <- list()
+    if (length(values) > 0) {
+      context <- gsub("[_.-]", " ", col)
+      spans <- detect_pii(values, detectors = detectors, context = context)
+      for (type in unique(spans$type)) {
+        rows[[length(rows) + 1]] <- summarise_type(spans[spans$type == type, ], values, col)
+      }
     }
-    context <- gsub("[_.-]", " ", col)
-    spans <- detect_pii(values, detectors = detectors, context = context)
-    for (type in unique(spans$type)) {
-      rows[[length(rows) + 1]] <- summarise_type(spans[spans$type == type, ], values, col)
-    }
-  }
+    found <- do.call(rbind, c(list(empty_scan()), rows))
+    found <- found[found$rate >= min_rate, , drop = FALSE]
+    found <- found[order(-found$rate, found$type), , drop = FALSE]
+    list(
+      name = col, n_sampled = length(values),
+      sampled = attr(values, "n_usable") > sample, findings = found
+    )
+  })
+}
 
-  out <- do.call(rbind, c(list(empty_scan()), rows))
-  out <- out[out$rate >= min_rate, , drop = FALSE]
-  out <- out[order(match(out$column, names(columns)), -out$rate, out$type), , drop = FALSE]
-  rownames(out) <- NULL
-  structure(out, class = c("cg_scan", "data.frame"), n_columns = length(columns))
+# The number of rows, when known without reading the table.
+table_rows <- function(data) {
+  if (is.data.frame(data) && !inherits(data, "tbl_sql")) {
+    return(nrow(data))
+  }
+  if (inherits(data, "ArrowObject") && inherits(data, c("Table", "RecordBatch"))) {
+    return(data$num_rows)
+  }
+  NA_integer_
 }
 
 # Values of one column as trimmed, non-empty strings (see spec, step 1).

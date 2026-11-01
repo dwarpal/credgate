@@ -1,0 +1,4 @@
+v,source,table,column,type,class,n_rows,n_sampled,n_matched,n_full,rate,mean_confidence,sample_method,scanned_at,credgate
+1,lake,"files/calls, ""Q3"".csv",cust_pan,pan,identity_strong,3,3,3,3,1,0.97,all,2026-11-01T10:00:00Z,conformance
+1,lake,"files/calls, ""Q3"".csv",notes,,,3,2,0,0,0,,all,2026-11-01T10:00:00Z,conformance
+1,lake,"files/calls, ""Q3"".csv",amount,,,3,0,0,0,0,,all,2026-11-01T10:00:00Z,conformance

@@ -203,6 +203,27 @@ In R: `log <- cg_audit_log("audit.jsonl")`, `policy_apply(..., audit = log)`,
 files. Rotation and retention (default 5 years, at least 1, per the
 [threat model](docs/threat-model.md)) come with the proxy.
 
+## PII inventory
+
+Discovery at scale starts with an inventory: which tables and columns hold
+which kinds of personal data. `pii_inventory()` scans a table with the
+`scan_pii()` rules and records every column - also those where nothing was
+found, so the inventory shows what was covered - with the source, table,
+sample size and when it was scanned. It never records values, not even
+masked ones. Inventories of many tables are combined and saved as a CSV
+file that R and Python write identically.
+
+```python
+inv = credgate.pii_inventory(customers, source="crm", table="customers")
+inv += credgate.pii_inventory(calls, source="crm", table="calls")
+inv.write("inventory.csv")                       # credgate.read_inventory() reads it back
+```
+
+In R: `pii_inventory(customers, source = "crm", table = "customers")`,
+combined with `rbind()`, saved with `write_inventory()` and read with
+`read_inventory()`. Scanning whole warehouses (Spark, BigQuery, every table
+of a database) builds on this and is in progress.
+
 ## Large data
 
 credgate works on tables too big for memory, in both languages and on the

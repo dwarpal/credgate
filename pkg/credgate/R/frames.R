@@ -232,18 +232,20 @@ scan_columns <- function(data) {
 }
 
 # The column's usable values, sampled as the spec says: with n > sample
-# values, those at 0-based positions floor(i * n / sample).
+# values, those at 0-based positions floor(i * n / sample). The number of
+# usable values n is kept as the attribute `n_usable`.
 sampled_values <- function(chunks, sample) {
   if (isTRUE(attr(chunks, "single"))) {
     values <- NULL
     chunks(function(x) values <<- scan_values(x))
     n <- length(values)
-    return(if (n > sample) values[floor((seq_len(sample) - 1) * n / sample) + 1] else values)
+    out <- if (n > sample) values[floor((seq_len(sample) - 1) * n / sample) + 1] else values
+    return(structure(out, n_usable = n))
   }
-  n <- 0
+  n <- 0L
   chunks(function(x) n <<- n + length(scan_values(x)))
   if (n == 0) {
-    return(character())
+    return(structure(character(), n_usable = 0L))
   }
   wanted <- if (n > sample) floor((seq_len(sample) - 1) * n / sample) + 1 else seq_len(n)
   out <- character(length(wanted))
@@ -254,7 +256,7 @@ sampled_values <- function(chunks, sample) {
     out[here] <<- values[wanted[here] - seen]
     seen <<- seen + length(values)
   })
-  out
+  structure(out, n_usable = n)
 }
 
 check_installed <- function(pkg) {

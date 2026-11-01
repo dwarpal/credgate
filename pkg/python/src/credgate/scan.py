@@ -83,24 +83,55 @@ def scan_pii(
             sampled values.
         detectors: Detector ids to run; ``None`` runs all registered ones.
     """
+    columns = _scan_columns(data, sample, min_rate, detectors)
+    findings = [f for c in columns for f in c.findings]
+    return ScanReport(findings, n_columns=len(columns))
+
+
+@dataclass(frozen=True)
+class _ColumnScan:
+    name: str
+    n_sampled: int
+    sampled: bool  # True when only a sample of the usable values was checked
+    findings: list[ColumnFinding]
+
+
+def _scan_columns(
+    data: Any, sample: int, min_rate: float, detectors: Sequence[str] | None
+) -> list[_ColumnScan]:
+    """Every column of ``data``, with the types found in it (see the spec's
+    "Column scan"); columns without usable values have no findings."""
     if not isinstance(sample, numbers.Integral) or sample < 1:
         raise ValueError("`sample` must be a positive whole number.")
-    columns = _columns(data)
-    findings: list[ColumnFinding] = []
-    for name, chunks in columns:
-        values = _sampled_values(chunks, sample)
-        if not values:
-            continue
-        context = name.replace("_", " ").replace(".", " ").replace("-", " ")
-        spans = detect_pii(values, detectors=detectors, context=context)
-        by_type: dict[str, list[Span]] = {}
-        for s in spans:
-            by_type.setdefault(s.type, []).append(s)
-        found = [_summarise(name, group, values) for group in by_type.values()]
-        found = [f for f in found if f.rate >= min_rate]
-        found.sort(key=lambda f: (-f.rate, f.type))
-        findings.extend(found)
-    return ScanReport(findings, n_columns=len(columns))
+    out = []
+    for name, chunks in _columns(data):
+        values, n_usable = _sampled_values(chunks, sample)
+        found: list[ColumnFinding] = []
+        if values:
+            context = name.replace("_", " ").replace(".", " ").replace("-", " ")
+            spans = detect_pii(values, detectors=detectors, context=context)
+            by_type: dict[str, list[Span]] = {}
+            for s in spans:
+                by_type.setdefault(s.type, []).append(s)
+            found = [_summarise(name, group, values) for group in by_type.values()]
+            found = [f for f in found if f.rate >= min_rate]
+            found.sort(key=lambda f: (-f.rate, f.type))
+        out.append(_ColumnScan(name, len(values), n_usable > sample, found))
+    return out
+
+
+def _n_rows(data: Any) -> int | None:
+    """The number of rows, when known without reading the table."""
+    module = type(data).__module__.split(".")[0].lstrip("_")
+    kind = type(data).__name__
+    if module == "pyarrow" and kind == "Table":
+        return int(data.num_rows)
+    if module in ("pandas", "polars") and kind == "DataFrame":
+        return len(data)
+    if isinstance(data, Mapping):
+        first = next(iter(data.values()), None)
+        return len(first) if hasattr(first, "__len__") else None
+    return None
 
 
 # A column is a function returning its values in chunks; it is called again
@@ -150,18 +181,18 @@ def _duckdb_chunks(rel: Any, column: str) -> Iterator[list[Any]]:
         yield batch.column(0).to_pylist()
 
 
-def _sampled_values(chunks: Chunks, sample: int) -> list[str]:
+def _sampled_values(chunks: Chunks, sample: int) -> tuple[list[str], int]:
     """The column's usable values, sampled as the spec says: with n > sample
-    values, those at positions floor(i * n / sample)."""
+    values, those at positions floor(i * n / sample). Also returns n."""
     first = chunks()
     head = next(first, None)
     if head is None:
-        return []
+        return [], 0
     rest = next(first, None)
     if rest is None:  # one chunk, already in memory
         values = _scan_values(head)
         n = len(values)
-        return [values[i * n // sample] for i in range(sample)] if n > sample else values
+        return ([values[i * n // sample] for i in range(sample)] if n > sample else values), n
     # Several chunks: count, then pick the sampled positions in a second pass.
     n = len(_scan_values(head)) + len(_scan_values(rest)) + sum(len(_scan_values(c)) for c in first)
     wanted = [i * n // sample for i in range(sample)] if n > sample else list(range(n))
@@ -176,7 +207,7 @@ def _sampled_values(chunks: Chunks, sample: int) -> list[str]:
         seen += len(values)
         if k == len(wanted):
             break
-    return out
+    return out, n
 
 
 def _scan_values(raw: Iterable[Any]) -> list[str]:

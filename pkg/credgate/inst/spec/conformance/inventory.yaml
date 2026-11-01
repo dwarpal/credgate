@@ -1,0 +1,82 @@
+# Inventory conformance cases (see README.md, "Inventory"). Every CredGate
+# implementation must produce exactly the expected rows, in order.
+#
+# Fields per case:
+#   id        unique name
+#   source    the source name passed to pii_inventory
+#   table     the table name passed to pii_inventory
+#   columns   the table: column name -> list of values (null = missing);
+#             all columns of a case have the same length
+#   sample    optional; default 10000
+#   min_rate  optional; default 0
+#   expect    the complete, ordered rows, without `scanned_at` and
+#             `credgate` (which vary); a missing field means empty
+#
+# `file` names the case whose rows, with `scanned_at` and `credgate` set as
+# given, must be written byte for byte as inventory/written-by-both.csv.
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+file:
+  case: coverage-of-every-column
+  scanned_at: '2026-11-01T10:00:00Z'
+  credgate: conformance
+  path: inventory/written-by-both.csv
+
+cases:
+
+  - id: coverage-of-every-column
+    source: lake
+    table: 'files/calls, "Q3".csv'
+    columns:
+      cust_pan: ['ABCPE1234F', 'aaacr5055k', 'XYZPQ9876R']
+      notes: ['no PII here', 'ok', null]
+      amount: [1.5, 2.25, null]
+    expect:
+      - {v: 1, source: lake, table: 'files/calls, "Q3".csv', column: cust_pan,
+         type: pan, class: identity_strong, n_rows: 3, n_sampled: 3,
+         n_matched: 3, n_full: 3, rate: 1.0, mean_confidence: 0.97,
+         sample_method: all}
+      - {v: 1, source: lake, table: 'files/calls, "Q3".csv', column: notes,
+         n_rows: 3, n_sampled: 2, n_matched: 0, n_full: 0, rate: 0.0,
+         sample_method: all}
+      - {v: 1, source: lake, table: 'files/calls, "Q3".csv', column: amount,
+         n_rows: 3, n_sampled: 0, n_matched: 0, n_full: 0, rate: 0.0,
+         sample_method: all}
+
+  - id: below-min-rate-is-still-covered
+    source: crm
+    table: calls
+    min_rate: 0.3
+    columns:
+      notes: ['Called customer, Aadhaar 542229371182', 'no PII here',
+              'mobile +91 98765 43210', 'nothing']
+    expect:
+      - {v: 1, source: crm, table: calls, column: notes, n_rows: 4,
+         n_sampled: 4, n_matched: 0, n_full: 0, rate: 0.0, sample_method: all}
+
+  - id: sampled-column
+    source: crm
+    table: ids
+    sample: 2
+    columns:
+      id: ['ABCPE1234F', 'x', 'y', 'z', 'ABCPE1234F']
+    expect:
+      - {v: 1, source: crm, table: ids, column: id, type: pan,
+         class: identity_strong, n_rows: 5, n_sampled: 2, n_matched: 1,
+         n_full: 1, rate: 0.5, mean_confidence: 0.85, sample_method: even}
+
+  - id: several-types-in-one-column
+    source: crm
+    table: contacts
+    columns:
+      contact: ['priya.n@oksbi', 'priya.nair@example.org', 'rahul@ybl', 'ok']
+    expect:
+      - {v: 1, source: crm, table: contacts, column: contact, type: upi_id,
+         class: financial, n_rows: 4, n_sampled: 4, n_matched: 2, n_full: 2,
+         rate: 0.5, mean_confidence: 0.95, sample_method: all}
+      - {v: 1, source: crm, table: contacts, column: contact, type: email,
+         class: contact, n_rows: 4, n_sampled: 4, n_matched: 1, n_full: 1,
+         rate: 0.25, mean_confidence: 0.95, sample_method: all}
