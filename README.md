@@ -314,6 +314,16 @@ line.
 Masking changes only what is displayed; detection and `redact()`
 (`[AADHAAR]`, `[PERSON_NAME]`) are unaffected.
 
+## Security
+
+credgate runs entirely offline: no network calls, telemetry or downloads.
+Secrets (vault passphrases) come only from arguments, environment variables
+or a prompt, and detected values are masked whenever credgate shows them.
+The [threat model](docs/threat-model.md) sets out what credgate protects,
+against whom, what it trusts and where it does not protect, for InfoSec and
+compliance reviews. Please report security issues privately to the
+maintainers rather than in a public issue.
+
 ## Known limits
 
 - Names and addresses are found only next to a cue: an honorific (Shri, Smt,

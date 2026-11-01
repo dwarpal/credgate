@@ -279,6 +279,35 @@ of hand-tuned constants, and later grammars for addresses and k-anonymity
 risk for tables. Neural NER only as an optional, clearly labelled extra
 layer.
 
+### Build order for the governance features (agreed 2026-11-01)
+
+Done since 0.4.0: reversible tokenisation with encrypted vault files,
+large-data support in Python and R (pandas, Polars, Arrow/Parquet, DuckDB,
+DBI databases including Postgres), a throughput benchmark. The next pieces
+are built in dependency order, so nothing is built twice or retrofitted
+(see [docs/threat-model.md](docs/threat-model.md) for the reasoning):
+
+1. **Threat model** (done: docs/threat-model.md).
+2. **Keyed tokens** in the spec: HMAC of type and canonical value; needed by
+   the audit log, the proxy and parallel engines.
+3. **New detectors**: card verification code and expiry (for policies;
+   never stored), CKYC, ration card, NREGA job card numbers.
+4. **Policy engine** in the spec: destinations (local, internal, frontier),
+   rules on combinations (card + CVV + expiry -> block), fail closed,
+   versioned. Same YAML in R and Python.
+5. **Audit log** in the spec: keyed hashes only, hash chain, policy version
+   per record, retention default 5 years (minimum 1), on-premises.
+6. **Discovery at scale**: Spark (PySpark, sparklyr), BigQuery, a
+   warehouse-wide PII inventory - using keyed tokens, policies and audit.
+   Detection-only scanning can move earlier if a concrete need arises.
+7. **Proxy** (Python): offline, localhost by default, a Nix-built image.
+8. **Shiny apps** in R and Python: a policy editor for InfoSec and
+   compliance (possible after 4) and the assistant (after 7); thin, with all
+   decisions in the policy engine and proxy.
+
+Inputs for this order came from user interviews (kept outside the
+repository) and a review of DPDP, RBI, CERT-In and PCI DSS obligations.
+
 | # | Area | Today | To do |
 |---|---|---|---|
 | 1 | Accuracy benchmarking | `evaluate()` in both packages; synthetic labelled corpus (dev/test); per-type report in `benchmark/README.md` (test F1 0.947 at 0.5); compared with Presidio (F1 0.949 vs 0.666 India-configured on common types) | Labelled synthetic corpus; per-type precision, recall, F1; published report. Compare with Microsoft Presidio (MIT, has Indian recognisers); verify that other named tools exist, run locally and allow published benchmarks before comparing |
