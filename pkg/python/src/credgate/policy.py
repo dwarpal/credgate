@@ -196,12 +196,19 @@ class Policy:
         )
 
     def apply(
-        self, text: str | Sequence[str], destination: str, vault: Vault | None = None
+        self,
+        text: str | Sequence[str],
+        destination: str,
+        vault: Vault | None = None,
+        audit: Any = None,
     ) -> Decision:
         """Decide, then rewrite the texts if the request is allowed: matches to
         redact become placeholders, matches to tokenise become tokens from
-        ``vault``. A blocked request gets no texts."""
+        ``vault``. A blocked request gets no texts. With ``audit`` (an
+        :class:`~credgate.AuditLog`), the decision is recorded, blocked or not."""
         decision = self.decide(text, destination)
+        if audit is not None:
+            audit.record(decision)
         if not decision.allowed:
             return decision
         if vault is None and any(m.action == "tokenise" for m in decision.matches):

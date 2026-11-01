@@ -7,7 +7,7 @@
 \usage{
 policy_decide(policy, text, destination)
 
-policy_apply(policy, text, destination, vault = NULL)
+policy_apply(policy, text, destination, vault = NULL, audit = NULL)
 }
 \arguments{
 \item{policy}{A policy from \code{\link[=cg_policy]{cg_policy()}}.}
@@ -18,6 +18,9 @@ policy_apply(policy, text, destination, vault = NULL)
 an error.}
 
 \item{vault}{A vault from \code{\link[=cg_vault]{cg_vault()}}, needed when the policy tokenises.}
+
+\item{audit}{An audit log from \code{\link[=cg_audit_log]{cg_audit_log()}}: the decision is recorded,
+blocked or not.}
 }
 \value{
 An object of class \code{cg_decision}: a list with \code{policy_id},

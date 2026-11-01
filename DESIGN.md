@@ -300,8 +300,11 @@ are built in dependency order, so nothing is built twice or retrofitted
    combinations (`all_of`: card + CVV + expiry -> block), strict loading,
    revisions. Same YAML in R and Python; example in
    examples/policies/bank-default.yaml.
-5. **Audit log** in the spec: keyed hashes only, hash chain, policy version
-   per record, retention default 5 years (minimum 1), on-premises.
+5. **Audit log** in the spec (done): one record per decision, keyed
+   identifier hashes (never for card verification data), hash chain with a
+   head to keep elsewhere, policy revision and endpoint per record; R and
+   Python write and verify the same files. Rotation and retention (default 5
+   years, minimum 1, on-premises) come with the proxy.
 6. **Discovery at scale**: Spark (PySpark, sparklyr), BigQuery, a
    warehouse-wide PII inventory - using keyed tokens, policies and audit.
    Detection-only scanning can move earlier if a concrete need arises.

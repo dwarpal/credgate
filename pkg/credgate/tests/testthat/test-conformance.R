@@ -226,3 +226,50 @@ test_that("policy: unknown destination is an error", {
   )
 })
 
+
+audit_spec <- conformance("audit.yaml")
+for (case in audit_spec$id_hashes) {
+  test_that(paste("audit id hash:", case$type, case$id), {
+    skip_if_not_installed("openssl")
+    expect_identical(
+      credgate:::audit_id_hash(credgate:::token_key(audit_spec$key), case$type, case$canonical),
+      case$id
+    )
+  })
+}
+for (case in audit_spec$logs) {
+  test_that(paste("audit log verifies:", case$file), {
+    skip_if_not_installed("openssl")
+    check <- audit_verify(file.path(cg_spec_path(), "conformance", case$file))
+    expect_true(check$ok)
+    expect_equal(check$records, case$records)
+    expect_identical(check$head, case$head)
+  })
+}
+tampered <- function(lines, change, at) {
+  i <- at
+  switch(change,
+    edit = {
+      lines[i] <- sub('"actor":"', '"actor":"x', lines[i], fixed = TRUE)
+      lines
+    },
+    delete = lines[-i],
+    swap = {
+      lines[c(i, i + 1)] <- lines[c(i + 1, i)]
+      lines
+    },
+    duplicate = append(lines, lines[i], after = i)
+  )
+}
+for (case in audit_spec$tamper$cases) {
+  test_that(paste("audit tampering detected:", case$id), {
+    skip_if_not_installed("openssl")
+    src <- file.path(cg_spec_path(), "conformance", audit_spec$tamper$file)
+    lines <- readLines(src, encoding = "UTF-8")
+    path <- withr::local_tempfile(fileext = ".jsonl")
+    writeLines(enc2utf8(tampered(lines, case$change, case$at)), path, useBytes = TRUE)
+    check <- audit_verify(path)
+    expect_false(check$ok)
+    expect_equal(check$line, case$line)
+  })
+}
