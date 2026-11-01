@@ -6,3 +6,6 @@ credgate_*.tar.gz
 result
 result-*
 .DS_Store
+
+# Interview notes and answers stay local, never in the public repo.
+research/
