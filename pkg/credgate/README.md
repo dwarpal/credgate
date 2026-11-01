@@ -254,6 +254,14 @@ scan_pii(dplyr::tbl(con, "calls"))                       # any dbplyr table
 redact_query(con, "SELECT call_id, notes FROM calls", "calls_safe")
 ```
 
+Any DBI database works the same way, for example Postgres:
+
+```r
+con <- DBI::dbConnect(RPostgres::Postgres(), dbname = "lending", host = "db.internal")
+scan_pii(dplyr::tbl(con, "loan_notes"))                     # needs dbplyr
+redact_query(con, "SELECT id, notes FROM loan_notes", "loan_notes_safe")
+```
+
 `redact()`, `tokenise()` and `detect_pii()` also accept Arrow arrays. See
 `vignette("large-data")` and the
 [large-data guide](https://github.com/dwarpal/credgate/blob/main/docs/large-data.md).

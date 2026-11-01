@@ -78,6 +78,21 @@ scan_pii(dplyr::tbl(con, dplyr::sql("SELECT * FROM 'calls.parquet'")))
 redact_query(con, "SELECT call_id, notes FROM 'calls.parquet'", "calls_safe")
 ```
 
+The same works on any database with a DBI driver (Postgres, SQL Server via
+odbc, Oracle, Snowflake, ...): `redact_query()` needs only DBI, and
+`scan_pii()` takes a dbplyr table. For example, Postgres:
+
+```r
+con <- DBI::dbConnect(RPostgres::Postgres(), dbname = "lending", host = "db.internal")
+scan_pii(dplyr::tbl(con, "loan_notes"))                     # needs dbplyr
+redact_query(con, "SELECT id, notes FROM loan_notes", "loan_notes_safe")
+```
+
+Tested with DuckDB and SQLite. `scan_pii()` reads each column twice (to
+count, then to sample), so the sample matches the in-memory one only if the
+database returns rows in the same order both times; DuckDB and SQLite do for
+plain tables.
+
 The vignette `vignette("large-data", package = "credgate")` walks through
 both. Examples: [`arrow_parquet.R`](../examples/r/arrow_parquet.R),
 [`duckdb_dbplyr.R`](../examples/r/duckdb_dbplyr.R).
