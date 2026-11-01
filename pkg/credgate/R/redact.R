@@ -14,8 +14,10 @@
 #' redact("Name: Priya Nair; PAN: ABCPN1234K")
 #' redact(c("UPI priya.n@oksbi", "nothing here"))
 redact <- function(text, detectors = NULL, context = NULL, min_confidence = 0) {
+  arrow <- from_arrow(text)
+  text <- arrow$text
   spans <- detect_pii(text, detectors = detectors, context = context, min_confidence = min_confidence)
-  apply_redaction(text, spans)
+  arrow$wrap(apply_redaction(text, spans))
 }
 
 apply_redaction <- function(text, spans) {

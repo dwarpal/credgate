@@ -23,6 +23,7 @@
 #' detect_pii("Customer PAN ABCPE1234F, GSTIN 27AAPFU0939F1ZV")
 detect_pii <- function(text, detectors = NULL, context = NULL,
                        min_confidence = 0, window = NULL) {
+  text <- from_arrow(text)$text
   if (!is.character(text)) {
     rlang::abort("`text` must be a character vector.")
   }

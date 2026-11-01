@@ -39,3 +39,10 @@ test_that("sampling caps the values checked per column", {
   expect_equal(report$n_sampled, 10L)
   expect_equal(report$rate, 0.5)
 })
+
+test_that("a subset of a scan report still prints", {
+  report <- scan_pii(data.frame(pan = c("ABCPE1234F", "AAACR5055K")))
+  out <- capture.output(print(report[1, c("column", "type")]))
+  expect_true(any(grepl("pan", out)))
+})
+

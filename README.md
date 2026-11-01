@@ -150,13 +150,28 @@ available programmatically (`x$value`, `span.value`) or with `--reveal`.
 
 ## Large data
 
-In Python, credgate works directly on pandas and Polars Series, Arrow
-arrays and tables, DuckDB (`SELECT cg_redact(notes) FROM 'calls.parquet'`)
-and Parquet files larger than memory (`credgate redact --parquet ...`);
+credgate works on tables too big for memory, in both languages and on the
+command line:
+
+| | Python | R |
+|---|---|---|
+| Parquet | `credgate.arrow.redact_parquet()` | `redact_parquet()` |
+| DuckDB | SQL: `SELECT cg_redact(notes) FROM 'calls.parquet'` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` |
+| Polars | `pl.col("notes").credgate.redact()` | - |
+| Arrow, pandas | Series, arrays, tables, datasets | arrays, tables, datasets |
+| Other databases | - | any DBI database via dbplyr |
+
+```sh
+credgate scan calls.parquet
+credgate redact --parquet calls.parquet --column notes -o calls_safe.parquet
+```
+
 `scan_pii()` reads big tables one column at a time and gives the same report
-as in memory. See the [Python README](pkg/python/README.md#large-data-pandas-polars-arrow-duckdb-parquet).
-Throughput is measured in [benchmark/README.md](benchmark/README.md#throughput).
-R support for Arrow and DuckDB is planned.
+as in memory. The [large-data guide](docs/large-data.md) explains the
+approach with Python, R and command-line examples; runnable versions are in
+[`examples/`](examples/README.md#large-data-parquet-polars-duckdb-arrow), and
+the R vignette `vignette("large-data", package = "credgate")` walks through
+it. Throughput is measured in [benchmark/README.md](benchmark/README.md#throughput).
 
 ## Installation
 

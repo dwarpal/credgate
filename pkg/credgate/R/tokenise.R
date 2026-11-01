@@ -50,18 +50,20 @@ cg_vault <- function() {
 #' restore("The customer with [PAN_1] can be reached on [MOBILE_IN_1].", vault)
 tokenise <- function(text, vault, detectors = NULL, context = NULL, min_confidence = 0) {
   check_vault(vault)
+  arrow <- from_arrow(text)
+  text <- arrow$text
   if (!is.character(text)) {
     rlang::abort("`text` must be a character vector.")
   }
   docs <- ifelse(is.na(text), "", text)
   spans <- detect_pii(docs, detectors = detectors, context = context, min_confidence = min_confidence)
   if (nrow(spans) == 0) {
-    return(text)
+    return(arrow$wrap(text))
   }
   tokens <- tokens_for(vault, spans)
   out <- replace_spans(docs, spans, tokens)
   out[is.na(text)] <- NA_character_
-  out
+  arrow$wrap(out)
 }
 
 #' Put the values behind tokens back into text

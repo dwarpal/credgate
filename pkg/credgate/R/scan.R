@@ -12,7 +12,13 @@
 #' logicals and dates are skipped. The rules are shared with the Python
 #' package (see the spec's "Column scan" section).
 #'
-#' @param data A data frame.
+#' @param data A data frame, an Arrow `Table` or `Dataset` (for example from
+#'   `arrow::open_dataset()`), or a database table from dbplyr
+#'   (`dplyr::tbl(con, "calls")`, for DuckDB, Postgres and other DBI
+#'   databases). Arrow and database tables are read one column at a time, in
+#'   chunks, so they may be larger than memory; the sample is the same as for
+#'   the table in memory. For a database, rows must come back in the same order
+#'   on each read (DuckDB and SQLite do for a plain table).
 #' @param sample Maximum number of values checked per column.
 #' @param min_rate Report a type only if it occurs in at least this share of
 #'   sampled values (0 reports every type found).
@@ -29,21 +35,15 @@
 #' )
 #' scan_pii(customers)
 scan_pii <- function(data, sample = 10000L, min_rate = 0, detectors = NULL) {
-  if (!is.data.frame(data)) {
-    rlang::abort("`data` must be a data frame.")
-  }
   if (!rlang::is_scalar_integerish(sample) || sample < 1) {
     rlang::abort("`sample` must be a positive whole number.")
   }
+  columns <- scan_columns(data)
   rows <- list()
-  for (col in names(data)) {
-    values <- scan_values(data[[col]])
-    n <- length(values)
-    if (n == 0) {
+  for (col in names(columns)) {
+    values <- sampled_values(columns[[col]], sample)
+    if (length(values) == 0) {
       next
-    }
-    if (n > sample) {
-      values <- values[floor((seq_len(sample) - 1) * n / sample) + 1]
     }
     context <- gsub("[_.-]", " ", col)
     spans <- detect_pii(values, detectors = detectors, context = context)
@@ -54,9 +54,9 @@ scan_pii <- function(data, sample = 10000L, min_rate = 0, detectors = NULL) {
 
   out <- do.call(rbind, c(list(empty_scan()), rows))
   out <- out[out$rate >= min_rate, , drop = FALSE]
-  out <- out[order(match(out$column, names(data)), -out$rate, out$type), , drop = FALSE]
+  out <- out[order(match(out$column, names(columns)), -out$rate, out$type), , drop = FALSE]
   rownames(out) <- NULL
-  structure(out, class = c("cg_scan", "data.frame"), n_columns = ncol(data))
+  structure(out, class = c("cg_scan", "data.frame"), n_columns = length(columns))
 }
 
 # Values of one column as trimmed, non-empty strings (see spec, step 1).
@@ -101,6 +101,12 @@ empty_scan <- function() {
 #' @export
 print.cg_scan <- function(x, ...) {
   n_columns <- attr(x, "n_columns")
+  needed <- c("column", "type", "rate", "n_matched", "n_sampled", "n_full", "mean_confidence", "example")
+  if (is.null(n_columns) || !all(needed %in% names(x))) {
+    # A subset such as report[1:2, 1:3]: print it as a plain data frame.
+    print(as.data.frame(unclass(x)), ...)
+    return(invisible(x))
+  }
   found <- unique(x$column)
   if (nrow(x) == 0) {
     cli::cli_text("Scanned {n_columns} column{?s}: no PII found.")

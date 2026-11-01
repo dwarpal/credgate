@@ -18,6 +18,8 @@
   sampling as in memory.
 - Command line: `credgate redact --parquet IN --column NAME -o OUT` and
   `credgate scan file.parquet`.
+- Examples for pandas, Polars, DuckDB, Arrow/Parquet and the command line,
+  and a large-data guide (`docs/large-data.md`).
 - Faster: all documents in a call are searched in one pass per pattern,
   and text whose characters each normalise to one character skips the
   position map. Detection is 1.1-1.5x faster depending on text length
