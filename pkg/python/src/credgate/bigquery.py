@@ -49,7 +49,8 @@ def scan_pii(
         client: A ``google.cloud.bigquery.Client``.
         table: ``"project.dataset.table"``, or a table reference.
         sample: Maximum number of rows sampled.
-        min_rate, detectors: As for :func:`credgate.scan_pii`.
+        min_rate: As for :func:`credgate.scan_pii`.
+        detectors: As for :func:`credgate.scan_pii`.
         sampling: ``"tablesample"`` (block sampling; only sampled blocks are
             billed) or ``"rand"`` (reads and bills whole columns). Views and
             external tables always use ``"rand"``.

@@ -3,7 +3,7 @@
 Bank, insurance and fintech data is usually too big for a data frame. This
 guide shows how to find and remove personal data in large tables with
 credgate, in Python, in R and on the command line. Every example uses
-synthetic data; runnable versions are in [`examples/`](../examples/).
+synthetic data; runnable versions are in [`examples/`](https://github.com/dwarpal/credgate/tree/main/examples/).
 
 ## The approach
 
@@ -69,10 +69,10 @@ con.sql("COPY (SELECT call_id, cg_redact(notes) AS notes FROM 'calls.parquet') "
         "TO 'calls_safe.parquet'")
 ```
 
-Examples: [`pandas_scan_redact.py`](../examples/python/pandas_scan_redact.py),
-[`polars_redact.py`](../examples/python/polars_redact.py),
-[`duckdb_sql_redact.py`](../examples/python/duckdb_sql_redact.py),
-[`arrow_parquet_stream.py`](../examples/python/arrow_parquet_stream.py).
+Examples: [`pandas_scan_redact.py`](https://github.com/dwarpal/credgate/blob/main/examples/python/pandas_scan_redact.py),
+[`polars_redact.py`](https://github.com/dwarpal/credgate/blob/main/examples/python/polars_redact.py),
+[`duckdb_sql_redact.py`](https://github.com/dwarpal/credgate/blob/main/examples/python/duckdb_sql_redact.py),
+[`arrow_parquet_stream.py`](https://github.com/dwarpal/credgate/blob/main/examples/python/arrow_parquet_stream.py).
 
 ## R
 
@@ -108,8 +108,8 @@ the query has been read and then writes them in one transaction; give it a
 second connection (`to_con`) to write as it reads.
 
 The vignette `vignette("large-data", package = "credgate")` walks through
-both. Examples: [`arrow_parquet.R`](../examples/r/arrow_parquet.R),
-[`duckdb_dbplyr.R`](../examples/r/duckdb_dbplyr.R).
+both. Examples: [`arrow_parquet.R`](https://github.com/dwarpal/credgate/blob/main/examples/r/arrow_parquet.R),
+[`duckdb_dbplyr.R`](https://github.com/dwarpal/credgate/blob/main/examples/r/duckdb_dbplyr.R).
 
 ## Command line
 
@@ -119,11 +119,11 @@ credgate scan calls.parquet
 credgate redact --parquet calls.parquet --column notes --min-confidence 0.5 -o calls_safe.parquet
 ```
 
-Example: [`parquet_pipeline.sh`](../examples/shell/parquet_pipeline.sh).
+Example: [`parquet_pipeline.sh`](https://github.com/dwarpal/credgate/blob/main/examples/shell/parquet_pipeline.sh).
 
 ## Speed
 
 On one core of a 2019 laptop credgate processes about 0.4 MB of text per
-second in Python and 0.2-0.3 MB in R ([throughput](../benchmark/README.md#throughput)).
+second in Python and 0.2-0.3 MB in R ([throughput](https://github.com/dwarpal/credgate/blob/main/benchmark/README.md#throughput)).
 Detection is independent per row, so it scales with cores and machines.
 Redaction inside Spark and faster matching are on the roadmap.

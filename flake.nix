@@ -101,6 +101,21 @@
           docsPy = pkgs.python3.withPackages (ps: with ps; [
             mkdocs mkdocs-material mkdocstrings mkdocstrings-python
           ]);
+          # pkgdown downloads these JavaScript libraries while building; the
+          # build has no network, so fetch them here (pinned to the hashes
+          # pkgdown itself checks) and put them in pkgdown's cache.
+          pkgdownAssets = pkgs.linkFarm "pkgdown-assets" (map (a: {
+            name = "R/pkgdown/${a.dir}/${baseNameOf a.url}";
+            path = pkgs.fetchurl { inherit (a) url hash; };
+          }) [
+            { dir = "headroom/0.11.0"; url = "https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js"; hash = "sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0="; }
+            { dir = "headroom/0.11.0"; url = "https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js"; hash = "sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4="; }
+            { dir = "bootstrap-toc/1.0.1"; url = "https://cdn.jsdelivr.net/gh/afeld/bootstrap-toc@v1.0.1/dist/bootstrap-toc.min.js"; hash = "sha256-4veVQbu7//Lk5TSmc7YV48MxtMy98e26cf5MrgZYnwo="; }
+            { dir = "clipboard.js/2.0.11"; url = "https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.11/clipboard.min.js"; hash = "sha512-7O5pXpc0oCRrxk8RUfDYFgn0nO1t+jLuIOQdOMRp4APB7uZ4vSjspzp5y6YDtDs4VzUSTbWzBFZ/LKJhnyFOKw=="; }
+            { dir = "search/1.0.0"; url = "https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.min.js"; hash = "sha512-KnvCNMwWBGCfxdOtUpEtYgoM59HHgjHnsVGSxxgz7QH1DYeURk+am9p3J+gsOevfE29DV0V+/Dd52ykTKxN5fA=="; }
+            { dir = "search/1.0.0"; url = "https://cdnjs.cloudflare.com/ajax/libs/autocomplete.js/0.38.0/autocomplete.jquery.min.js"; hash = "sha512-GU9ayf+66Xx2TmpxqJpliWbT5PiGYxpaG8rfnBEk1LL8l1KGkRShhngwdXK1UgqhAzWpZHSiYPc09/NwDQIGyg=="; }
+            { dir = "search/1.0.0"; url = "https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js"; hash = "sha512-5CYOlHXGh6QpOFA/TeTylKLWfB3ftPsde7AnmhuitiTX4K5SqCLBeKro6sPS8ilsz1Q4NRx3v8Ko2IBiszzdww=="; }
+          ]);
         in
         {
           # The slow-to-build R packages on their own (nixpkgs' public cache
@@ -119,7 +134,8 @@
             cp ${./spec/README.md} docs/spec.md
             mkdocs build --site-dir $out
 
-            export DOCS_R=$out/r
+            export DOCS_R=$out/r R_USER_CACHE_DIR=$TMPDIR/cache
+            cp -rL ${pkgdownAssets} $R_USER_CACHE_DIR && chmod -R u+w $R_USER_CACHE_DIR
             Rscript -e 'pkgdown::build_site("pkg/credgate", override = list(destination = Sys.getenv("DOCS_R")),
                                             install = FALSE, new_process = FALSE, preview = FALSE)'
           '';
