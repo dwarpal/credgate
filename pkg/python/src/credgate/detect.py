@@ -117,25 +117,37 @@ def _run_detector(
                 if det.validate is not None and not det.validate(matched):
                     continue
 
-                around = f"{ntext[max(0, s - window) : s]} {ntext[e : e + window]} {contexts[doc]}"
-                ctx_hit = _keyword(context_re, around)
-                neg_hit = _keyword(negative_re, around)
+                before = ntext[max(0, s - window) : s]
+                after = ntext[e : e + window]
+                ctx_hit = _nearest_keyword(context_re, before, after, contexts[doc], window)
+                neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc], window)
                 if det.context_required and ctx_hit is None:
                     continue
+                # The closer cue wins: a negative keyword farther away than a
+                # supporting one is ignored.
+                neg_ignored = (
+                    ctx_hit is not None and neg_hit is not None and neg_hit[1] > ctx_hit[1]
+                )
 
-                score = det.base(matched) if callable(det.base) else det.base
+                if ctx_hit is None and det.base_without_context is not None:
+                    score = det.base_without_context
+                else:
+                    score = det.base(matched) if callable(det.base) else det.base
                 if ctx_hit is not None:
                     score += (1 - score) * scoring["context_boost"]
-                if neg_hit is not None:
+                if neg_hit is not None and not neg_ignored:
                     score *= scoring["negative_factor"]
 
                 reasons = f"matched {det.label} pattern"
                 if det.checks:
                     reasons += f"; {det.checks}"
                 if ctx_hit is not None:
-                    reasons += f"; context '{ctx_hit}'"
+                    reasons += f"; context '{ctx_hit[0]}'"
                 if neg_hit is not None:
-                    reasons += f"; negative context '{neg_hit}'"
+                    if neg_ignored:
+                        reasons += f"; farther negative context '{neg_hit[0]}' ignored"
+                    else:
+                        reasons += f"; negative context '{neg_hit[0]}'"
                 if det.describe is not None:
                     reasons += f"; {det.describe(matched)}"
 
@@ -159,11 +171,33 @@ def _run_detector(
     return out
 
 
-def _keyword(pattern: regex.Pattern[str] | None, text: str) -> str | None:
+_WORD_END = regex.compile(r"[\p{L}\p{M}]*")
+_WORD_START = regex.compile(r"[\p{L}\p{M}]*$")
+
+
+def _nearest_keyword(
+    pattern: regex.Pattern[str] | None, before: str, after: str, extra: str, window: int
+) -> tuple[str, int] | None:
+    """The keyword nearest the match and its distance: the characters between
+    the match and the word containing the keyword. Keywords in the caller's
+    extra context count as `window` away, farther than any in the text."""
     if pattern is None:
         return None
-    m = pattern.search(text)
-    return m.group(0) if m else None
+    hits: list[tuple[str, int]] = []
+    last = None
+    for m in pattern.finditer(before):
+        last = m
+    if last is not None:
+        word_end = _WORD_END.match(before, last.end()).end()
+        hits.append((last.group(0), len(before) - word_end))
+    m = pattern.search(after)
+    if m is not None:
+        word_start = _WORD_START.search(after[: m.start()]).start()
+        hits.append((m.group(0), word_start))
+    m = pattern.search(extra)
+    if m is not None:
+        hits.append((m.group(0), window))
+    return min(hits, key=lambda h: h[1]) if hits else None
 
 
 def _resolve_overlaps(spans: list[Span]) -> list[Span]:

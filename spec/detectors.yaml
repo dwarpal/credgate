@@ -53,6 +53,8 @@ tables:
 
 fragments:
   aadhaar_context: 'aadhaa?r|\badhar\b|\buid(?:ai)?\b|आधार'
+  phone_context: '\bmob|\bphone|\bcell\b|whats ?app|\btel\b|\bph\b|मोबाइल|फ़ोन|फोन'
+  ifsc_code: '\b[A-Z]{4}0[A-Z0-9]{6}\b'
   id_negative_context: '\border\b|\binvoice\b|\btxn\b|\btransaction\b|\bref(erence)?\b|\bticket\b|\btracking\b|\bawb\b|\butr\b'
   # Money context: a 10-digit amount is not a phone number.
   money_context: '₹|\brs\.?(?![\p{L}])|\binr\b|\bamount\b|\bprice\b|\bcrores?\b|\blakhs?\b|\bbalance\b|\btotal\b|रुपये|रुपए'
@@ -62,9 +64,13 @@ fragments:
 
   # --- Names -------------------------------------------------------------
   # Words that end a name: field labels, relation markers, honorifics.
-  name_stop_latin: '(?!(?i:address|addr|mobile|phone|mob|pan|aadhaar|aadhar|dob|age|gender|sex|email|pin|father|mother|son|daughter|wife|husband|and|account|a/c|the|of|is|was|in|at|on|for|to|with|no|name|resident|r/o|s/o|d/o|w/o|c/o|shri|shree|sri|smt|sh|kumari|km|mr|mrs|ms|miss|dr|late|sushri)(?![\p{L}]))'
+  name_stop_latin: '(?!(?i:thanks|thank|namaste|namaskar|dear|hello|hi|hey|please|kindly|sir|madam|address|addr|mobile|phone|mob|pan|aadhaar|aadhar|dob|age|gender|sex|email|pin|father|mother|son|daughter|wife|husband|and|account|a/c|the|of|is|was|in|at|on|for|to|with|no|name|resident|r/o|s/o|d/o|w/o|c/o|shri|shree|sri|smt|sh|kumari|km|mr|mrs|ms|miss|dr|late|sushri)(?![\p{L}]))'
   # Labels, relations and postpositions (possessives such as का/की/के).
   name_stop_indic: '(?!(?:पता|मोबाइल|फोन|पिता|माता|पति|पत्नी|पुत्र|पुत्री|आयु|उम्र|निवासी|ग्राम|जन्म|और|का|की|के|को|ने|से|है|में)(?![\p{L}\p{M}]))'
+  # Words that show a capitalised phrase after an honorific is not a person:
+  # software ("Ms Word"), festivals ("Shri Ram Navami"), institutions
+  # ("Shri Ram Mandir Trust").
+  not_a_name: '(?!(?:{{latin_cap_word}}[ ]){0,3}(?i:word|excel|powerpoint|outlook|teams|office|navami|jayanti|ashtami|chaturthi|purnima|puja|pooja|utsav|mahotsav|mandir|temple|trust|ashram|sansthan|samiti|vidyalaya|school|college|hospital|foundation)(?![\p{L}]))'
   indic_word: '[\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gujarati}\p{Script=Gurmukhi}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Oriya}]+'
   # Capitalised Latin word ("Ramesh", "RAMESH"), or an initial with a full
   # stop when another word follows ("R. K. Sharma"). A full word never takes
@@ -147,8 +153,9 @@ detectors:
     bounded: true
     ignore_case: true
     base: 0.85
+    # The format alone (3 letters, 7 digits) could be a product code.
+    base_without_context: 0.3
     context: '\bvoter|\bepic\b|election|electoral|मतदाता'
-    context_required: true
 
   - id: passport
     class: identity_strong
@@ -233,7 +240,10 @@ detectors:
     patterns: ['[0-9]{9,18}']
     bounded: true
     base: 0.85
-    context: '\ba/?c\b|\bacct|\baccount|\bsavings\b|\bcurrent a|\bbank\b|खाता|बैंक'
+    # An IFSC next to a number is evidence of an account (bank records
+    # list them together).
+    context: '\ba/?c\b|\bacct|\baccount|\bsavings\b|\bcurrent a|\bbank\b|खाता|बैंक|{{ifsc_code}}'
+    negative: '{{phone_context}}'
     context_required: true
 
   # --- Contact -----------------------------------------------------------
@@ -248,7 +258,7 @@ detectors:
       default: 0.65
       rules:
         - {match: '^(?:\+91|0|91[ -])', value: 0.85}
-    context: '\bmob|\bphone|\bcontact|\bcell\b|whats ?app|\btel\b|\bph\b|मोबाइल|फ़ोन|फोन|संपर्क'
+    context: '{{phone_context}}|\bcontact|संपर्क'
     negative: '{{money_context}}|{{id_negative_context}}'
     canonical: last10_digits
 
@@ -300,10 +310,13 @@ detectors:
     class: personal
     label: Person name
     patterns:
-      - '{{honorific_latin}}(?<value>{{latin_name_cap}})'
+      - '{{honorific_latin}}{{not_a_name}}(?<value>{{latin_name_cap}})'
+      # "ji" after a name is an honorific in Hindi and Hinglish.
+      - '(?<![\p{L}]){{not_a_name}}(?<value>{{latin_name_cap}})\s(?i:ji)(?![\p{L}])'
       - '{{relation_latin}}(?<value>{{latin_name_any}})'
       - '{{label_latin}}(?<value>{{latin_name_any}})'
       - '{{honorific_indic}}(?<value>{{indic_name}})'
+      - '(?<![\p{L}\p{M}])(?<value>{{indic_name}})\s?जी(?![\p{L}\p{M}])'
       - '{{label_indic}}(?<value>{{indic_name}})'
     capture: value
     base: 0.8

@@ -78,7 +78,7 @@ def test_multiple_documents_none_and_empty():
 
 def test_context_per_document():
     spans = detect_pii(["ABC1234567", "ABC1234567"], context=["voter_id", None])
-    assert [s.doc for s in spans] == [0]
+    assert [(s.doc, s.confidence) for s in spans] == [(0, 0.97), (1, 0.3)]
     with pytest.raises(ValueError, match="one per document"):
         detect_pii(["a", "b"], context=["x"])
 
@@ -181,3 +181,13 @@ def test_synth_is_reproducible_and_leaves_global_rng_alone():
     a = credgate.synth_indian_pii(5, seed=99)
     assert random.random() == before
     assert a == credgate.synth_indian_pii(5, seed=99)
+
+
+def test_base_without_context_is_validated():
+    args = {"id": "x", "data_class": "c", "label": "X", "patterns": "X[0-9]+"}
+    with pytest.raises(ValueError, match="needs `context`"):
+        credgate.Detector(**args, base_without_context=0.3)
+    with pytest.raises(ValueError, match="exclude each other"):
+        credgate.Detector(**args, base_without_context=0.3, context="x", context_required=True)
+    with pytest.raises(ValueError, match=r"\(0, 1\]"):
+        credgate.Detector(**args, base_without_context=0, context="x")

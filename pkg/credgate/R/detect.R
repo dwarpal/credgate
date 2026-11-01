@@ -80,32 +80,38 @@ run_detector <- function(det, text, norm, ntext, context, window) {
   }
 
   n <- nchar(ntext[doc])
-  around <- paste(
-    stringi::stri_sub(ntext[doc], pmax(1L, s - window), s - 1L),
-    stringi::stri_sub(ntext[doc], e + 1L, pmin(n, e + window)),
-    if (is.null(context)) "" else context[doc]
-  )
-  ctx_hit <- find_keyword(around, det$context)
-  neg_hit <- find_keyword(around, det$negative)
+  before <- stringi::stri_sub(ntext[doc], pmax(1L, s - window), s - 1L)
+  after <- stringi::stri_sub(ntext[doc], e + 1L, pmin(n, e + window))
+  extra <- if (is.null(context)) rep("", length(doc)) else context[doc]
+  ctx <- nearest_keyword(det$context, before, after, extra, window)
+  neg <- nearest_keyword(det$negative, before, after, extra, window)
 
   if (det$context_required) {
-    keep <- !is.na(ctx_hit)
+    keep <- !is.na(ctx$hit)
     doc <- doc[keep]
     s <- s[keep]
     e <- e[keep]
     matched <- matched[keep]
-    ctx_hit <- ctx_hit[keep]
-    neg_hit <- neg_hit[keep]
+    ctx <- ctx[keep, , drop = FALSE]
+    neg <- neg[keep, , drop = FALSE]
     if (length(doc) == 0) {
       return(NULL)
     }
   }
+  has_ctx <- !is.na(ctx$hit)
+  has_neg <- !is.na(neg$hit)
+  # The closer cue wins: a negative keyword farther away than a supporting
+  # one is ignored.
+  neg_ignored <- has_ctx & has_neg & neg$distance > ctx$distance
 
   scoring <- the$engine$scoring
   score <- if (is.function(det$base)) det$base(matched) else rep(det$base, length(doc))
-  score[!is.na(ctx_hit)] <- score[!is.na(ctx_hit)] +
-    (1 - score[!is.na(ctx_hit)]) * scoring$context_boost
-  score[!is.na(neg_hit)] <- score[!is.na(neg_hit)] * scoring$negative_factor
+  if (!is.null(det$base_without_context)) {
+    score[!has_ctx] <- det$base_without_context
+  }
+  score[has_ctx] <- score[has_ctx] + (1 - score[has_ctx]) * scoring$context_boost
+  apply_neg <- has_neg & !neg_ignored
+  score[apply_neg] <- score[apply_neg] * scoring$negative_factor
 
   reasons <- paste0("matched ", det$label, " pattern")
   if (!is.null(det$checks)) {
@@ -113,8 +119,13 @@ run_detector <- function(det, text, norm, ntext, context, window) {
   }
   reasons <- paste0(
     reasons,
-    ifelse(is.na(ctx_hit), "", paste0("; context '", ctx_hit, "'")),
-    ifelse(is.na(neg_hit), "", paste0("; negative context '", neg_hit, "'"))
+    ifelse(has_ctx, paste0("; context '", ctx$hit, "'"), ""),
+    ifelse(!has_neg, "",
+      ifelse(neg_ignored,
+        paste0("; farther negative context '", neg$hit, "' ignored"),
+        paste0("; negative context '", neg$hit, "'")
+      )
+    )
   )
   if (!is.null(det$describe)) {
     reasons <- paste0(reasons, "; ", det$describe(matched))
@@ -134,14 +145,50 @@ run_detector <- function(det, text, norm, ntext, context, window) {
   )
 }
 
-find_keyword <- function(x, pattern) {
+# The keyword nearest each match and its distance: the characters between the
+# match and the word containing the keyword. Keywords in the caller's extra
+# context count as `window` away, farther than any in the text.
+nearest_keyword <- function(pattern, before, after, extra, window) {
+  n <- length(before)
+  hit <- rep(NA_character_, n)
+  distance <- rep(NA_integer_, n)
   if (is.null(pattern)) {
-    return(rep(NA_character_, length(x)))
+    return(data.frame(hit = hit, distance = distance))
   }
-  stringi::stri_extract_first_regex(
-    x, pattern,
-    opts_regex = stringi::stri_opts_regex(case_insensitive = TRUE)
-  )
+  opts <- stringi::stri_opts_regex(case_insensitive = TRUE)
+  consider <- function(i, h, d) {
+    if (is.na(distance[i]) || d < distance[i]) {
+      hit[i] <<- h
+      distance[i] <<- d
+    }
+  }
+  loc_before <- stringi::stri_locate_all_regex(before, pattern, opts_regex = opts)
+  loc_after <- stringi::stri_locate_first_regex(after, pattern, opts_regex = opts)
+  loc_extra <- stringi::stri_locate_first_regex(extra, pattern, opts_regex = opts)
+  for (i in seq_len(n)) {
+    lb <- loc_before[[i]]
+    if (!is.na(lb[1, 1])) {
+      last <- lb[nrow(lb), ]
+      rest <- stringi::stri_sub(before[i], last[2] + 1L)
+      word_end <- last[2] + letters_run(rest, "^[\\p{L}\\p{M}]+")
+      consider(i, stringi::stri_sub(before[i], last[1], last[2]), nchar(before[i]) - word_end)
+    }
+    if (!is.na(loc_after[i, 1])) {
+      lead <- stringi::stri_sub(after[i], 1L, loc_after[i, 1] - 1L)
+      word_start <- nchar(lead) - letters_run(lead, "[\\p{L}\\p{M}]+$")
+      consider(i, stringi::stri_sub(after[i], loc_after[i, 1], loc_after[i, 2]), word_start)
+    }
+    if (!is.na(loc_extra[i, 1])) {
+      consider(i, stringi::stri_sub(extra[i], loc_extra[i, 1], loc_extra[i, 2]), window)
+    }
+  }
+  data.frame(hit = hit, distance = distance)
+}
+
+# Length of the match of `pattern` in `x` (0 if none).
+letters_run <- function(x, pattern) {
+  m <- stringi::stri_extract_first_regex(x, pattern)
+  if (is.na(m)) 0L else nchar(m)
 }
 
 map_spans <- function(norm, doc, s, e) {

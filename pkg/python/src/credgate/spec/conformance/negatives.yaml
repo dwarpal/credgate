@@ -47,12 +47,12 @@ negatives:
   - {id: hindi-sentence, text: 'कल बैठक दस बजे होगी'}
   - {id: hindi-digits-date, text: 'तारीख ३१/१०/२०२६ है'}
 
+  - {id: ms-office-products, text: 'Ms Word and Ms Excel documents'}
+  - {id: festival-after-shri, text: 'Shri Ram Navami holiday on 6 April'}
+  - {id: temple-trust, text: 'Donation to Shri Ram Mandir Trust'}
+
 known_false_positives:
-  - id: ms-office-products
-    text: 'Ms Word and Ms Excel documents'
+  - id: deity-before-ji
+    text: 'Ram ji ki kripa se sab theek hai'
     type: person_name
-    why: Any capitalised word after an honorific is taken as a name.
-  - id: festival-after-shri
-    text: 'Shri Ram Navami holiday on 6 April'
-    type: person_name
-    why: Same rule; names of festivals and deities follow honorifics.
+    why: Any capitalised word before "ji" is taken as a name; deities are addressed the same way.

@@ -58,16 +58,32 @@ For a vector of documents:
    - `gstin`: upper-cased; structure, state code in list `gst_state_codes`,
      and the mod-36 check character.
    - `{match_stripped: regex}`: the regex matches after removing `separators`.
-4. **Context**: take up to `scoring.context_window` code points before and
-   after the match in the normalised text, plus the caller's extra context
-   (e.g. a column name). Search them, case-insensitively, for `context` and
-   `negative`. With `context_required: true`, drop matches without context.
+4. **Context**: take up to `scoring.context_window` code points before the
+   match (`before`) and after it (`after`) in the normalised text, and the
+   caller's extra context (`extra`, e.g. a column name). Search each,
+   case-insensitively, for `context` and for `negative`, and keep the
+   **nearest** keyword of each kind with its distance:
+   - in `before`: the last match; distance = code points between the end of
+     the word containing it (extended over following letters and marks,
+     `[\p{L}\p{M}]`) and the match;
+   - in `after`: the first match; distance = code points between the match
+     and the start of the word containing it;
+   - in `extra`: the first match; distance = `context_window`, so cues in the
+     text always count as nearer.
+   Ties go to the earlier source in the order `before`, `after`, `extra`.
+   With `context_required: true`, drop matches without context.
 5. **Score**: start from `base` - a number, or `{default, rules}` where the
-   first rule whose `match` regex matches the matched text sets the value.
-   With context: `score + (1 - score) * context_boost`. With negative context:
-   `score * negative_factor`. Round to `scoring.digits` decimal places.
+   first rule whose `match` regex matches the matched text sets the value -
+   or from `base_without_context` when it is set and no context keyword was
+   found. With context: `score + (1 - score) * context_boost`. With negative
+   context: `score * negative_factor`, **unless** a context keyword is
+   strictly nearer than the negative one (the closer cue wins: "Aadhaar
+   5422... for e-KYC; order 519..." is an Aadhaar number). Round to
+   `scoring.digits` decimal places.
 6. **Reasons** (free text, for people): `matched <label> pattern`, then
-   `checks` if set, `context '<keyword>'`, `negative context '<keyword>'`, then
+   `checks` if set, `context '<keyword>'`, then `negative context
+   '<keyword>'` or, when it was outweighed, `farther negative context
+   '<keyword>' ignored`, then
    `describe`: either `{position, table, template}` (1-based character of the
    matched text, upper-cased, looked up in the table and substituted for `{}`)
    or `{default, rules: [{match, text}]}`.
@@ -100,6 +116,7 @@ Conformance compares `type`, `value`, and when given `confidence`,
 | `context` | no | Regex of supporting keywords |
 | `negative` | no | Regex of keywords that lower confidence |
 | `context_required` | no | Drop matches without context (default false) |
+| `base_without_context` | no | Confidence instead of `base` when no context keyword is found; needs `context`, excludes `context_required` |
 | `describe` | no | Extra reason per match |
 | `canonical` | no | Canonical form (default `strip_upper`) |
 

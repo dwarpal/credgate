@@ -27,6 +27,10 @@ the$detectors <- list()
 #'   context, or a function taking the matched strings and returning one
 #'   confidence per match (e.g. higher for a mobile number written with
 #'   `+91`).
+#' @param base_without_context Confidence (0-1) used instead of `base` when no
+#'   context keyword is found, or `NULL`. For patterns that are strong
+#'   evidence with context but weak without it (a voter ID format alone could
+#'   be a product code).
 #' @param context Regex (case-insensitive) of keywords that raise confidence
 #'   when they appear near the match, or `NULL`.
 #' @param negative Regex (case-insensitive) of keywords that lower confidence,
@@ -53,6 +57,7 @@ new_detector <- function(id, class, label, pattern,
                          validate = NULL,
                          checks = NULL,
                          base = 0.8,
+                         base_without_context = NULL,
                          context = NULL,
                          negative = NULL,
                          context_required = FALSE,
@@ -63,14 +68,23 @@ new_detector <- function(id, class, label, pattern,
     rlang::is_string(id), rlang::is_string(class), rlang::is_string(label),
     is.character(pattern), length(pattern) >= 1, !anyNA(pattern),
     is.null(capture) || rlang::is_string(capture),
-    is.function(base) || (rlang::is_scalar_double(base) && base > 0 && base <= 1)
+    is.function(base) || (rlang::is_scalar_double(base) && base > 0 && base <= 1),
+    is.null(base_without_context) || (rlang::is_scalar_double(base_without_context) &&
+      base_without_context > 0 && base_without_context <= 1)
   )
+  if (!is.null(base_without_context) && isTRUE(context_required)) {
+    rlang::abort("`base_without_context` and `context_required` exclude each other.")
+  }
+  if (!is.null(base_without_context) && is.null(context)) {
+    rlang::abort("`base_without_context` needs `context`.")
+  }
   structure(
     list(
       id = id, class = class, label = label, pattern = pattern, capture = capture,
       validate = validate %||% function(x) rep(TRUE, length(x)),
       checks = checks,
-      base = base, context = context, negative = negative,
+      base = base, base_without_context = base_without_context,
+      context = context, negative = negative,
       context_required = context_required,
       canonical = canonical %||% canonical_default,
       describe = describe, ignore_case = ignore_case

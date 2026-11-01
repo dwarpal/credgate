@@ -1,5 +1,20 @@
 # credgate (development version)
 
+* Context scoring: the closer cue wins. A negative word ("order", "ticket") is ignored when a
+  supporting keyword is nearer the match, so "Aadhaar 5422... for e-KYC;
+  order 519..." stays an Aadhaar number (confidence 0.97, with the reason
+  "farther negative context 'order' ignored").
+* A voter ID format (3 letters, 7 digits) without a nearby keyword is now
+  reported at confidence 0.3 instead of dropped; with "voter" or "EPIC"
+  nearby it still scores 0.97. New `new_detector()` argument
+  `base_without_context` for such patterns.
+* An IFSC code next to a number counts as evidence of a bank account, and
+  phone words nearby count against it.
+* "ji" after a name is a name cue ("Subhash Verma ji", "सुनीता जी").
+* "Ms Word", "Shri Ram Navami" and similar software, festival and
+  institution names after an honorific are no longer taken as names.
+* Benchmark (synthetic test split, confidence 0.5): F1 0.947 to 0.983,
+  precision 0.997 to 0.999; see `benchmark/README.md` for caveats.
 * Names and addresses are now masked in full wherever values are shown
   (printed spans, `preview()`, `scan_pii()` examples); before, their last
   4 characters were kept, which could show part of a surname or a PIN code.

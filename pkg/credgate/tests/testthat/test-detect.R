@@ -60,11 +60,11 @@ test_that("GSTIN wins over the PAN embedded in it", {
   expect_match(spans$reasons, "embeds PAN of firm")
 })
 
-test_that("context-gated types need context, from text or the context argument", {
-  expect_equal(nrow(detect_pii("ABC1234567")), 0)
-  expect_equal(detect_pii("voter id ABC1234567")$type, "voter_epic")
-  expect_equal(detect_pii("ABC1234567", context = "voter_id")$type, "voter_epic")
-  expect_equal(detect_pii("मतदाता ABC1234567")$type, "voter_epic")
+test_that("context comes from the text or the context argument", {
+  expect_equal(detect_pii("ABC1234567")$confidence, 0.3)
+  expect_equal(detect_pii("voter id ABC1234567")$confidence, 0.97)
+  expect_equal(detect_pii("ABC1234567", context = "voter_id")$confidence, 0.97)
+  expect_equal(detect_pii("मतदाता ABC1234567")$confidence, 0.97)
 })
 
 test_that("negative context lowers confidence", {

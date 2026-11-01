@@ -39,6 +39,8 @@ cases:
     expect:
       - {column: voter_id, type: voter_epic, n_sampled: 2, n_matched: 2,
          n_full: 2, rate: 1.0, mean_confidence: 0.97, example: XXXXXX1132}
+      - {column: code, type: voter_epic, n_sampled: 2, n_matched: 2,
+         n_full: 2, rate: 1.0, mean_confidence: 0.3, example: XXXXXX1132}
 
   - id: evenly-spaced-sample
     sample: 2
