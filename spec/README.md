@@ -400,6 +400,54 @@ A blocked request has no output texts.
 
 Conformance cases are in `conformance/policy.yaml`.
 
+## Audit log (`audit`)
+
+Evidence of what was decided, for regulators, internal audit and DPDP
+reviews - without holding the personal data itself.
+
+**File**: UTF-8 JSON Lines, one record per line, appended. Each record is
+one JSON object:
+
+| Field | Content |
+|---|---|
+| `v` | record format, `1` |
+| `seq` | 1 for the first record, then +1 |
+| `time` | UTC, `YYYY-MM-DDTHH:MM:SS.sssZ` |
+| `actor` | who made the request (by default the operating-system user) |
+| `policy` | `{"id", "revision"}` |
+| `destination` | `{"name", "tier", "provider"}` (`provider` may be null) |
+| `allowed` | true or false |
+| `blocked_by` | list of rule ids (and `destination-blocked`), empty if allowed |
+| `items` | one object per match, in order: `{"type", "action", "rule"}`, plus `"id"` (below) except for the `sensitive_auth` class |
+| `prev` | SHA-256 (lower-case hex) of the previous line's bytes, without its line ending; 64 zeros for the first record |
+
+**Identifier hashes.** With an audit key (at least 32 bytes, from the caller
+or `CREDGATE_AUDIT_KEY`; a different key from the token key), each item's
+`id` is the first 8 bytes, as 16 lower-case hex digits, of
+HMAC-SHA256(key, `credgate-audit-v1` ∖0 type ∖0 canonical). Whoever holds
+the key can check whether a given identifier was involved; the log alone
+reveals nothing. Without a key, items carry no `id`. Card verification data
+(class `sensitive_auth`) is never hashed or otherwise recorded beyond its
+type, action and rule (PCI DSS: it must not be stored).
+
+The log never contains text, values, tokens or vault contents.
+
+**Writing.** A writer reads the last line of an existing log (if any),
+continues `seq`, and sets `prev` to the SHA-256 of that line. One writer per
+file at a time.
+
+**Verifying** (`audit_verify(path)`): reading line by line, every line must
+be a JSON object with `v` 1, `seq` equal to its position (1-based), and
+`prev` equal to the SHA-256 of the previous line (64 zeros for the first).
+The result reports whether the log is intact, the number of records, the
+first failing line and why, and the SHA-256 of the last line - the **head**.
+Editing, deleting, inserting or reordering records breaks the chain;
+removing records from the end does not, so keep copies of the head
+somewhere else (another system, a ticket, a signed report) and compare.
+
+Conformance cases are in `conformance/audit.yaml`, with logs written by each
+implementation in `conformance/audit/`.
+
 ## Evaluation (`evaluate`)
 
 Measures detection against labelled text.

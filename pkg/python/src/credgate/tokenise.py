@@ -59,23 +59,25 @@ def new_token_key() -> str:
     return secrets.token_hex(_MIN_KEY_BYTES)
 
 
-def _token_key(key: str | bytes | None) -> bytes:
+def _token_key(
+    key: str | bytes | None, env: str = "CREDGATE_TOKEN_KEY", what: str = "token key"
+) -> bytes:
     if key is None:
-        key = os.environ.get("CREDGATE_TOKEN_KEY") or None
+        key = os.environ.get(env) or None
         if key is None:
-            raise ValueError("No token key: pass `key` or set CREDGATE_TOKEN_KEY.")
+            raise ValueError(f"No {what}: pass `key` or set {env}.")
     if isinstance(key, str):
         try:
             raw = bytes.fromhex(key.strip())
         except ValueError:
-            raise ValueError("A token key given as text must be hex digits.") from None
+            raise ValueError(f"A {what} given as text must be hex digits.") from None
     elif isinstance(key, bytes):
         raw = key
     else:
-        raise TypeError("A token key must be hex text or bytes.")
+        raise TypeError(f"A {what} must be hex text or bytes.")
     if len(raw) < _MIN_KEY_BYTES:
         raise ValueError(
-            f"A token key needs at least {_MIN_KEY_BYTES} bytes ({2 * _MIN_KEY_BYTES} hex "
+            f"A {what} needs at least {_MIN_KEY_BYTES} bytes ({2 * _MIN_KEY_BYTES} hex "
             "digits); make one with new_token_key()."
         )
     return raw

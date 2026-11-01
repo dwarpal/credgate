@@ -12,6 +12,7 @@ except PackageNotFoundError:  # running from a source checkout
     __version__ = "0.5.0"
 
 from ._spec import spec_path
+from .audit import AuditCheck, AuditLog, audit_read, audit_verify
 from .checksums import (
     gstin_check_char,
     gstin_valid,
@@ -40,6 +41,8 @@ from .tokenise import (
 )
 
 __all__ = [
+    "AuditCheck",
+    "AuditLog",
     "ColumnFinding",
     "Decision",
     "Destination",
@@ -57,6 +60,8 @@ __all__ = [
     "UnknownTokenError",
     "Vault",
     "VaultFileError",
+    "audit_read",
+    "audit_verify",
     "bounded",
     "detect_pii",
     "detectors",

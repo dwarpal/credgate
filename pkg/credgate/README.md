@@ -305,6 +305,21 @@ Loading checks everything: an unknown field, tier, action or type is an
 error. An example policy is in the repository's
 `examples/policies/bank-default.yaml`.
 
+## Audit log
+
+Policy decisions can be recorded in an append-only, hash-chained log: who
+sent which kinds of data to which endpoint, under which policy revision and
+rule - never the text or the values. Editing, deleting or reordering records
+is detected; with an audit key, identifiers are kept as keyed hashes; card
+verification codes are never recorded. R and Python share the format.
+
+```r
+log <- cg_audit_log("audit.jsonl")                  # key from CREDGATE_AUDIT_KEY, if set
+policy_apply(policy, messages, "claude", audit = log)  # recorded, allowed or blocked
+audit_verify("audit.jsonl")                         # intact? and the head hash
+audit_read("audit.jsonl")                           # the records, as a data frame
+```
+
 ## Masked output
 
 Wherever credgate *shows* a detected value (printed matches, `preview()`,

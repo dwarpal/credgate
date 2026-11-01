@@ -39,7 +39,7 @@ payment data localisation (payment data stored only in India), PCI DSS
 | **Token key** (planned keyed tokens) | supplied by the organisation | with the key, tokens can be checked against guessed values |
 | **Vault passphrases** | the user; `CREDGATE_VAULT_PASSPHRASE` | unlock saved vaults |
 | **Policies** | YAML files (a Shiny editor is planned) | decide what may go where |
-| **Audit log** (planned) | on-premises files or database | the evidence for regulators; must be complete and unaltered |
+| **Audit log** | on-premises files (JSON Lines) | the evidence for regulators; must be complete and unaltered |
 | **Model credentials** | environment variables | access to paid or internal models |
 | **credgate itself** | packages, images, source | a compromised release could leak everything |
 
@@ -146,11 +146,11 @@ control, which is why redaction happens *before* the request leaves.
 
 ### Audit log edited or deleted (A4)
 
-Planned: each record contains the hash of the previous one, so editing,
-deleting or reordering records is detected by a verification command;
-records carry the policy version that decided them. Retention is
-configurable: default **5 years**, minimum **1 year** (DPDP Rules, PCI DSS),
-stored on-premises in India (CERT-In, RBI). Tamper-*evidence*, not
+Each record contains the hash of the previous one, so editing, deleting,
+inserting or reordering records is detected by `audit_verify()`; records
+carry the policy revision and rule that decided them. Planned with the
+proxy: rotation and retention - default **5 years**, minimum **1 year**
+(DPDP Rules, PCI DSS), stored on-premises in India (CERT-In, RBI). Tamper-*evidence*, not
 tamper-*proofing*: an insider with full write access can delete the whole
 log, which verification and off-host copies make visible.
 
