@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- BigQuery: `credgate.bigquery.scan_pii()`, `pii_inventory()` and
+  `inventory_dataset()` (every table in a dataset), with the
+  google-cloud-bigquery client you pass. BigQuery samples the table
+  (`TABLESAMPLE`, billing only the sampled blocks; `sampling="rand"` for
+  views) and only the sample is downloaded; only scannable columns are read.
+  A dry run checks the cost of every query first and anything estimated
+  above `max_bytes` (default 1 GB) is refused before it runs; the limit is
+  also sent to BigQuery. New extras: `bigquery`, and `spark` (not in `all`).
 - Spark: `scan_pii()` and `pii_inventory()` accept PySpark DataFrames. The
   table is sampled inside the cluster (a seeded random sample of up to
   `sample` rows, `seed = 42` by default) and only the sample reaches the

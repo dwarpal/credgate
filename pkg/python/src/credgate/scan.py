@@ -102,6 +102,15 @@ class _ColumnScan:
 
 
 @dataclass(frozen=True)
+class _Sampled:
+    """Rows already sampled by an engine (Spark, BigQuery), as column -> values."""
+
+    columns: dict[str, list[Any]]
+    n_rows: int | None
+    sample_method: str
+
+
+@dataclass(frozen=True)
 class _TableInfo:
     n_rows: int | None
     sample_method: str | None  # None: per column, "all" or "even"
@@ -116,8 +125,10 @@ def _scan_columns(
     if not isinstance(sample, numbers.Integral) or sample < 1:
         raise ValueError("`sample` must be a positive whole number.")
     if _spark.is_spark(data):
-        data, n_rows, method = _spark.sample_rows(data, sample, seed)
-        info = _TableInfo(n_rows, method)
+        data = _spark.sample_rows(data, sample, seed)
+    if isinstance(data, _Sampled):
+        info = _TableInfo(data.n_rows, data.sample_method)
+        data = data.columns
     else:
         info = _TableInfo(_n_rows(data), None)
     out = []

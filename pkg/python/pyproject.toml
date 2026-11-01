@@ -41,7 +41,10 @@ vault = ["PyNaCl>=1.5"]
 arrow = ["pyarrow>=14"]
 polars = ["polars>=1.0"]
 duckdb = ["duckdb>=1.1", "pyarrow>=14", "numpy"]  # DuckDB Python functions need numpy
-all = ["credgate[vault,arrow,polars,duckdb]"]
+bigquery = ["google-cloud-bigquery>=3.0"]
+# Not in `all`: PySpark is a 400 MB download, and Spark users already have it.
+spark = ["pyspark>=3.4"]
+all = ["credgate[vault,arrow,polars,duckdb,bigquery]"]
 
 [project.scripts]
 credgate = "credgate.cli:main"

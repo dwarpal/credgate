@@ -33,6 +33,7 @@ Imports:
     yaml
 Suggests:
     arrow,
+    bigrquery,
     askpass,
     DBI,
     dbplyr,

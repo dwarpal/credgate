@@ -24,6 +24,15 @@ data, frontier models may not, a card with its CVV and expiry is blocked for
 frontier models, and CVVs never leave. Load it with
 `credgate.Policy.load()` (Python) or `cg_policy()` (R).
 
+### BigQuery
+
+[`bigquery/sandbox_check.py`](bigquery/sandbox_check.py) and
+[`bigquery/sandbox_check.R`](bigquery/sandbox_check.R) check credgate's
+BigQuery support against real BigQuery, in the free BigQuery sandbox: they
+load synthetic data, compare BigQuery's cost estimates with the bytes
+billed for each sampling mode, check the cost limit, and write the
+inventory from both languages for comparison.
+
 ### Large data (Parquet, Polars, DuckDB, Arrow)
 
 Create the synthetic input first: `python examples/python/make_synthetic_calls.py`

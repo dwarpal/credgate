@@ -1,0 +1,108 @@
+# BigQuery query conformance cases (see README.md, "BigQuery tables").
+# Every implementation must build exactly `sql` (null: no query is run),
+# read exactly the columns in `read`, and record `sample_method`.
+#
+# Fields per case:
+#   id        unique name
+#   table     project.dataset.table
+#   kind      TABLE or VIEW
+#   rows      the table's row count
+#   fields    schema: name, type, mode (NULLABLE when omitted)
+#   sample    optional; default 10000
+#   sampling  optional; default tablesample
+
+spec_version: 1
+
+cases:
+
+  - id: small-table-reads-all-rows
+    table: test.crm.customers
+    kind: TABLE
+    rows: 50
+    fields:
+      - {name: pan, type: STRING}
+      - {name: acct, type: INT64}
+      - {name: amt, type: NUMERIC}
+      - {name: score, type: FLOAT64}
+      - {name: tags, type: STRING, mode: REPEATED}
+      - {name: addr, type: RECORD}
+      - {name: dob, type: DATE}
+    sql: "SELECT `pan`, CAST(`acct` AS STRING) AS `acct`, IF(`amt` = TRUNC(`amt`), CAST(`amt` AS STRING), NULL) AS `amt`, `score` FROM `test.crm.customers`"
+    read: [pan, acct, amt, score]
+    sample_method: all
+
+  - id: large-table-block-sample
+    table: bank-prod.crm.calls
+    kind: TABLE
+    rows: 1000000
+    fields:
+      - {name: notes, type: STRING}
+    sql: "SELECT `notes` FROM `bank-prod.crm.calls` TABLESAMPLE SYSTEM (1.2 PERCENT) LIMIT 10000"
+    read: [notes]
+    sample_method: bigquery-tablesample
+
+  - id: rand-sample-reads-whole-columns
+    table: bank-prod.crm.calls
+    kind: TABLE
+    rows: 1000000
+    sampling: rand
+    fields:
+      - {name: notes, type: STRING}
+    sql: "SELECT `notes` FROM `bank-prod.crm.calls` WHERE RAND() < 0.012 LIMIT 10000"
+    read: [notes]
+    sample_method: bigquery-rand
+
+  - id: views-cannot-use-tablesample
+    table: bank-prod.crm.calls_view
+    kind: VIEW
+    rows: 1000000
+    fields:
+      - {name: notes, type: STRING}
+    sql: "SELECT `notes` FROM `bank-prod.crm.calls_view` WHERE RAND() < 0.012 LIMIT 10000"
+    read: [notes]
+    sample_method: bigquery-rand
+
+  - id: fraction-capped-at-everything
+    table: p.d.t
+    kind: TABLE
+    rows: 10001
+    fields:
+      - {name: notes, type: STRING}
+    sql: "SELECT `notes` FROM `p.d.t` TABLESAMPLE SYSTEM (100 PERCENT) LIMIT 10000"
+    read: [notes]
+    sample_method: bigquery-tablesample
+
+  - id: tiny-fraction-has-a-floor
+    table: p.d.t
+    kind: TABLE
+    rows: 1.0e+13  # as a float: R reads integers above 2^31 as missing
+    sample: 10
+    sampling: rand
+    fields:
+      - {name: notes, type: STRING}
+    sql: "SELECT `notes` FROM `p.d.t` WHERE RAND() < 0.000001 LIMIT 10"
+    read: [notes]
+    sample_method: bigquery-rand
+
+  - id: older-type-names
+    table: p.d.t
+    kind: TABLE
+    rows: 5
+    fields:
+      - {name: acct, type: INTEGER}
+      - {name: score, type: FLOAT}
+      - {name: big, type: BIGNUMERIC}
+    sql: "SELECT CAST(`acct` AS STRING) AS `acct`, `score`, IF(`big` = TRUNC(`big`), CAST(`big` AS STRING), NULL) AS `big` FROM `p.d.t`"
+    read: [acct, score, big]
+    sample_method: all
+
+  - id: nothing-to-read
+    table: p.d.t
+    kind: TABLE
+    rows: 5
+    fields:
+      - {name: tags, type: STRING, mode: REPEATED}
+      - {name: raw, type: BYTES}
+    sql: null
+    read: []
+    sample_method: all

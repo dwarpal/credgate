@@ -28,6 +28,7 @@ synthetic data; runnable versions are in [`examples/`](../examples/).
 | Parquet larger than memory | `credgate.arrow.redact_parquet()` | `redact_parquet()` | `credgate redact --parquet` |
 | DuckDB | SQL: `cg_redact(notes)`, `cg_has_pii(notes)` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` | - |
 | Other databases (DBI) | - | `redact_query()`, `scan_pii()` on dbplyr tables | - |
+| BigQuery (scan, inventory) | `credgate.bigquery` | `bq_scan_pii()`, `bq_pii_inventory()` | - |
 | Spark (scan, inventory) | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) | - |
 | Scan a file | `scan_pii()` | `scan_pii()` | `credgate scan file.parquet` |
 

@@ -46,9 +46,10 @@
             # DuckDB are marked broken on x86_64-darwin). Their tests skip
             # without them.
             ++ nixpkgs.lib.optionals (python3Packages.pythonAtLeast "3.13") (
-              builtins.filter (p: (builtins.tryEval p.drvPath).success) (with python3Packages; [ pandas polars pyarrow duckdb pyspark ])
-              # Java for the PySpark tests (a local Spark, no network)
-              ++ [ python3Packages.pkgs.jdk17_headless ]
+              builtins.filter (p: (builtins.tryEval p.drvPath).success) (with python3Packages; [ pandas polars pyarrow duckdb pyspark google-cloud-bigquery ])
+              # Java for the PySpark tests (a local Spark, no network), and
+              # the BigQuery emulator for the BigQuery tests (local only)
+              ++ [ python3Packages.pkgs.jdk17_headless python3Packages.pkgs.bigquery-emulator ]
             );
           preCheck = ''
             export HOME=$TMPDIR SPARK_LOCAL_IP=127.0.0.1
