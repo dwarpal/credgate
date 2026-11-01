@@ -142,7 +142,8 @@ test_that("Arrow arrays, Parquet files and tables", {
   back <- arrow::read_parquet(dst)
   expect_identical(back$notes, redacted)
   expect_identical(back$pan, rep("ABCPE1234F", 4))
-  expect_identical(arrow::read_parquet(dst, as_data_frame = FALSE)$schema, arrow::open_dataset(src)$schema)
+  # Schemas are external pointers: compare them with Arrow's own Equals().
+  expect_true(arrow::read_parquet(dst, as_data_frame = FALSE)$schema$Equals(arrow::open_dataset(src)$schema))
   redact_parquet(src, dst)
   expect_identical(arrow::read_parquet(dst)$pan, rep("[PAN]", 4))
   expect_error(redact_parquet(src, src), "must differ")
