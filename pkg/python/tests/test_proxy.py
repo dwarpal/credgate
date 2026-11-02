@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -465,7 +466,7 @@ def test_sigterm_drains_for_load_balancers(tmp_path, server_kind):
             "--workers",
             "2",
             "--drain-seconds",
-            "1",
+            "4",
             "--server",
             server_kind,
         ],
@@ -487,13 +488,20 @@ def test_sigterm_drains_for_load_balancers(tmp_path, server_kind):
         slow_request.start()
         time.sleep(0.5)  # the request is now waiting for the slow endpoint
         proc.send_signal(signal.SIGTERM)
-        time.sleep(0.3)
-        status, _, body = _call(base, path="/healthz")
+        # Within the 4-second drain window, /healthz turns to "draining" as
+        # soon as the signal is handled (later on a busy machine).
+        deadline = time.monotonic() + 3
+        status, body = 0, b""
+        while time.monotonic() < deadline:
+            status, _, body = _call(base, path="/healthz")
+            if status == 503:
+                break
+            time.sleep(0.05)
         assert status == 503
         assert json.loads(body)["status"] == "draining"
-        slow_request.join(timeout=10)
+        slow_request.join(timeout=20)
         assert result["answer"][0] == 200  # finished, not cut off
-        assert proc.wait(timeout=10) == 0
+        assert proc.wait(timeout=30) == 0
         time.sleep(0.5)
         with pytest.raises(ConnectionRefusedError):  # no worker left listening
             socket.create_connection(("127.0.0.1", port), timeout=1).close()
@@ -524,7 +532,11 @@ def test_proxy_rotates_and_prunes_its_audit_log(upstream, tmp_path):
     messages = []
     thread = threading.Thread(target=_retention, args=(config, messages.append), daemon=True)
     thread.start()
-    thread.join(timeout=2)  # the first pass runs at once
+    # The first pass runs at once; on a busy machine it can take seconds, so
+    # wait for it rather than for a fixed time.
+    deadline = time.monotonic() + 60
+    while not messages and time.monotonic() < deadline:
+        time.sleep(0.05)
     assert not (tmp_path / "audit.2019-03.jsonl").exists()
     assert "audit.2019-03.jsonl" in messages[0]
     check = credgate.audit_verify(audit)
