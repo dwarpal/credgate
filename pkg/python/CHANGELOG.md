@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix: with audit rotation, a writer arriving just as another started the
+  new month's file could give its record the same sequence number as the
+  other's (seen once in CI with four processes; `audit_verify()` reported
+  it). After rotating, a writer now reads the new file before numbering.
 - Proxy, phase 2:
   - **Streaming**: answers are passed on as the model writes them, in each
     API's own format, with tokens put back as they arrive. A piece ending in

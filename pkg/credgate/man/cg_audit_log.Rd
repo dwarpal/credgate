@@ -68,6 +68,13 @@ new month arrives, and the chain continues in a new active file;
 removes monthly files older than the retention period (at least 1 year),
 only from the oldest end and only if the log verifies, and records them in
 \verb{<stem>.pruned.json}, from which the rest still verifies.
+
+One R process at a time should write a given log: R has no file locks, so
+two R processes writing the same file could give two records the same
+sequence number (which \code{audit_verify()} then reports). Give each process
+its own file (for example with \code{Sys.getpid()} in the name). The Python
+package locks the file, so several Python processes - such as the
+proxy's workers - can share one.
 }
 \examples{
 \dontshow{if (requireNamespace("openssl", quietly = TRUE)) withAutoprint(\{ # examplesIf}

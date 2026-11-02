@@ -27,6 +27,13 @@ audit_never_hashed <- "sensitive_auth"
 #' only from the oldest end and only if the log verifies, and records them in
 #' `<stem>.pruned.json`, from which the rest still verifies.
 #'
+#' One R process at a time should write a given log: R has no file locks, so
+#' two R processes writing the same file could give two records the same
+#' sequence number (which `audit_verify()` then reports). Give each process
+#' its own file (for example with `Sys.getpid()` in the name). The Python
+#' package locks the file, so several Python processes - such as the
+#' proxy's workers - can share one.
+#'
 #' @param path The log file (JSON Lines); created if missing.
 #' @param key Audit key (64+ hex digits or raw); `NULL` uses
 #'   `CREDGATE_AUDIT_KEY` if set, otherwise identifiers are not hashed.
