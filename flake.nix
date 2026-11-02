@@ -102,7 +102,7 @@
                 (with pkgs.rPackages; [ arrow duckdb DBI dbplyr dplyr ]);
           };
           docsPy = pkgs.python3.withPackages (ps: with ps; [
-            mkdocs mkdocs-material mkdocstrings mkdocstrings-python
+            mkdocs mkdocs-material mkdocstrings mkdocstrings-python mkdocs-rss-plugin
           ]);
           # pkgdown downloads these JavaScript libraries while building; the
           # build has no network, so fetch them here (pinned to the hashes
