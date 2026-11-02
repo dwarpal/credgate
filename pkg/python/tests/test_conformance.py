@@ -333,3 +333,42 @@ def test_database_query(case):
         case.get("sample", 10000),
     )
     assert got == (case["sql"], case["read"], case["sample_method"], case["fetch"])
+
+
+ROTATED = AUDIT_SPEC["rotated"]
+
+
+def _rotated_copy(tmp_path):
+    import shutil
+
+    folder = tmp_path / "rotated"
+    shutil.copytree(credgate.spec_path() / "conformance" / Path(ROTATED["path"]).parent, folder)
+    for file in folder.iterdir():
+        file.chmod(0o644)  # installed files can be read-only
+    return folder / Path(ROTATED["path"]).name
+
+
+def test_rotated_log_written_by_both_verifies(tmp_path):
+    check = credgate.audit_verify(_rotated_copy(tmp_path))
+    assert check.ok
+    assert (check.records, check.files, check.head) == (
+        ROTATED["records"],
+        ROTATED["files"],
+        ROTATED["head"],
+    )
+
+
+@pytest.mark.parametrize("case", ROTATED["tamper"], ids=lambda c: c["id"])
+def test_rotated_log_tampering_is_detected(case, tmp_path):
+    path = _rotated_copy(tmp_path)
+    folder = path.parent
+    if "delete" in case:
+        (folder / case["delete"]).unlink()
+    if "rename" in case:
+        (folder / case["rename"][0]).rename(folder / case["rename"][1])
+    if "replace" in case:
+        name, old, new = case["replace"]
+        text = (folder / name).read_text(encoding="utf-8")
+        assert old in text
+        (folder / name).write_text(text.replace(old, new, 1), encoding="utf-8")
+    assert not credgate.audit_verify(path).ok

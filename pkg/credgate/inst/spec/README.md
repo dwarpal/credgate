@@ -629,6 +629,41 @@ Editing, deleting, inserting or reordering records breaks the chain;
 removing records from the end does not, so keep copies of the head
 somewhere else (another system, a ticket, a signed report) and compare.
 
+**Rotation** (optional, monthly). The log at `<dir>/<stem>.jsonl` is the
+*active* file. Before a record is written, if the active file is not empty
+and the new record's month (UTC, from `time`) is later than the month of its
+first record, the active file is renamed to `<dir>/<stem>.YYYY-MM.jsonl`
+(the month of its records; an existing file of that name is an error, never
+overwritten) and the record starts a new active file. The chain continues
+across files: the new record's `seq` follows, and its `prev` is the SHA-256
+of the last line of the renamed file. Each closed segment so holds the
+records of exactly one month. Writers that share a log (several processes)
+lock the active file, and after taking the lock check that it is still the
+file at the path (if it was rotated meanwhile, they open the new one); they
+take the record's time while holding the lock, so records are in time order.
+
+**Verifying a rotated log** (`audit_verify` on the active file's path): the
+segments, in month order, then the active file form one chain, checked as
+above with `seq` and `prev` continuing across files; failures name the file
+and line. A missing or altered segment breaks the chain.
+
+**Retention** (`audit_prune(path, keep_years)`, `keep_years` at least 1,
+default 5): removes closed segments whose month ended more than `keep_years`
+years ago (at whole months: a segment for month M may go once the date is
+past the end of month M plus `keep_years` years), only from the oldest end,
+never the active file, and only if the whole log verifies - a broken log is
+kept as evidence. Before deleting, it writes `<dir>/<stem>.pruned.json`:
+
+```json
+{"credgate_audit_pruned": 1, "last_seq": 41250, "head": "<SHA-256 of the last pruned line>",
+ "segments": [{"name": "audit.2021-10.jsonl", "first_seq": 1, "last_seq": 40112,
+               "first_time": "...", "last_time": "...", "head": "..."}]}
+```
+
+(`segments` lists every pruned segment, oldest first; the file is written to
+a temporary name, then renamed). Verification then starts from it: the
+first remaining record must have `seq = last_seq + 1` and `prev = head`.
+
 Conformance cases are in `conformance/audit.yaml`, with logs written by each
 implementation in `conformance/audit/`.
 

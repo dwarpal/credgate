@@ -11,4 +11,5 @@
 ::: credgate.AuditLog
 ::: credgate.audit_verify
 ::: credgate.audit_read
+::: credgate.audit_prune
 ::: credgate.AuditCheck

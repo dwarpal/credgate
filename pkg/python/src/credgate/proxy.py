@@ -89,6 +89,10 @@ class ProxyConfig:
         workers: Processes serving requests (Linux and macOS). Detection is
             CPU work, and one Python process uses one core for it; with
             several workers the proxy uses several cores.
+        audit_rotate: Start a new audit file each month (see
+            :class:`~credgate.AuditLog`).
+        audit_retention_years: Remove monthly audit files older than this
+            (at least 1; 0 keeps them all), at start and once a day.
         drain_seconds: On SIGTERM, how long to keep serving while reporting
             "draining" on ``/healthz``, so a load balancer stops routing here;
             then requests in progress are finished and the proxy exits.
@@ -106,6 +110,8 @@ class ProxyConfig:
     timeout: float = 300
     workers: int = 1
     drain_seconds: float = 5
+    audit_rotate: bool = True
+    audit_retention_years: int = 5
     _users: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -123,6 +129,10 @@ class ProxyConfig:
                 raise ValueError(
                     f"No users in {self.keys}; add one with `credgate proxy add-user`."
                 )
+        if self.audit_retention_years and self.audit_retention_years < 1:
+            raise ValueError(
+                "`audit_retention_years` must be at least 1 (or 0 to keep everything)."
+            )
         if not 1 <= self.workers <= 64:
             raise ValueError("`workers` must be between 1 and 64.")
         if self.workers > 1 and not hasattr(os, "fork"):
@@ -163,6 +173,9 @@ def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
             finally:
                 os._exit(0)
         children.append(pid)
+
+    if config.audit_rotate and config.audit_retention_years:
+        threading.Thread(target=_retention, args=(config, log or _stderr), daemon=True).start()
 
     def terminate(signum: int, frame: Any) -> None:
         for pid in children:
@@ -215,6 +228,24 @@ def _wait_for_requests(timeout: float) -> None:
 def _signal(pid: int, sig: int) -> None:
     with contextlib.suppress(OSError):
         os.kill(pid, sig)
+
+
+def _retention(config: ProxyConfig, log: Callable[[str], Any]) -> None:
+    """Remove audit files past the retention period, at start and daily (in
+    the main process only, so two never prune at once)."""
+    from .audit import audit_prune
+
+    while True:
+        try:
+            removed = audit_prune(config.audit, keep_years=config.audit_retention_years)
+            if removed:
+                log(
+                    f"credgate proxy: audit files past {config.audit_retention_years} years "
+                    "removed: " + ", ".join(removed)
+                )
+        except Exception as e:  # never stop serving over retention; say so
+            log(f"credgate proxy: audit retention not applied: {e}")
+        time.sleep(24 * 3600)
 
 
 def _exit_with_parent(parent: int) -> None:
@@ -405,7 +436,12 @@ class _Handler(BaseHTTPRequestHandler):
 
         slots = _text_slots(body)
         vault = Vault(self.config.token_key)
-        audit = AuditLog(self.config.audit, key=self.config.audit_key, actor=user)
+        audit = AuditLog(
+            self.config.audit,
+            key=self.config.audit_key,
+            actor=user,
+            rotate=self.config.audit_rotate,
+        )
         with _CPU:
             decision = policy.apply(
                 [get() for get, _ in slots], destination, vault=vault, audit=audit

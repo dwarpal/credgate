@@ -1,5 +1,16 @@
 # credgate (development version)
 
+* Audit log rotation and retention: with rotation, each month's records go
+  to their own file (`<stem>.YYYY-MM.jsonl`) and the hash chain runs on
+  across files; `audit_verify()` and `audit_read()` cover all of them, and a
+  removed, renamed or altered month is detected. `audit_prune()` removes
+  months past the retention period (default 5 years, at least 1): only from
+  the oldest end, never the active file, never from a log that fails
+  verification; removed months are recorded in `<stem>.pruned.json`, from
+  which the rest still verifies. Several writers rotate safely. R and
+  Python write and verify the same rotated logs. Audit files are created
+  private to the account writing them (`0600`).
+  `cg_audit_log(..., rotate = TRUE)`; `audit_record()` takes a `time`.
 * Whole-database inventories: `inventory_database()` scans every table of a
   database through a connection (SQLAlchemy in Python, DBI in R): Postgres,
   DuckDB, SQLite, MySQL, IBM Db2 and others. Each table is sampled by the

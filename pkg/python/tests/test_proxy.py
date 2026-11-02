@@ -509,3 +509,34 @@ def test_sigterm_drains_for_load_balancers(tmp_path):
         if proc.poll() is None:
             proc.kill()
         slow.shutdown()
+
+
+def test_proxy_rotates_and_prunes_its_audit_log(upstream, tmp_path):
+    from datetime import UTC, datetime
+
+    from credgate.proxy import _retention
+
+    audit = tmp_path / "audit.jsonl"
+    # an old month already on disk, written with rotation
+    old = credgate.AuditLog(audit, rotate=True)
+    decision = _policy(upstream).decide(["hello"], "local")
+    old.record(decision, time=datetime(2019, 3, 1, tzinfo=UTC))
+    config = ProxyConfig(policy=_policy(upstream), audit=audit, port=0, audit_retention_years=5)
+    server = _start(make_server(config, log=lambda line: None))
+    base = f"http://127.0.0.1:{server.server_address[1]}/v1"
+    try:
+        assert _call(base, _chat("local/x", "hello"))[0] == 200  # a new month: rotates
+    finally:
+        server.shutdown()
+    assert (tmp_path / "audit.2019-03.jsonl").exists()
+    messages = []
+    thread = threading.Thread(target=_retention, args=(config, messages.append), daemon=True)
+    thread.start()
+    thread.join(timeout=2)  # the first pass runs at once
+    assert not (tmp_path / "audit.2019-03.jsonl").exists()
+    assert "audit.2019-03.jsonl" in messages[0]
+    check = credgate.audit_verify(audit)
+    assert check.ok
+    assert check.records == 1
+    with pytest.raises(ValueError, match="at least 1"):
+        ProxyConfig(policy=_policy(upstream), audit=audit, audit_retention_years=-2)

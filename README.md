@@ -227,8 +227,16 @@ credgate.audit_verify("audit.jsonl")              # intact? and the head hash
 
 In R: `log <- cg_audit_log("audit.jsonl")`, `policy_apply(..., audit = log)`,
 `audit_verify()`, `audit_read()`. R and Python write and verify the same
-files. Rotation and retention (default 5 years, at least 1, per the
-[threat model](docs/threat-model.md)) come with the proxy.
+files.
+
+Logs can **rotate monthly** (`AuditLog(path, rotate=True)`,
+`cg_audit_log(path, rotate = TRUE)`): each month's records go to their own
+file, and the chain runs on across files, so a deleted or altered month is
+detected like an edited line. **Retention**: `audit_prune(path, keep_years =
+5)` removes months past the retention period (at least 1 year) - only the
+oldest, and never from a log that fails verification - and records what it
+removed so the rest still verifies. The proxy rotates monthly and keeps 5
+years by default.
 
 ## PII inventory
 
