@@ -51,7 +51,7 @@ cg_policy <- function(x) {
   if (rlang::is_string(x)) {
     x <- yaml::yaml.load(paste(read_utf8_lines(x), collapse = "\n"))
   }
-  parse_policy(x)
+  structure(parse_policy(x), source = x)
 }
 
 read_utf8_lines <- function(path) {

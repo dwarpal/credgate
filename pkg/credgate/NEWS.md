@@ -1,5 +1,16 @@
 # credgate (development version)
 
+* Policy editor: `policy_editor()` is a Shiny app for InfoSec to change a
+  policy without editing YAML. It edits endpoints and rules (in order, since
+  the first matching rule decides), tries sample text against the unsaved
+  policy, shows the changes before saving, and saves only a policy that
+  loads. `policy_write()` saves a policy in a fixed layout, raises its
+  revision and appends to a hash-chained change log
+  (`<stem>.changes.jsonl`): who, when, why and what changed.
+  `policy_diff()` lists the changes between two policies and
+  `policy_changes()` reads the log and checks its chain. Comments in a
+  policy file are not kept when it is saved. `shiny` and `bslib` are
+  suggested, not required.
 * Audit log rotation and retention: with rotation, each month's records go
   to their own file (`<stem>.YYYY-MM.jsonl`) and the hash chain runs on
   across files; `audit_verify()` and `audit_read()` cover all of them, and a

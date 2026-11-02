@@ -18,3 +18,7 @@ for f in NOTICE AUTHORS; do
   install -m 644 "$root/$f" "$root/pkg/credgate/inst/$f"
 done
 echo "licence files synced"
+# The example bank policy ships with the R package (template for the policy editor).
+mkdir -p "$root/pkg/credgate/inst/policies"
+install -m 644 "$root/examples/policies/bank-default.yaml" "$root/pkg/credgate/inst/policies/bank-default.yaml"
+echo "example policy synced"
