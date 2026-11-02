@@ -129,8 +129,8 @@ async def _exchange(
         if exchange.request_id:
             extra.append((b"x-request-id", exchange.request_id.encode()))
         if isinstance(payload, P._Live):
-            note = await _stream(exchange, payload, extra, executor, receive, send, disconnected)
-            note = note or exchange._note
+            ended = await _stream(exchange, payload, extra, executor, receive, send, disconnected)
+            note = ended or exchange._note or note  # "stream" unless it ended otherwise
         else:
             data = json.dumps(payload).encode()
             await send(
