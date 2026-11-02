@@ -260,7 +260,7 @@ check it against real BigQuery, in the free sandbox, is in
 Whole databases - Postgres, DuckDB, SQLite, MySQL, IBM Db2 and others - are
 inventoried table by table through a connection (SQLAlchemy in Python, DBI
 in R). Each table is sampled by the database where it can (`TABLESAMPLE`,
-DuckDB's `USING SAMPLE`); otherwise its first rows are read, and the
+or a reservoir sample in DuckDB); otherwise its first rows are read, and the
 inventory says so. With an inventory file, an interrupted scan continues
 where it stopped, and later runs rescan only tables that changed.
 

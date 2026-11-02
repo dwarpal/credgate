@@ -1,7 +1,7 @@
 """PII inventories of whole databases (the spec's "Databases" rules).
 
 Every table in the chosen schemas is sampled by the database where it can
-(Postgres and Db2 ``TABLESAMPLE SYSTEM``, DuckDB ``USING SAMPLE``), and only
+(Postgres and Db2 ``TABLESAMPLE SYSTEM``, DuckDB a reservoir sample), and only
 the sample is read. With an inventory file, the scan can resume after an
 interruption, and later runs rescan only the tables that changed.
 
@@ -202,7 +202,9 @@ def sample_query(
             None,
         )
     if family == "duckdb":
-        return f"{sql} USING SAMPLE {p} PERCENT (system) LIMIT {sample}", read, "tablesample", None
+        # Not DuckDB's block sampling: its blocks hold about 2,000 rows, so a
+        # small fraction of a medium-sized table is often no block at all.
+        return f"{sql} USING SAMPLE {sample} ROWS (reservoir)", read, "reservoir", None
     if family in ("sqlite", "mysql"):
         return f"{sql} LIMIT {sample}", read, "first-rows", None
     return sql, read, "first-rows", sample

@@ -312,11 +312,14 @@ sampled by the database where it can, and only the sample is read.
    |---|---|---|---|
    | `postgresql` | `SELECT cols FROM t` | `... TABLESAMPLE SYSTEM (p) LIMIT sample` | `tablesample` |
    | `db2` | `SELECT cols FROM t` | `... TABLESAMPLE SYSTEM (p) FETCH FIRST sample ROWS ONLY` | `tablesample` |
-   | `duckdb` | `SELECT cols FROM t` | `... USING SAMPLE p PERCENT (system) LIMIT sample` | `tablesample` |
+   | `duckdb` | `SELECT cols FROM t` | `... USING SAMPLE sample ROWS (reservoir)` | `reservoir` |
    | `sqlite`, `mysql` | `SELECT cols FROM t` | `... LIMIT sample` | `first-rows` |
    | any other | `SELECT cols FROM t` | `SELECT cols FROM t`, reading only the first `sample` rows | `first-rows` |
 
-   With `n <= sample`, `sample_method` is `all`. `first-rows` is not a
+   With `n <= sample`, `sample_method` is `all`. DuckDB uses a reservoir
+   sample (exactly `sample` rows, uniformly), not its block sampling: its
+   blocks hold about 2,000 rows, so a small fraction of a medium-sized
+   table is often no block at all. `first-rows` is not a
    random sample: identifiers that appear only later in the table can be
    missed, and the inventory says so.
 5. The column-scan rules then apply to the rows read, without further

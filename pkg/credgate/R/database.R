@@ -2,8 +2,8 @@
 #'
 #' Scans every table of a database through a DBI connection and returns an
 #' inventory (see [pii_inventory()]). Each table is sampled by the database
-#' where it can - Postgres and IBM Db2 with `TABLESAMPLE SYSTEM`, DuckDB with
-#' `USING SAMPLE` - and only the sample is read; other databases are read
+#' where it can - Postgres and IBM Db2 with `TABLESAMPLE SYSTEM`, DuckDB with a
+#' reservoir sample - and only the sample is read; other databases are read
 #' from their first rows, and the inventory says so (`sample_method`
 #' `"first-rows"`). Only text and number columns are read. The rules are
 #' shared with the Python package (`credgate.database`; see the spec's
@@ -120,7 +120,9 @@ db_sample_query <- function(family, schema, table, n, columns, sample = 10000L) 
   out <- switch(family,
     postgresql = list(paste0(sql, " TABLESAMPLE SYSTEM (", p, ") LIMIT ", sample), "tablesample", NULL),
     db2 = list(paste0(sql, " TABLESAMPLE SYSTEM (", p, ") FETCH FIRST ", sample, " ROWS ONLY"), "tablesample", NULL),
-    duckdb = list(paste0(sql, " USING SAMPLE ", p, " PERCENT (system) LIMIT ", sample), "tablesample", NULL),
+    # Not DuckDB's block sampling: its blocks hold about 2,000 rows, so a
+    # small fraction of a medium-sized table is often no block at all.
+    duckdb = list(paste0(sql, " USING SAMPLE ", sample, " ROWS (reservoir)"), "reservoir", NULL),
     sqlite = ,
     mysql = list(paste0(sql, " LIMIT ", sample), "first-rows", NULL),
     list(sql, "first-rows", as.integer(sample))

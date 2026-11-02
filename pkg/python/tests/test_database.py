@@ -116,7 +116,7 @@ def test_duckdb_samples_in_the_database(tmp_path):
     inv = inventory_database(engine, source="duckdb", sample=1000)
     # DuckDB's driver names schemas catalog.schema (the database file's name).
     rows = [r for r in inv if r.table == "warehouse.crm.calls"]
-    assert {r.sample_method for r in rows} == {"tablesample"}
+    assert {r.sample_method for r in rows} == {"reservoir"}
     assert {r.n_rows for r in rows} == {200000}
     assert {r.type for r in rows} == {"pan", "mobile_in"}
-    assert all(0 < r.n_sampled <= 1000 for r in rows)
+    assert {r.n_sampled for r in rows} == {1000}  # exactly `sample` rows

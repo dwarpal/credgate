@@ -61,10 +61,10 @@ test_that("DuckDB: sampled in the database", {
   DBI::dbExecute(con, "CREATE TABLE crm.calls AS SELECT 'PAN ABCPE1234F' AS note FROM range(200000)")
   inv <- inventory_database(con, source = "duckdb", sample = 1000L)
   rows <- inv[endsWith(inv$table, "crm.calls"), ]
-  expect_identical(unique(rows$sample_method), "tablesample")
+  expect_identical(unique(rows$sample_method), "reservoir")
   expect_equal(unique(rows$n_rows), 200000)
   expect_identical(unique(rows$type), "pan")
-  expect_true(all(rows$n_sampled > 0 & rows$n_sampled <= 1000))
+  expect_identical(unique(rows$n_sampled), 1000L) # exactly `sample` rows
 })
 
 test_that("Postgres: block sampling, row estimates, BIGINT kept whole", {

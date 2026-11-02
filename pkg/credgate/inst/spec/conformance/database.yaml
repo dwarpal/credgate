@@ -59,17 +59,17 @@ cases:
     fetch: null
     sample_method: tablesample
 
-  - id: duckdb-block-sample
+  - id: duckdb-reservoir-sample
     family: duckdb
     schema: main
     table: calls
     rows: 1000000
     columns:
       - {name: notes, type: VARCHAR}
-    sql: 'SELECT "notes" FROM "main"."calls" USING SAMPLE 1.2 PERCENT (system) LIMIT 10000'
+    sql: 'SELECT "notes" FROM "main"."calls" USING SAMPLE 10000 ROWS (reservoir)'
     read: [notes]
     fetch: null
-    sample_method: tablesample
+    sample_method: reservoir
 
   - id: sqlite-first-rows
     family: sqlite
