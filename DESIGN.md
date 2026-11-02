@@ -305,10 +305,14 @@ are built in dependency order, so nothing is built twice or retrofitted
    head to keep elsewhere, policy revision and endpoint per record; R and
    Python write and verify the same files. Rotation and retention (default 5
    years, minimum 1, on-premises) come with the proxy.
-6. **Discovery at scale**: Spark (PySpark, sparklyr), BigQuery, a
-   warehouse-wide PII inventory - using keyed tokens, policies and audit.
-   Detection-only scanning can move earlier if a concrete need arises.
-7. **Proxy** (Python): offline, localhost by default, a Nix-built image.
+6. **Discovery at scale** (done): a shared inventory format; Spark
+   (PySpark, sparklyr), BigQuery tables and datasets, and whole databases
+   (SQLAlchemy, DBI), each sampled where the data lives.
+7. **Proxy** (Python, standard library only): phase 1 done - the
+   OpenAI-compatible API, policy per endpoint, tokens restored in answers,
+   audit log, localhost and shared (per-user keys, TLS) modes. Next:
+   token-by-token streaming, Anthropic/Ollama/Gemini APIs, audit rotation
+   and retention, a Nix-built image.
 8. **Shiny apps** in R and Python: a policy editor for InfoSec and
    compliance (possible after 4) and the assistant (after 7); thin, with all
    decisions in the policy engine and proxy.

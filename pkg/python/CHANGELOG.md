@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Proxy (phase 1): `credgate proxy serve` puts the policy between tools and
+  OpenAI-compatible model endpoints (`/v1/chat/completions`, `/v1/models`).
+  Each request is allowed, redacted, tokenised or blocked per endpoint and
+  recorded in the audit log; tokenised values are restored in the answer
+  (never in tool calls). Localhost mode by default; shared mode with
+  per-user keys (`credgate proxy add-user`) and TLS. Fails closed, refuses
+  content it cannot check, keeps endpoint keys from clients. Standard
+  library only. See docs/proxy.md.
 - Whole-database inventories: `inventory_database()` scans every table of a
   database through a connection (SQLAlchemy in Python, DBI in R): Postgres,
   DuckDB, SQLite, MySQL, IBM Db2 and others. Each table is sampled by the
