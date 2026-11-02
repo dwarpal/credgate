@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Proxy, standard server: up to the system's maximum of connections (not
+  Python's default of 5) wait to be accepted, so a burst of requests on a
+  busy Linux machine is not left waiting for the kernel's retries until
+  clients time out. Found when a concurrency test timed out in CI.
+
 ## 0.8.1 (2026-11-02)
 
 Tests only; the package behaves as 0.8.0. Three proxy tests waited a fixed

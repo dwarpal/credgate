@@ -587,3 +587,26 @@ def test_nothing_is_sent_when_the_audit_log_cannot_be_written(env, tmp_path):
     assert status == 500
     assert body["error"]["code"] == "credgate_error"
     assert Recorder.raw == []
+
+
+def test_bursts_of_connections_wait_in_a_long_enough_queue(tmp_path):
+    # Python's standard server keeps only 5 connections waiting to be
+    # accepted; a burst beyond that waits for the kernel's retries.
+    pol = credgate.Policy.from_dict(
+        {
+            "policy": "credgate-policy",
+            "version": 1,
+            "id": "q",
+            "revision": 1,
+            "destinations": {"x": {"tier": "local", "url": "http://127.0.0.1:9/v1"}},
+            "rules": [],
+            "default_action": "allow",
+        }
+    )
+    server = make_server(
+        ProxyConfig(policy=pol, audit=tmp_path / "a.jsonl", port=0), log=lambda line: None
+    )
+    try:
+        assert server.request_queue_size >= 128
+    finally:
+        server.server_close()

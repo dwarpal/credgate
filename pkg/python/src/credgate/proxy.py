@@ -340,6 +340,12 @@ def make_server(config: ProxyConfig, log: Callable[[str], Any] | None = None) ->
 
 
 class _Server(ThreadingHTTPServer):
+    # Connections waiting to be accepted. Python's default is 5: in a burst
+    # of requests on a busy Linux machine, connections beyond it wait for
+    # the kernel's retries (seconds) and clients time out. Production servers
+    # allow far more (uvicorn and gunicorn 2048); the system's maximum here.
+    request_queue_size = socket.SOMAXCONN
+
     def handle_error(self, request: Any, client_address: Any) -> None:
         if isinstance(sys.exc_info()[1], ConnectionError):
             return  # a client that went away is not an error worth a traceback
