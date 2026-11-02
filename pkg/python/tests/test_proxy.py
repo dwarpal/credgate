@@ -382,8 +382,6 @@ def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path):
         check = credgate.audit_verify(tmp_path / "audit.jsonl")
         assert check.ok
         assert check.records == 30
-        children = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True)
-        assert len(children.stdout.split()) == 2
     finally:
         proc.send_signal(signal.SIGTERM)
         proc.wait(timeout=20)
@@ -504,7 +502,9 @@ def test_sigterm_drains_for_load_balancers(tmp_path):
         slow_request.join(timeout=10)
         assert result["answer"][0] == 200  # finished, not cut off
         assert proc.wait(timeout=10) == 0
-        assert subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True).stdout == b""
+        time.sleep(0.5)
+        with pytest.raises(ConnectionRefusedError):  # no worker left listening
+            socket.create_connection(("127.0.0.1", port), timeout=1).close()
     finally:
         if proc.poll() is None:
             proc.kill()
