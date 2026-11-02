@@ -91,6 +91,8 @@ audit_record <- function(log, decision, time = NULL) {
     item
   })
   stamp <- format(time %||% Sys.time(), "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC")
+  # As in Python: the log's folder is created if it does not exist yet.
+  dir.create(dirname(log$path), recursive = TRUE, showWarnings = FALSE)
   last <- if (file.exists(log$path)) audit_last_line(log$path) else NULL
   first_month <- if (is.null(last)) NULL else substr(audit_first_record(log$path)$time, 1, 7)
   if (log$rotate && !is.null(first_month) && substr(stamp, 1, 7) > first_month) {

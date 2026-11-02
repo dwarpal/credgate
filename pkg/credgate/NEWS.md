@@ -1,5 +1,8 @@
 # credgate (development version)
 
+* `audit_record()` (and `policy_apply(..., audit = )`) creates the audit
+  log's folder if it does not exist yet, as the Python package does; it
+  failed with "cannot open the connection" before.
 * `cg_audit_log()` documents that one R process at a time should write a
   given log: R has no file locks. Give each process its own file; Python
   processes (such as the proxy's workers) can share one.

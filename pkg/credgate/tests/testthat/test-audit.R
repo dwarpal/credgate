@@ -133,3 +133,16 @@ test_that("audit files are private", {
     expect_identical(format(file.mode(f)), "600", info = basename(f))
   }
 })
+
+test_that("the log's folder is created if it does not exist, as in Python", {
+  skip_if_not_installed("openssl")
+  path <- file.path(withr::local_tempdir(), "logs", "2026", "audit.jsonl")
+  log <- cg_audit_log(path, rotate = TRUE)
+  policy <- cg_policy(list(
+    policy = "credgate-policy", version = 1L, id = "t", revision = 1L,
+    destinations = list(x = list(tier = "local")), rules = list(), default_action = "allow"
+  ))
+  audit_record(log, policy_decide(policy, "hello", "x"))
+  expect_true(file.exists(path))
+  expect_true(audit_verify(path)$ok)
+})
