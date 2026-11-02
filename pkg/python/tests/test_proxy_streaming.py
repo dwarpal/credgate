@@ -358,7 +358,7 @@ def test_the_restorer_holds_back_only_what_could_be_a_token():
 
 
 def test_openai_streams_with_tokens_restored(proxy):
-    base, _ = proxy()
+    base, server = proxy()
     status, headers, body = _post(
         base,
         "/v1/chat/completions",
@@ -376,6 +376,7 @@ def test_openai_streams_with_tokens_restored(proxy):
     text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks if c["choices"])
     assert text == EXPECTED
     assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
+    assert _logged(server, "200 stream")  # the log says it streamed, on both servers
 
 
 def test_answers_arrive_while_the_model_is_still_writing(proxy):

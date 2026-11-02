@@ -3,11 +3,11 @@
 What credgate protects, against whom, what it trusts, and where it does
 **not** protect. It covers detection, scanning and inventories (including
 Spark, BigQuery and whole databases), redaction, keyed and numbered
-tokenisation, saved vaults, policies, the audit log and the proxy, and the
-planned Shiny apps, so that those are designed against it.
+tokenisation, saved vaults, policies and the policy editor, the audit log
+and the proxy, so that each is designed against it.
 
 Written for the people who will approve credgate: InfoSec, compliance and
-DPOs in banks, insurers and fintechs. Updated 2026-11-02 (Python 0.7.0).
+DPOs in banks, insurers and fintechs. Updated 2026-11-02 (Python 0.8.0).
 
 ## 1. Setting
 
@@ -38,7 +38,7 @@ payment data localisation (payment data stored only in India), PCI DSS
 | **Token vaults** (token → real value) | memory; `.cgvault` files | whoever holds a vault and its passphrase can re-identify |
 | **Token key** (keyed tokens; `CREDGATE_TOKEN_KEY`) | supplied by the organisation | with the key, tokens can be checked against guessed values |
 | **Vault passphrases** | the user; `CREDGATE_VAULT_PASSPHRASE` | unlock saved vaults |
-| **Policies** | YAML files (a Shiny editor is planned) | decide what may go where |
+| **Policies** | YAML files, edited by hand or in the policy editor (R Shiny), with a change log | decide what may go where |
 | **Audit log** | on-premises files (JSON Lines) | the evidence for regulators; must be complete and unaltered |
 | **Model credentials** | environment variables | access to paid or internal models |
 | **credgate itself** | packages, images, source | a compromised release could leak everything |
@@ -78,7 +78,7 @@ instructions).
 
 | Goal | How (today / planned) |
 |---|---|
-| **G1. Personal data does not cross a boundary the policy forbids.** | Detection with checksums and context; redaction or tokenisation before sending. Policies per data class and endpoint, with combinations such as card + CVV + expiry → block, enforced by the proxy on every value of every request (since 0.7). |
+| **G1. Personal data does not cross a boundary the policy forbids.** | Detection with checksums and context; redaction or tokenisation before sending. Policies per data class and endpoint, with combinations such as card + CVV + expiry → block, enforced by the proxy on every value of every request (since 0.7), for the OpenAI, Anthropic and Ollama APIs (since 0.8) - including everything a tool adds on its own, such as the context Claude Code sends. |
 | **G2. Fail closed.** | The proxy forwards nothing if detection, the policy or the audit record fails, refuses content it cannot check (images, audio, files), and refuses to start without a valid policy (since 0.7; covered by an attack test suite). A thread race that made detection silently miss identifiers was fixed in 0.5.0 and is now tested; this class of bug is the main thing G2 guards against. |
 | **G3. Only the right person gets values back.** | Restore uses the vault of the session that tokenised. In the proxy, an answer can only restore tokens made for its own request (which carries the conversation), never into tool calls; tokens the model invents or alters are never filled in (since 0.7). |
 | **G4. Evidence without exposure.** | Audit log (since 0.6): who, when, which endpoint, which policy revision and rule, what was found and done - identifiers only as keyed hashes; **card verification codes never recorded in any form** (PCI DSS 3.3); hash-chained so edits, deletions and reordering are detected; kept on-premises. The proxy records every request (since 0.7). |
@@ -155,7 +155,11 @@ with the chain running across files, so a removed or altered month is
 detected too. Retention (since 0.8): default **5 years**, minimum **1 year**
 (DPDP Rules, PCI DSS), stored on-premises in India (CERT-In, RBI); old months
 are removed only from the oldest end, never from a log that fails
-verification, and what was removed is recorded so the rest still verifies. Tamper-*evidence*, not
+verification, and what was removed is recorded so the rest still verifies.
+Several Python processes (such as the proxy's workers) can write one log: a
+race at the monthly rotation that could repeat a sequence number was found
+and fixed before 0.8 was released. Base R has no file locks, so each R
+process writes its own log. Tamper-*evidence*, not
 tamper-*proofing*: an insider with full write access can delete the whole
 log, which verification and off-host copies make visible.
 
@@ -165,8 +169,13 @@ Policies are versioned (`revision`) and every audit record names the
 policy revision and rule; loading is strict (unknown fields, endpoints,
 types are errors); the proxy refuses to start with an invalid policy, loads
 it once at start, and reports its revision on `/healthz`, so every instance
-behind a load balancer can be checked. Planned: the Shiny editor records who
-changed what.
+behind a load balancer can be checked. The policy editor (R Shiny) saves
+only a policy that loads with the same strict rules, raises its revision,
+and appends who saved it, when, why and what changed to a hash-chained
+change log next to the policy, so edited or removed entries are detected.
+The editor's name field is what the user typed (or Shiny's signed-in user):
+who may reach the editor is controlled by the server's sign-in, not by
+credgate.
 
 ### Proxy misused (A2, A8)
 
@@ -178,15 +187,25 @@ credentials only from the environment, never seen by clients; content it
 cannot check (images, audio) is refused, not forwarded; it fails closed;
 its log has no request text. Values are restored only into the answer's
 text, only from the tokens made for that request, never into tool calls.
-Planned: token-by-token streaming that never emits half a token, audit
-rotation and retention. Users can still call a model directly and bypass
-the proxy - network rules, not credgate, enforce that the proxy is the only
-way out.
+Since 0.8 (phase 2): answers stream piece by piece, and a piece that could
+be the start of a token is held back until it is complete, so a token is
+never shown half-restored; an endpoint that fails or sends something
+unreadable mid-answer ends the stream with an error, never with what it
+sent. The Anthropic and Ollama APIs are governed like the OpenAI one, and
+content blocks credgate cannot check (images, documents, unknown types)
+are refused. In localhost mode only, a user's own key for an endpoint the
+proxy holds no key for is passed on (for example Claude Code signed in to
+the user's account); shared mode never passes client keys on. A shared
+proxy can run on uvicorn, a production HTTP server, which limits the
+requests in progress per worker. Users can still call a model directly and
+bypass the proxy - network rules, not credgate, enforce that the proxy is
+the only way out.
 
 ### Supply chain (A7)
 
 Few dependencies (R: cli, jsonlite, rlang, stringi, yaml; Python: regex,
-PyYAML; everything else optional). Builds are reproducible with Nix; CI
+PyYAML; everything else optional), all under permissive licences; the
+optional proxy server adds uvicorn (BSD-3), httptools and uvloop (MIT). Builds are reproducible with Nix; CI
 actions are pinned to commit hashes; PyPI releases use Trusted Publishing
 (no long-lived tokens); every change goes through a reviewed pull request
 with CI on Linux and macOS. Organisations can build credgate themselves

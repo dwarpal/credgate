@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.8.0 (2026-11-02)
+
+The proxy, phase 2: answers stream as the model writes them, Claude Code
+and the Anthropic SDKs, Ollama clients and VS Code Copilot Chat can use it,
+and a shared proxy can run on uvicorn, a production HTTP server. The audit
+log rotates monthly and keeps 5 years by default. Documentation:
+https://dwarpal.github.io/credgate/
+
 - Fix: with audit rotation, a writer arriving just as another started the
   new month's file could give its record the same sequence number as the
   other's (seen once in CI with four processes; `audit_verify()` reported
