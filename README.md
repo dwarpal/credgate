@@ -15,12 +15,16 @@ detection rules, so both languages find exactly the same matches.
 the [R package site](https://dwarpal.github.io/credgate/r/), guides and the
 shared specification.
 
-> **Status: early development (pre-alpha).** PII detection, column
-> scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
+> **Status: early development (pre-alpha).** Working today: PII detection,
+> column scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file), policies, the audit log and the PII inventory (data frames,
-> Spark, BigQuery, databases) and the proxy work today. The IDE assistant is planned;
-> see [DESIGN.md](DESIGN.md) for the roadmap.
+> vault file), policies and the policy editor for InfoSec (R Shiny), the
+> audit log with monthly rotation and retention, the PII inventory (data
+> frames, Spark, BigQuery, databases), and the proxy: OpenAI, Anthropic and
+> Ollama APIs with streaming, so Claude Code, VS Code Copilot Chat, Open
+> WebUI, ellmer and the SDKs can go through it, on the standard library or
+> uvicorn. Next: better detection of names without a cue. A built-in chat
+> assistant is under review. See [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
 

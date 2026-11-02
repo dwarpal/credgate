@@ -264,7 +264,8 @@ compliance people at banks, NBFCs and insurers).
 
 ## 6. Improvement roadmap (agreed 2026-10-31)
 
-Status as of py-v0.5.0 / CRAN 0.1.0 (under review). The evaluation
+Status as of py-v0.5.0 / CRAN 0.1.0 (under review); the build order below
+is updated to py-v0.8.1. The evaluation
 harness (item 1) is done. **Reordered 2026-10-31** (see section 5):
 accuracy is already ahead of the alternatives on our benchmark, so after a
 few quick accuracy fixes the next work is the product chain - tokenise and
@@ -309,14 +310,17 @@ are built in dependency order, so nothing is built twice or retrofitted
 6. **Discovery at scale** (done): a shared inventory format; Spark
    (PySpark, sparklyr), BigQuery tables and datasets, and whole databases
    (SQLAlchemy, DBI), each sampled where the data lives.
-7. **Proxy** (Python, standard library only): phase 1 done - the
-   OpenAI-compatible API, policy per endpoint, tokens restored in answers,
-   audit log, localhost and shared (per-user keys, TLS) modes. Next:
-   token-by-token streaming, Anthropic/Ollama/Gemini APIs, audit rotation
-   and retention, a Nix-built image.
-8. **Shiny apps** in R and Python: a policy editor for InfoSec and
-   compliance (possible after 4) and the assistant (after 7); thin, with all
-   decisions in the policy engine and proxy.
+7. **Proxy** (Python): phase 1 done in 0.7 - the OpenAI-compatible API,
+   policy per endpoint, tokens restored in answers, audit log, localhost and
+   shared (per-user keys, TLS) modes. Phase 2 done in 0.8 - streaming with
+   tokens restored as they arrive, the Anthropic and Ollama APIs (Claude
+   Code, VS Code Copilot Chat, Ollama clients), and an optional production
+   server (uvicorn, `credgate[server]`). Still to do: the Gemini API, a
+   Nix-built image.
+8. **Shiny apps**: the policy editor for InfoSec and compliance is done (R
+   Shiny). The chat assistant is under review (2026-11-02): the proxy now
+   governs the tools people already use, so the assistant's remaining value
+   is in what only an app inside the session can do.
 
 Inputs for this order came from user interviews (kept outside the
 repository) and a review of DPDP, RBI, CERT-In and PCI DSS obligations.
