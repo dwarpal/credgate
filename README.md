@@ -257,6 +257,22 @@ In R, with bigrquery: `bq_pii_inventory("my-project.crm.customers")`,
 check it against real BigQuery, in the free sandbox, is in
 [`examples/bigquery/`](examples/bigquery/).
 
+Whole databases - Postgres, DuckDB, SQLite, MySQL, IBM Db2 and others - are
+inventoried table by table through a connection (SQLAlchemy in Python, DBI
+in R). Each table is sampled by the database where it can (`TABLESAMPLE`,
+DuckDB's `USING SAMPLE`); otherwise its first rows are read, and the
+inventory says so. With an inventory file, an interrupted scan continues
+where it stopped, and later runs rescan only tables that changed.
+
+```python
+from credgate.database import inventory_database
+inv = inventory_database(engine, source="postgres:crm", path="inventory.csv")
+```
+
+```r
+inv <- inventory_database(con, source = "postgres:crm", path = "inventory.csv")
+```
+
 ## Large data
 
 credgate works on tables too big for memory, in both languages and on the
@@ -271,6 +287,7 @@ command line:
 | Other databases | - | any DBI database via dbplyr |
 | Spark | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) |
 | BigQuery | `credgate.bigquery.pii_inventory()`, `inventory_dataset()` | `bq_pii_inventory()`, `bq_inventory_dataset()` |
+| Whole databases | `credgate.database.inventory_database()` (SQLAlchemy) | `inventory_database()` (DBI) |
 
 ```sh
 credgate scan calls.parquet

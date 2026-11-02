@@ -8,6 +8,13 @@ BigQuery all produce the same inventory.
 ::: credgate.InventoryRow
 ::: credgate.read_inventory
 
+## Databases
+
+::: credgate.database
+    options:
+      show_root_heading: false
+      members: [inventory_database, DatabaseInventory, sample_query]
+
 ## BigQuery
 
 ::: credgate.bigquery

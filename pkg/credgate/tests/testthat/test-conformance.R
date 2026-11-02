@@ -341,3 +341,19 @@ for (case in conformance("bigquery.yaml")$cases) {
     expect_identical(got$method, case$sample_method)
   })
 }
+
+for (case in conformance("database.yaml")$cases) {
+  test_that(paste("database query:", case$id), {
+    columns <- data.frame(
+      name = vapply(case$columns, function(c) c$name, ""),
+      type = vapply(case$columns, function(c) c$type, "")
+    )
+    got <- credgate:::db_sample_query(
+      case$family, case$schema, case$table, case$rows, columns, case[["sample"]] %||% 10000L
+    )
+    expect_identical(got$sql, case$sql)
+    expect_identical(got$read, as.character(unlist(case$read)))
+    expect_identical(got$method, case$sample_method)
+    expect_equal(got$fetch, case$fetch)
+  })
+}

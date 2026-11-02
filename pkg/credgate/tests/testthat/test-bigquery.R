@@ -54,7 +54,7 @@ test_that("large tables are sampled by BigQuery; views use RAND()", {
   queries <- fake_bigquery(n = 1e6)
   inv <- bq_pii_inventory("test.crm.customers", sample = 1000)
   expect_identical(unique(inv$sample_method), "bigquery-tablesample")
-  expect_identical(unique(inv$n_rows), 1000000L)
+  expect_equal(unique(inv$n_rows), 1e6)
   expect_match(queries(), "TABLESAMPLE SYSTEM \\(0.12 PERCENT\\) LIMIT 1000$")
   # BigQuery would check its own limit against the whole table: not sent.
   expect_null(attr(queries, "limits")()[[1]])

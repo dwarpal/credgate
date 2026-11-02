@@ -1,0 +1,145 @@
+# Database query conformance cases (see README.md, "Databases"). Every
+# implementation must build exactly `sql` (null: no query runs), read
+# exactly the columns in `read`, and record `sample_method`. `fetch` is the
+# number of rows read (null: all rows the query returns).
+#
+# Fields per case:
+#   id        unique name
+#   family    postgresql, db2, duckdb, sqlite, mysql or other
+#   schema    the table's schema
+#   table     the table's name
+#   rows      the table's row count
+#   columns   name and type (as the database reports it)
+#   sample    optional; default 10000
+
+spec_version: 1
+
+cases:
+
+  - id: small-table-all-rows-skips-unreadable-types
+    family: postgresql
+    schema: crm
+    table: customers
+    rows: 50
+    columns:
+      - {name: pan, type: VARCHAR(10)}
+      - {name: account_no, type: BIGINT}
+      - {name: notes, type: TEXT}
+      - {name: dob, type: DATE}
+      - {name: is_active, type: BOOLEAN}
+      - {name: profile, type: JSONB}
+      - {name: tags, type: "TEXT[]"}
+      - {name: photo, type: BYTEA}
+    sql: 'SELECT "pan", "account_no", "notes" FROM "crm"."customers"'
+    read: [pan, account_no, notes]
+    fetch: null
+    sample_method: all
+
+  - id: postgres-block-sample
+    family: postgresql
+    schema: crm
+    table: calls
+    rows: 1000000
+    columns:
+      - {name: notes, type: text}
+    sql: 'SELECT "notes" FROM "crm"."calls" TABLESAMPLE SYSTEM (1.2) LIMIT 10000'
+    read: [notes]
+    fetch: null
+    sample_method: tablesample
+
+  - id: db2-block-sample
+    family: db2
+    schema: CRM
+    table: CALLS
+    rows: 1000000
+    columns:
+      - {name: NOTES, type: VARCHAR}
+    sql: 'SELECT "NOTES" FROM "CRM"."CALLS" TABLESAMPLE SYSTEM (1.2) FETCH FIRST 10000 ROWS ONLY'
+    read: [NOTES]
+    fetch: null
+    sample_method: tablesample
+
+  - id: duckdb-block-sample
+    family: duckdb
+    schema: main
+    table: calls
+    rows: 1000000
+    columns:
+      - {name: notes, type: VARCHAR}
+    sql: 'SELECT "notes" FROM "main"."calls" USING SAMPLE 1.2 PERCENT (system) LIMIT 10000'
+    read: [notes]
+    fetch: null
+    sample_method: tablesample
+
+  - id: sqlite-first-rows
+    family: sqlite
+    schema: main
+    table: calls
+    rows: 1000000
+    columns:
+      - {name: notes, type: TEXT}
+    sql: 'SELECT "notes" FROM "main"."calls" LIMIT 10000'
+    read: [notes]
+    fetch: null
+    sample_method: first-rows
+
+  - id: mysql-backticks
+    family: mysql
+    schema: crm
+    table: calls
+    rows: 1000000
+    columns:
+      - {name: notes, type: varchar(255)}
+    sql: 'SELECT `notes` FROM `crm`.`calls` LIMIT 10000'
+    read: [notes]
+    fetch: null
+    sample_method: first-rows
+
+  - id: other-databases-read-the-first-rows
+    family: other
+    schema: CRM
+    table: CALLS
+    rows: 1000000
+    columns:
+      - {name: NOTES, type: NVARCHAR}
+    sql: 'SELECT "NOTES" FROM "CRM"."CALLS"'
+    read: [NOTES]
+    fetch: 10000
+    sample_method: first-rows
+
+  - id: quotes-in-names
+    family: postgresql
+    schema: crm
+    table: 'odd"name'
+    rows: 5
+    columns:
+      - {name: 'a"b', type: text}
+    sql: 'SELECT "a""b" FROM "crm"."odd""name"'
+    read: ['a"b']
+    fetch: null
+    sample_method: all
+
+  - id: nothing-to-read
+    family: sqlite
+    schema: main
+    table: blobs
+    rows: 5
+    columns:
+      - {name: raw, type: BLOB}
+      - {name: created, type: TIMESTAMP}
+    sql: null
+    read: []
+    fetch: null
+    sample_method: all
+
+  - id: duckdb-catalog-and-schema
+    family: duckdb
+    schema: warehouse.crm
+    table: calls
+    rows: 5
+    columns:
+      - {name: note, type: VARCHAR}
+    sql: 'SELECT "note" FROM "warehouse"."crm"."calls"'
+    read: [note]
+    fetch: null
+    sample_method: all

@@ -147,6 +147,9 @@ table_rows <- function(data) {
 
 # Values of one column as trimmed, non-empty strings (see spec, step 1).
 scan_values <- function(x) {
+  if (inherits(x, "integer64")) {
+    x <- as.character(x) # BIGINT from databases (bit64): every digit kept
+  }
   if (is.factor(x)) {
     x <- as.character(x)
   } else if (is.numeric(x)) {
