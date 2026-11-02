@@ -125,6 +125,16 @@
           # lacks some of them), so CI can keep them in its Nix store cache.
           r-integration-deps = pkgs.linkFarmFromDrvs "credgate-r-integration-deps" available;
 
+          # What `nix flake check` would otherwise build from source on every
+          # CI run, because nixpkgs' public cache lacks it: the R test
+          # dependencies (on macOS: shiny and its compiled dependencies,
+          # openssl, sodium) and Python 3.11's packages. CI builds this first
+          # and keeps it in its Nix store cache.
+          ci-deps = pkgs.linkFarmFromDrvs "credgate-ci-deps" (
+            (with pkgs.rPackages; [ testthat withr sodium openssl shiny bslib ])
+            ++ (with pkgs.python311Packages; [ hatchling regex pyyaml pytest uvicorn httptools ])
+          );
+
           docs = pkgs.runCommand "credgate-docs" {
             nativeBuildInputs = [ docsR docsPy pkgs.pandoc ];
             LC_ALL = "C.UTF-8";
