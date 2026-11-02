@@ -76,7 +76,7 @@ Presidio is broader and more mature:
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
-  NLP back-ends, custom recognisers; credgate is pre-alpha.
+  NLP back-ends, custom recognisers; credgate is alpha.
 - **The corpus favours credgate**: we generated it; on general English text
   Presidio may well do better.
 

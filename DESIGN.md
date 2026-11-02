@@ -264,7 +264,8 @@ compliance people at banks, NBFCs and insurers).
 
 ## 6. Improvement roadmap (agreed 2026-10-31)
 
-Status as of py-v0.5.0 / CRAN 0.1.0 (under review). The evaluation
+Status as of py-v0.5.0 / CRAN 0.1.0 (under review); the build order below
+is updated to py-v0.8.1. The evaluation
 harness (item 1) is done. **Reordered 2026-10-31** (see section 5):
 accuracy is already ahead of the alternatives on our benchmark, so after a
 few quick accuracy fixes the next work is the product chain - tokenise and
@@ -309,14 +310,46 @@ are built in dependency order, so nothing is built twice or retrofitted
 6. **Discovery at scale** (done): a shared inventory format; Spark
    (PySpark, sparklyr), BigQuery tables and datasets, and whole databases
    (SQLAlchemy, DBI), each sampled where the data lives.
-7. **Proxy** (Python, standard library only): phase 1 done - the
-   OpenAI-compatible API, policy per endpoint, tokens restored in answers,
-   audit log, localhost and shared (per-user keys, TLS) modes. Next:
-   token-by-token streaming, Anthropic/Ollama/Gemini APIs, audit rotation
-   and retention, a Nix-built image.
-8. **Shiny apps** in R and Python: a policy editor for InfoSec and
-   compliance (possible after 4) and the assistant (after 7); thin, with all
-   decisions in the policy engine and proxy.
+7. **Proxy** (Python): phase 1 done in 0.7 - the OpenAI-compatible API,
+   policy per endpoint, tokens restored in answers, audit log, localhost and
+   shared (per-user keys, TLS) modes. Phase 2 done in 0.8 - streaming with
+   tokens restored as they arrive, the Anthropic and Ollama APIs (Claude
+   Code, VS Code Copilot Chat, Ollama clients), and an optional production
+   server (uvicorn, `credgate[server]`). Still to do: the Gemini API, a
+   Nix-built image.
+8. **Shiny apps**: the policy editor for InfoSec and compliance is done (R
+   Shiny). The chat assistant is **dropped** (2026-11-02; see "Decision: no
+   chat assistant" below).
+9. **Candidates after name detection**: a read-only proxy activity panel
+   (each request: endpoint, what was found, what the policy did, audited),
+   and a safe-context helper for data frames (structure and a redacted
+   sample, ready for any tool).
+
+### Status: alpha (2026-11-02)
+
+credgate moved from pre-alpha to alpha at 0.8.1: the main path (detection,
+policies, audit log, proxy, policy editor) is built, tested and released,
+but no one outside the project relies on it yet, and formats and APIs may
+still change. **Beta** needs: a written stability promise for the policy
+and audit formats and the main functions; at least one real pilot; CRAN
+acceptance and better name detection.
+
+### Decision: no chat assistant (2026-11-02)
+
+The assistant package (section 2, "assistant") is dropped. When it was
+planned, the proxy did not exist; now Claude Code, VS Code Copilot Chat,
+Open WebUI, Jupyter AI, Continue, ellmer and the SDKs all go through it and
+are governed, so a chat of our own adds little that these tools lack. A
+chat app would also pull in what users expect of one - files, code
+execution, tools and MCP servers, skills, memory, agents - and become a
+general harness: the most crowded part of the field, where those tools move
+faster, and every tool it connects is a new way for data to leave that
+would itself need governing. credgate is the gate, not the room.
+
+What only credgate could offer is kept, without a chat: seeing what the
+policy does to each request (the proxy activity panel) and asking about a
+data frame safely (the safe-context helper). Both stay in credgate's lane -
+governance and visibility - and work with whatever tool people use.
 
 Inputs for this order came from user interviews (kept outside the
 repository) and a review of DPDP, RBI, CERT-In and PCI DSS obligations.

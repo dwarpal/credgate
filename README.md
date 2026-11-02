@@ -15,12 +15,19 @@ detection rules, so both languages find exactly the same matches.
 the [R package site](https://dwarpal.github.io/credgate/r/), guides and the
 shared specification.
 
-> **Status: early development (pre-alpha).** PII detection, column
-> scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
+> **Status: alpha.** The main path is built and tested, but no one outside
+> the project relies on it yet, so formats and APIs may still change.
+> Working today: PII detection,
+> column scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file), policies, the audit log and the PII inventory (data frames,
-> Spark, BigQuery, databases) and the proxy work today. The IDE assistant is planned;
-> see [DESIGN.md](DESIGN.md) for the roadmap.
+> vault file), policies and the policy editor for InfoSec (R Shiny), the
+> audit log with monthly rotation and retention, the PII inventory (data
+> frames, Spark, BigQuery, databases), and the proxy: OpenAI, Anthropic and
+> Ollama APIs with streaming, so Claude Code, VS Code Copilot Chat, Open
+> WebUI, ellmer and the SDKs can go through it, on the standard library or
+> uvicorn. Next: better detection of names without a cue. credgate will not
+> have its own chat assistant: use any tool through the proxy. See
+> [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
 
@@ -420,7 +427,7 @@ Presidio is broader and more mature:
 - **Beyond text**: image (OCR) and structured-data redaction, a REST service
   and Docker images.
 - **Maturity and extensibility**: years in production, many languages and
-  NLP back-ends, custom recognisers; credgate is pre-alpha.
+  NLP back-ends, custom recognisers; credgate is alpha.
 - **The corpus favours credgate**: we generated it; on general English text
   Presidio may well do better.
 
