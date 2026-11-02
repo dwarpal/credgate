@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.8.1 (2026-11-02)
+
+Tests only; the package behaves as 0.8.0. Three proxy tests waited a fixed
+time for something that takes longer on a busy machine, and one failed once
+in a Nix build of 0.8.0 (it passed on every rerun). They now wait for the
+condition itself:
+
+- audit retention: the first pass may take seconds;
+- the load-balancer drain: `/healthz` turns to "draining" when the signal
+  is handled, within a longer drain window;
+- uvicorn noticing a client that leaves: a wider margin.
+
+A slowed-down retention pass made the old test fail and the new one pass.
+
 ## 0.8.0 (2026-11-02)
 
 The proxy, phase 2: answers stream as the model writes them, Claude Code

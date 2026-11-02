@@ -874,7 +874,7 @@ def _stream_request(base, model="local/m", text="hello"):
 def test_uvicorn_notices_a_client_that_leaves_while_the_model_thinks(proxy, server_kind):
     if server_kind != "uvicorn":
         pytest.skip("the standard server notices at the next piece")
-    FakeEverything.first_delay = 4
+    FakeEverything.first_delay = 15
     base, server = proxy()
     conn, response = _stream_request(base)
     assert response.status == 200
@@ -882,8 +882,8 @@ def test_uvicorn_notices_a_client_that_leaves_while_the_model_thinks(proxy, serv
     left = time.monotonic()
     response.close()
     conn.close()
-    assert _logged(server, "client_closed", seconds=3)
-    assert time.monotonic() - left < 2  # not after the model's 4 seconds
+    assert _logged(server, "client_closed", seconds=10)
+    assert time.monotonic() - left < 10  # long before the model's 15 seconds
 
 
 def test_uvicorn_limits_requests_in_progress(proxy, server_kind):
