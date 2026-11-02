@@ -25,6 +25,7 @@ variable \code{CREDGATE_MASK=full} (the option wins). The default is
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://dwarpal.github.io/credgate/r/}
   \item \url{https://github.com/dwarpal/credgate}
   \item Report bugs at \url{https://github.com/dwarpal/credgate/issues}
 }

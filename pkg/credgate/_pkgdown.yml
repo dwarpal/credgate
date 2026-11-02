@@ -59,6 +59,7 @@ reference:
     contents:
       - pii_inventory
       - write_inventory
+      - inventory_database
       - bq_scan_pii
   - title: Large data
     contents:

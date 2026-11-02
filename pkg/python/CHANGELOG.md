@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Whole-database inventories: `inventory_database()` scans every table of a
+  database through a connection (SQLAlchemy in Python, DBI in R): Postgres,
+  DuckDB, SQLite, MySQL, IBM Db2 and others. Each table is sampled by the
+  database where it can (`TABLESAMPLE SYSTEM` in Postgres and Db2, a
+  reservoir sample in DuckDB), otherwise its first rows are read (`sample_method`
+  `first-rows`); only text and number columns are read. With an inventory
+  file, an interrupted run continues where it stopped and later runs rescan
+  only tables whose row count changed or whose scan is older than
+  `max_age` days. Tables that cannot be read are reported, not fatal.
+  New extra: `database` (SQLAlchemy).
+
 ## 0.6.0 (2026-11-02)
 
 Governance and discovery: policies per model endpoint, a tamper-evident

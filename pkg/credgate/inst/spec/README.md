@@ -280,6 +280,65 @@ BigQuery's samples are random and not reproducible. The query for each
 case is in `conformance/bigquery.yaml`; implementations must build exactly
 these queries.
 
+**Databases** (`inventory_database`) are inventoried table by table
+through a connection (SQLAlchemy in Python, DBI in R); each table is
+sampled by the database where it can, and only the sample is read.
+
+1. **Tables**: every table in the given schemas (default: all schemas
+   except the database's own: `information_schema`, `pg_catalog`,
+   `pg_toast`, `sys`, `syscat`, `sysibm`, `sysstat`, `mysql`,
+   `performance_schema`, and names starting with `pg_temp`, `pg_toast_temp`,
+   or DuckDB's `system.` and `temp.` catalogs).
+   Views only on request, as reading one runs its query. `include` and
+   `exclude` are shell-style patterns matched against `schema.table`. Tables
+   are scanned in schema, then table name order; the inventory names each
+   `schema.table`.
+2. **Columns read**: all, except those whose type name (lower-cased)
+   contains `blob`, `binary`, `bytea`, `image`, `json`, `xml`, `geometry`,
+   `geography`, `array`, `struct`, `map`, `interval`, `date`, `time`,
+   `bool`, `uuid`, or ends with `[]`. Those are recorded with
+   `n_sampled = 0` and not read. With no column to read, no query runs.
+3. **Row count** `n`: for `postgresql`, the planner's estimate
+   (`pg_class.reltuples`) when it is 0 or more, otherwise `SELECT COUNT(*)`;
+   for other databases `SELECT COUNT(*)`. `n_rows = n` (for Postgres an
+   estimate, as exact counts need a full scan).
+4. **Query** for each database family, with identifiers in double quotes
+   (inner `"` doubled; backticks for `mysql`), the table as
+   `"schema"."table"` (DuckDB's driver names schemas `catalog.schema`: each
+   part is quoted), and `f = max(0.000001, min(1, 1.2 * sample / n))`,
+   `p = 100 * f` written as for BigQuery:
+
+   | Family | `n <= sample` | `n > sample` | `sample_method` |
+   |---|---|---|---|
+   | `postgresql` | `SELECT cols FROM t` | `... TABLESAMPLE SYSTEM (p) LIMIT sample` | `tablesample` |
+   | `db2` | `SELECT cols FROM t` | `... TABLESAMPLE SYSTEM (p) FETCH FIRST sample ROWS ONLY` | `tablesample` |
+   | `duckdb` | `SELECT cols FROM t` | `... USING SAMPLE sample ROWS (reservoir)` | `reservoir` |
+   | `sqlite`, `mysql` | `SELECT cols FROM t` | `... LIMIT sample` | `first-rows` |
+   | any other | `SELECT cols FROM t` | `SELECT cols FROM t`, reading only the first `sample` rows | `first-rows` |
+
+   With `n <= sample`, `sample_method` is `all`. DuckDB uses a reservoir
+   sample (exactly `sample` rows, uniformly), not its block sampling: its
+   blocks hold about 2,000 rows, so a small fraction of a medium-sized
+   table is often no block at all. `first-rows` is not a
+   random sample: identifiers that appear only later in the table can be
+   missed, and the inventory says so.
+5. The column-scan rules then apply to the rows read, without further
+   sampling.
+6. **Resume and change detection**: with an inventory file, its rows are
+   read first, and the file is rewritten (to a temporary file, then
+   renamed) after each table. A table is skipped, keeping its rows, when
+   the file has rows for it (same `source` and `table`) scanned within
+   `max_age` days (default 30) and with the same `n_rows` as now (both
+   known). So an interrupted run continues where it stopped, and a later
+   run rescans only tables that changed or are stale. Rows of tables no
+   longer in the database are dropped at the end.
+7. **Errors**: a table that cannot be read (for example without
+   permission) is reported as a warning and skipped, unless errors are
+   asked to stop the run; the returned inventory lists the tables that
+   failed, so gaps in coverage are visible.
+
+The query for each case is in `conformance/database.yaml`.
+
 **Inventory files** are CSV, written identically by every implementation so
 that files can be compared and diffed:
 

@@ -42,7 +42,7 @@ test_that("Spark tables: same results as in memory, sampled in the cluster, ever
   big <- dplyr::copy_to(sc, pans, "pans", overwrite = TRUE)
   inv <- pii_inventory(big, source = "hive", table = "t", sample = 500)
   expect_identical(unique(inv$sample_method), "spark-sample")
-  expect_identical(unique(inv$n_rows), 3000L)
+  expect_equal(unique(inv$n_rows), 3000)
   pan <- inv[!is.na(inv$type) & inv$type == "pan", ]
   expect_true(pan$n_sampled > 0 && pan$n_sampled <= 500)
   expect_equal(pan$rate, 1)

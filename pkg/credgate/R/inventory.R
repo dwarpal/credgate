@@ -3,7 +3,8 @@ inventory_fields <- c(
   "n_matched", "n_full", "rate", "mean_confidence", "sample_method",
   "scanned_at", "credgate"
 )
-inventory_ints <- c("v", "n_rows", "n_sampled", "n_matched", "n_full")
+inventory_ints <- c("v", "n_sampled", "n_matched", "n_full")
+# n_rows is a double in R: tables can have more rows than an R integer holds.
 inventory_optional <- c("type", "class", "n_rows", "mean_confidence")
 
 #' Record where PII is, for an inventory
@@ -50,7 +51,7 @@ pii_inventory <- function(data, source, table, sample = 10000L, min_rate = 0,
   }
   scanned_at <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   columns <- scan_table(data, sample, min_rate, detectors, seed)
-  n_rows <- as.integer(attr(columns, "n_rows"))
+  n_rows <- as.numeric(attr(columns, "n_rows"))
   method <- attr(columns, "sample_method")
   rows <- lapply(columns, function(col) {
     found <- col$findings
@@ -119,7 +120,7 @@ read_inventory <- function(path) {
       rlang::abort(paste0(path, ": `", field, "` is empty on line ", which(empty)[1] + 1, "."))
     }
     text[empty] <- NA
-    if (field %in% c(inventory_ints, "rate", "mean_confidence")) {
+    if (field %in% c(inventory_ints, "n_rows", "rate", "mean_confidence")) {
       value <- suppressWarnings(as.numeric(text))
       bad <- !is.na(text) & is.na(value)
       if (any(bad)) {
@@ -139,7 +140,7 @@ inventory_format <- function(field, x) {
   if (field %in% c("rate", "mean_confidence")) {
     out <- sub("\\.?0+$", "", sprintf(if (field == "rate") "%.4f" else "%.2f", x))
   } else {
-    out <- as.character(x)
+    out <- if (is.numeric(x)) format(x, scientific = FALSE, trim = TRUE) else as.character(x)
     quote <- grepl("[,\"\r\n]", out)
     out[quote] <- paste0("\"", gsub("\"", "\"\"", out[quote], fixed = TRUE), "\"")
   }
@@ -150,7 +151,7 @@ inventory_format <- function(field, x) {
 empty_inventory <- function() {
   data.frame(
     v = integer(), source = character(), table = character(), column = character(),
-    type = character(), class = character(), n_rows = integer(), n_sampled = integer(),
+    type = character(), class = character(), n_rows = numeric(), n_sampled = integer(),
     n_matched = integer(), n_full = integer(), rate = numeric(),
     mean_confidence = numeric(), sample_method = character(), scanned_at = character(),
     credgate = character()
@@ -184,6 +185,14 @@ print.cg_inventory <- function(x, ...) {
       rows$source[1], rows$table[1], length(unique(rows$column)), length(found),
       if (length(types)) paste0(" (", paste(types, collapse = ", "), ")") else ""
     ))
+  }
+  skipped <- attr(x, "skipped")
+  if (length(skipped) > 0) {
+    cat(sprintf("%d table(s) unchanged since the last scan, kept.\n", length(skipped)))
+  }
+  failed <- attr(x, "failed")
+  if (length(failed) > 0) {
+    cat(sprintf("Not scanned (%d): %s\n", length(failed), paste(names(failed), collapse = ", ")))
   }
   invisible(x)
 }

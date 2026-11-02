@@ -317,3 +317,19 @@ def test_bigquery_query(case):
         case.get("sampling", "tablesample"),
     )
     assert got == (case["sql"], case["read"], case["sample_method"])
+
+
+@pytest.mark.parametrize("case", conformance("database.yaml")["cases"], ids=lambda c: c["id"])
+def test_database_query(case):
+    from credgate.database import sample_query
+
+    columns = [(c["name"], c["type"]) for c in case["columns"]]
+    got = sample_query(
+        case["family"],
+        case["schema"],
+        case["table"],
+        case["rows"],
+        columns,
+        case.get("sample", 10000),
+    )
+    assert got == (case["sql"], case["read"], case["sample_method"], case["fetch"])

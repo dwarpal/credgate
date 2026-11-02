@@ -46,7 +46,7 @@
             # DuckDB are marked broken on x86_64-darwin). Their tests skip
             # without them.
             ++ nixpkgs.lib.optionals (python3Packages.pythonAtLeast "3.13") (
-              builtins.filter (p: (builtins.tryEval p.drvPath).success) (with python3Packages; [ pandas polars pyarrow duckdb pyspark google-cloud-bigquery ])
+              builtins.filter (p: (builtins.tryEval p.drvPath).success) (with python3Packages; [ pandas polars pyarrow duckdb pyspark google-cloud-bigquery sqlalchemy duckdb-engine ])
               # Java for the PySpark tests (a local Spark, no network), and
               # the BigQuery emulator for the BigQuery tests (local only)
               ++ [ python3Packages.pkgs.jdk17_headless python3Packages.pkgs.bigquery-emulator ]
@@ -73,7 +73,8 @@
         default = credgate;
       });
 
-      # R tests for Arrow, Parquet, databases (DuckDB, SQLite, Postgres) and
+      # R tests for Arrow, Parquet, databases and whole-database inventories
+      # (DuckDB, SQLite, Postgres) and
       # Spark (sparklyr, a local Spark without network). The
       # packages are large C++ builds, so this is not in `checks`; CI builds
       # it in a separate job (.github/workflows/integrations.yml):
@@ -173,7 +174,7 @@
             cd tests/testthat
             Rscript -e '
               library(testthat); library(credgate)
-              res <- do.call(rbind, lapply(c("test-frames.R", "test-spark.R"), function(f) {
+              res <- do.call(rbind, lapply(c("test-frames.R", "test-spark.R", "test-database.R"), function(f) {
                 as.data.frame(test_file(f, reporter = "progress",
                                         package = "credgate", load_package = "installed"))
               }))
