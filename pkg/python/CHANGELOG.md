@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+## 0.8.2 (2026-11-03)
+
+A proxy fix, and credgate is now marked alpha.
+
 - Proxy, standard server: up to the system's maximum of connections (not
   Python's default of 5) wait to be accepted, so a burst of requests on a
   busy Linux machine is not left waiting for the kernel's retries until
   clients time out. Found when a concurrency test timed out in CI.
+- Status: alpha (PyPI classifier "3 - Alpha"; was pre-alpha). The main
+  path is built and tested, but formats and APIs may still change.
 
 ## 0.8.1 (2026-11-02)
 
