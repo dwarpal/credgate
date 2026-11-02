@@ -192,7 +192,7 @@
       checks = forAll (pkgs:
         let
           rTest = pkgs.rWrapper.override {
-            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr sodium openssl ]);
+            packages = [ (credgateR pkgs) ] ++ (with pkgs.rPackages; [ testthat withr sodium openssl shiny bslib ]);
           };
         in
         {
@@ -229,6 +229,8 @@
             for f in NOTICE AUTHORS; do
               diff ${./.}/$f ${./pkg/credgate/inst}/$f || fail "R inst/$f"
             done
+            diff ${./examples/policies/bank-default.yaml} ${./pkg/credgate/inst/policies/bank-default.yaml} \
+              || fail "R inst/policies/bank-default.yaml"
             touch $out
           '';
 

@@ -40,6 +40,7 @@ nav:
   - R: https://dwarpal.github.io/credgate/r/
   - Guides:
       - Proxy: proxy.md
+      - Policy editor: policy-editor.md
       - Large data: large-data.md
       - Threat model: threat-model.md
   - Specification: spec.md

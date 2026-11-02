@@ -185,6 +185,18 @@ action or identifier type is an error, never a silent "allow" - and every
 decision names the policy revision and the rule behind each action, ready
 for the audit log. The format is specified in [spec/README.md](spec/README.md#policies-policy).
 
+InfoSec can change a policy in a browser instead of editing YAML:
+`credgate::policy_editor("bank-default.yaml")` (R, needs `shiny` and
+`bslib`). It edits endpoints and rules, tries sample text against the unsaved
+policy, shows what changed, and saves only a valid policy, recording who
+saved it, why and what changed in a hash-chained change log. See
+[docs/policy-editor.md](docs/policy-editor.md).
+
+<p align="center">
+  <img src="docs/images/policy-editor/endpoints.png" alt="The credgate policy editor: endpoints by tier" width="49%">
+  <img src="docs/images/policy-editor/try-blocked.png" alt="Try it: a card with its CVV and expiry is blocked for a frontier model" width="49%">
+</p>
+
 ## Proxy
 
 The proxy puts the policy between people's tools and the model endpoints:
