@@ -79,7 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     px = sub.add_parser("proxy", help="run the policy-enforcing proxy for model endpoints")
     px_sub = px.add_subparsers(dest="proxy_command", required=True)
-    ps = px_sub.add_parser("serve", help="run the proxy (OpenAI-compatible, on /v1)")
+    ps = px_sub.add_parser("serve", help="run the proxy (OpenAI, Anthropic and Ollama APIs)")
     ps.add_argument("--policy", required=True, help="policy file (YAML)")
     ps.add_argument("--audit", required=True, help="audit log file (JSON Lines)")
     ps.add_argument("--host", default="127.0.0.1", help="address to listen on (default: localhost)")
@@ -101,6 +101,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=5,
         help="remove monthly audit files older than this (min 1; 0 keeps all; default 5)",
+    )
+    ps.add_argument(
+        "--server",
+        choices=["standard", "uvicorn"],
+        default="standard",
+        help="HTTP server: standard library (default) or uvicorn (needs credgate[server])",
+    )
+    ps.add_argument(
+        "--concurrency",
+        type=int,
+        default=256,
+        help="uvicorn: requests one worker handles at once; more get 503 (default 256)",
+    )
+    ps.add_argument(
+        "--default-endpoint",
+        help="endpoint for models asked for without one (e.g. claude, for Claude Code)",
     )
     ps.add_argument(
         "--drain-seconds",
@@ -152,6 +168,9 @@ def _proxy(args: argparse.Namespace) -> int:
             timeout=args.timeout,
             workers=args.workers,
             drain_seconds=args.drain_seconds,
+            default_endpoint=args.default_endpoint,
+            server=args.server,
+            concurrency=args.concurrency,
             audit_rotate=not args.no_audit_rotate,
             audit_retention_years=args.audit_retention_years,
         )

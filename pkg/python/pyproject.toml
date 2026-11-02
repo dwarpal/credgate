@@ -46,6 +46,12 @@ bigquery = ["google-cloud-bigquery>=3.0"]
 database = ["sqlalchemy>=2.0"]
 # The proxy needs only the standard library; the extra exists for symmetry.
 proxy = []
+# The proxy on uvicorn, a production HTTP server (all BSD-3 or MIT licensed).
+server = [
+  "uvicorn>=0.30",
+  "httptools>=0.6; sys_platform != 'win32'",
+  "uvloop>=0.19; sys_platform != 'win32'",
+]
 # Not in `all`: PySpark is a 400 MB download, and Spark users already have it.
 spark = ["pyspark>=3.4"]
 all = ["credgate[vault,arrow,polars,duckdb,bigquery,database]"]

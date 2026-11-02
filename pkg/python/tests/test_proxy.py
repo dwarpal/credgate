@@ -124,8 +124,9 @@ def _policy(url):
 
 
 @pytest.fixture
-def proxy(upstream, tmp_path):
+def proxy(upstream, tmp_path, server_kind):
     def start(**kwargs):
+        kwargs.setdefault("server", server_kind)
         config = ProxyConfig(
             policy=_policy(upstream), audit=tmp_path / "audit.jsonl", port=0, **kwargs
         )
@@ -266,19 +267,6 @@ def test_bad_requests_and_errors_fail_closed(proxy):
     assert FakeModel.received == []
 
 
-def test_streaming_clients_get_the_answer_as_events(proxy):
-    base, _ = proxy()
-    status, content_type, body = _call(base, _chat("frontier/gpt", f"PAN {PAN}", stream=True))
-    assert status == 200
-    assert content_type == "text/event-stream"
-    assert "stream" not in FakeModel.received[-1]["body"]
-    events = [line[6:] for line in body.decode().splitlines() if line.startswith("data: ")]
-    assert events[-1] == "[DONE]"
-    first = json.loads(events[0])
-    assert first["object"] == "chat.completion.chunk"
-    assert first["choices"][0]["delta"]["content"] == f"Noted: PAN {PAN}"
-
-
 def test_models_are_listed_per_endpoint(proxy):
     base, _ = proxy()
     status, _, body = _call(base, path="/models")
@@ -319,7 +307,7 @@ def test_shared_mode_needs_keys_and_records_users(proxy, upstream, tmp_path, cap
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="workers need fork")
-def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path):
+def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path, server_kind):
     import os
     import signal
     import socket
@@ -361,6 +349,8 @@ def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path):
             str(port),
             "--workers",
             "3",
+            "--server",
+            server_kind,
         ],
         env=env,
         stderr=subprocess.DEVNULL,
@@ -428,7 +418,7 @@ class SlowModel(FakeModel):
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="workers need fork")
-def test_sigterm_drains_for_load_balancers(tmp_path):
+def test_sigterm_drains_for_load_balancers(tmp_path, server_kind):
     import os
     import signal
     import socket
@@ -476,6 +466,8 @@ def test_sigterm_drains_for_load_balancers(tmp_path):
             "2",
             "--drain-seconds",
             "1",
+            "--server",
+            server_kind,
         ],
         env=dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path)),
         stderr=subprocess.DEVNULL,

@@ -6,6 +6,39 @@
   new month's file could give its record the same sequence number as the
   other's (seen once in CI with four processes; `audit_verify()` reported
   it). After rotating, a writer now reads the new file before numbering.
+- Proxy, phase 2:
+  - **Streaming**: answers are passed on as the model writes them, in each
+    API's own format, with tokens put back as they arrive. A piece ending in
+    what could be the start of a token is held back until it is complete, so
+    a token split across pieces is restored like any other. A client that
+    leaves stops the endpoint's stream. An endpoint that fails mid-answer
+    ends the stream with an error event.
+  - **Anthropic API** (`/v1/messages`, `/v1/messages/count_tokens`), for
+    Claude Code and the Anthropic SDKs: system prompts, text, tool inputs and
+    tool results are governed. Thinking signatures pass unchanged. Images,
+    documents and unknown block types are refused. The endpoint's key is sent
+    as `x-api-key`, and errors come back in Anthropic's shape.
+  - **Ollama API** (`/api/chat`, `/api/generate`, `/api/show`, `/api/tags`,
+    `/api/version`), for Ollama clients and VS Code Copilot Chat's Ollama
+    models. Ollama's own settings (`num_ctx`, `context`) pass unchanged, and
+    images are refused.
+  - `--default-endpoint` routes models asked for without an endpoint, as
+    Claude Code does.
+  - In localhost mode, a client's own key goes on to endpoints the proxy
+    holds no key for. Shared mode never passes client keys on.
+  - Clients authenticate with `Authorization: Bearer` or `x-api-key`.
+- The proxy can run on **uvicorn**, a production HTTP server (BSD-3):
+  `credgate proxy serve --server uvicorn`, with `pip install
+  'credgate[server]'` (uvicorn, httptools and uvloop; all BSD-3 or MIT).
+  Policy, audit and streaming are the same code on both servers, and every
+  proxy test runs on both.
+  - `--concurrency` limits requests in progress per worker (default 256).
+    More get `503` with `Retry-After`; health checks are never refused.
+  - A client that leaves is noticed even while the model is still thinking.
+  - Chunked request bodies are read.
+  - Workers and the load-balancer drain work as on the standard server.
+  The standard-library server stays the default, with nothing to install.
+
 - Audit log rotation and retention: with rotation, each month's records go
   to their own file (`<stem>.YYYY-MM.jsonl`) and the hash chain runs on
   across files; `audit_verify()` and `audit_read()` cover all of them, and a

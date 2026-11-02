@@ -259,6 +259,77 @@ detection made one worker slower under load than alone (17 instead of 38
 requests per second at 8 clients), fixed by taking turns; and workers waiting
 on the shared socket could miss a shutdown, fixed with an accept timeout.
 
+### Streamed answers
+
+`proxy_load.py --stream`: the same requests with `"stream": true`. The fake
+endpoint sends its echo in 8-character pieces, one event each, as models
+do, so every token is split across pieces and must be put back together.
+The time to the first piece is measured too. 1 worker, 10 seconds per run
+(4,530 requests, audit chain intact):
+
+| Request | Clients | Requests/s | Pieces/s | p50 ms | p95 ms | First piece p50 ms | Errors | Wrong | Leaks |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 record (0.3 KB) | 1 | 145.6 | 4,827 | 6.0 | 9.5 | 3.8 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 8 | 137.8 | 4,569 | 53.2 | 71.1 | 48.1 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 32 | 114.1 | 3,783 | 226.7 | 422.9 | 221.4 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 1 | 9.9 | 6,463 | 84.6 | 141.8 | 33.2 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 8 | 12.5 | 8,154 | 579.3 | 722.4 | 511.8 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 32 | 12.9 | 8,425 | 2,394.0 | 2,524.7 | 2,321.8 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 1 | 1.4 | 9,457 | 657.6 | 714.2 | 271.9 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 8 | 1.4 | 8,961 | 5,682.9 | 5,724.4 | 4,966.1 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 32 | 1.4 | 9,081 | 16,909.1 | 22,829.1 | 16,199.4 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 1 | 0.3 | 9,209 | 3,446.8 | 3,466.2 | 1,543.2 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 8 | 0.3 | 9,029 | 20,228.2 | 29,951.3 | 16,448.1 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 32 | 0.3 | 8,997 | 61,400.4 | 115,399.0 | 57,741.3 | 0 | 0 | 0 |
+
+**Every streamed answer was correct**: no errors, every answer restored
+exactly despite tokens split across pieces, and no identifier reached the
+endpoint.
+
+**Reading it.** Here the endpoint sends every piece at once, so the proxy's
+own cost per piece is what is measured: one worker passes on about 9,000
+pieces per second. A real model writes about 30-100 pieces per second per
+answer, so one worker keeps up with roughly 100-300 answers streaming at
+the same time, and more with `--workers`. Checking the request comes before
+the first piece, so the first piece arrives a few milliseconds after the
+model sends it for a short message (3.8 ms here). The first-piece times
+under load above are the queue behind other answers, which a real model's
+pace would spread out.
+
+### On uvicorn
+
+`proxy_load.py --server uvicorn`: the same runs on the production server
+(`credgate[server]`), 10 seconds each. Raw results:
+[`proxy_load_uvicorn.json`](results/proxy_load_uvicorn.json),
+[`..._workers4.json`](results/proxy_load_uvicorn_workers4.json),
+[`proxy_load_stream_uvicorn.json`](results/proxy_load_stream_uvicorn.json).
+31,991 requests in all, every answer correct, no leaks, audit chains intact,
+52-57 MB per process. Requests per second, 8 clients:
+
+| Request | Standard, 1 worker | uvicorn, 1 worker | Standard, 4 workers | uvicorn, 4 workers |
+|---|---:|---:|---:|---:|
+| One customer record (0.3 KB) | 316 | 291 | 757 | 526 |
+| 20 records (5.1 KB) | 42.5 | 44.8 | 139 | 110 |
+| 200 records (50.9 KB) | 4.9 | 2.4-4.2 | 15.2 | 11.0 |
+| Streamed, 20 records (pieces/s) | 8,154 | 9,878 | | |
+| Streamed, 1,000 records, 32 clients (pieces/s) | 8,997 | 9,594 | | |
+
+With one worker the two servers are alike: detection is the limit. With four
+workers uvicorn handles 70-80% of the standard server's requests on this
+laptop, as each request passes between uvicorn's event loop and a thread.
+Streamed answers are slightly faster on uvicorn, which sends whatever pieces
+have arrived as one write. With a real model, whose seconds per answer
+dominate, the difference does not show; what uvicorn adds is a production
+HTTP layer, a limit on requests in progress, and noticing at once a client
+that leaves.
+
+Two findings from these runs went into the uvicorn server: handing each
+streamed piece to the event loop separately halved streaming throughput (and
+the heaviest run timed out), fixed by reading the endpoint in one thread and
+sending whatever has queued up together; and reading the request body from
+the request's thread cost a second hand-over, fixed by reading it on the
+event loop once the client's key checks out.
+
 ## BigQuery sampling cost
 
 [`bigquery_tablesample_cost.py`](bigquery_tablesample_cost.py) measures

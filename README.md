@@ -200,9 +200,11 @@ saved it, why and what changed in a hash-chained change log. See
 ## Proxy
 
 The proxy puts the policy between people's tools and the model endpoints:
-tools talk to it as to any OpenAI-compatible server, and every request is
-allowed, redacted, tokenised or blocked by the policy, recorded in the audit
-log, and tokenised values are put back into the answer. It runs on each
+tools talk to it as to an OpenAI-compatible, Anthropic or Ollama server
+(Claude Code, VS Code Copilot Chat with its own models, Open WebUI, the SDKs),
+and every request is allowed, redacted, tokenised or blocked by the policy,
+recorded in the audit log, and tokenised values are put back into the answer
+as it streams. It runs on each
 analyst's machine or, with per-user keys, as a shared server; it needs only
 the Python standard library.
 
@@ -372,6 +374,7 @@ remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
 
 ```sh
 pip install credgate
+pip install 'credgate[server]'   # the proxy on uvicorn, for a shared proxy
 ```
 
 ## Accuracy, and how it compares

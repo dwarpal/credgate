@@ -17,6 +17,12 @@ the original. After each run the audit chain is verified.
     python benchmark/proxy_load.py                      # the full matrix
     python benchmark/proxy_load.py --quick              # a short check
     python benchmark/proxy_load.py --workers 4          # proxy worker processes
+    python benchmark/proxy_load.py --stream             # answers streamed in pieces
+    python benchmark/proxy_load.py --server uvicorn     # the production server
+
+With ``--stream`` the endpoint streams its echo in 8-character pieces (one
+event each, as models do), every token is split across pieces, and the time
+to the first piece is measured as well.
 
 Writes benchmark/results/proxy_load.json and prints a Markdown table.
 """
@@ -82,6 +88,9 @@ class Endpoint(BaseHTTPRequestHandler):
             self.stats["leaks"] += len(leaks)
             if leaks and len(self.stats["examples"]) < 5:
                 self.stats["examples"].append(leaks[0][:4] + "...")
+        if body.get("stream"):
+            self._stream("echo: " + text, body["model"])
+            return
         self._json(
             {
                 "id": "x",
@@ -97,6 +106,21 @@ class Endpoint(BaseHTTPRequestHandler):
                 ],
             }
         )
+
+    def _stream(self, text, model):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        base = {"id": "x", "object": "chat.completion.chunk", "created": 1, "model": model}
+        events = [
+            base | {"choices": [{"index": 0, "delta": {"content": text[i : i + 8]}}]}
+            for i in range(0, len(text), 8)
+        ]
+        events.append(base | {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+        data = "".join(f"data: {json.dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
+        self.wfile.write(data.encode())
 
     def _json(self, payload):
         data = json.dumps(payload).encode()
@@ -131,10 +155,24 @@ def make_notes(n: int, seed: int) -> str:
 # --- load generator ----------------------------------------------------------------
 
 
-def client(args: tuple) -> list[tuple[float, int, bool, int]]:
+def read_stream(response: http.client.HTTPResponse, start: float) -> tuple[str, float]:
+    """The streamed answer's text, and the seconds to its first piece."""
+    parts, first = [], 0.0
+    for line in response:
+        if not line.startswith(b"data: ") or line.startswith(b"data: [DONE]"):
+            continue
+        for choice in json.loads(line[6:])["choices"]:
+            content = choice.get("delta", {}).get("content")
+            if content:
+                first = first or time.perf_counter() - start
+                parts.append(content)
+    return "".join(parts), first
+
+
+def client(args: tuple) -> list[tuple[float, int, bool, int, float]]:
     """One client process: `threads` threads sending requests until `until`."""
-    port, payloads, threads, until = args
-    out: list[tuple[float, int, bool, int]] = []
+    port, payloads, threads, until, stream = args
+    out: list[tuple[float, int, bool, int, float]] = []
     lock = threading.Lock()
 
     def worker(t: int) -> None:
@@ -143,26 +181,27 @@ def client(args: tuple) -> list[tuple[float, int, bool, int]]:
         local = []
         while time.time() < until:
             text = payloads[i % len(payloads)]
-            body = json.dumps(
-                {"model": "frontier/m", "messages": [{"role": "user", "content": text}]}
-            )
+            request = {"model": "frontier/m", "messages": [{"role": "user", "content": text}]}
+            body = json.dumps(request | {"stream": True} if stream else request)
             start = time.perf_counter()
             try:
                 conn.request(
                     "POST", "/v1/chat/completions", body, {"Content-Type": "application/json"}
                 )
                 response = conn.getresponse()
-                data = response.read()
-                ok = (
-                    response.status == 200
-                    and json.loads(data)["choices"][0]["message"]["content"] == "echo: " + text
-                )
+                first = 0.0
+                if stream and response.status == 200:
+                    answer, first = read_stream(response, start)
+                else:
+                    data = response.read()
+                    answer = json.loads(data)["choices"][0]["message"]["content"]
+                ok = response.status == 200 and answer == "echo: " + text
                 status = response.status
             except Exception:
                 conn.close()
                 conn = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
-                ok, status = False, 0
-            local.append((time.perf_counter() - start, status, ok, len(text.encode())))
+                ok, status, first = False, 0, 0.0
+            local.append((time.perf_counter() - start, status, ok, len(text.encode()), first))
             i += threads
         with lock:
             out.extend(local)
@@ -212,8 +251,14 @@ def main() -> None:
     parser.add_argument("--seconds", type=float, default=15, help="duration of each run")
     parser.add_argument("--workers", type=int, default=1, help="proxy worker processes")
     parser.add_argument("--quick", action="store_true", help="a short check")
-    parser.add_argument("--out", default=str(ROOT / "benchmark" / "results" / "proxy_load.json"))
+    parser.add_argument("--stream", action="store_true", help="streamed answers")
+    parser.add_argument("--server", default="standard", choices=["standard", "uvicorn"])
+    parser.add_argument("--out", default=None, help="results file (JSON)")
     args = parser.parse_args()
+    name = "proxy_load" + ("_stream" if args.stream else "")
+    name += "" if args.server == "standard" else f"_{args.server}"
+    name += f"_workers{args.workers}" if args.workers > 1 else ""
+    args.out = args.out or str(ROOT / "benchmark" / "results" / f"{name}.json")
     sizes = {"20 records": 20} if args.quick else SIZES
     concurrency = [1, 8] if args.quick else CONCURRENCY
     seconds = 3 if args.quick else args.seconds
@@ -256,6 +301,7 @@ def main() -> None:
     ]
     if args.workers > 1:
         command += ["--workers", str(args.workers)]
+    command += ["--server", args.server]
     proxy = subprocess.Popen(command, env=env, stderr=subprocess.DEVNULL)
     wait_for(proxy_port)
 
@@ -270,11 +316,14 @@ def main() -> None:
                 until = time.time() + seconds
                 with mp.get_context("spawn").Pool(processes) as pool:
                     started = time.time()
-                    parts = pool.map(client, [(proxy_port, payloads, threads, until)] * processes)
+                    parts = pool.map(
+                        client, [(proxy_port, payloads, threads, until, args.stream)] * processes
+                    )
                     elapsed = time.time() - started
                 rows = [r for part in parts for r in part]
                 after = stats(endpoint_port)
                 latencies = [r[0] for r in rows if r[1] == 200]
+                firsts = [r[4] for r in rows if r[1] == 200 and r[4]]
                 result = {
                     "size": label,
                     "records_per_request": n,
@@ -287,6 +336,15 @@ def main() -> None:
                     "p50_ms": round(1000 * percentile(latencies, 50), 1) if latencies else None,
                     "p95_ms": round(1000 * percentile(latencies, 95), 1) if latencies else None,
                     "p99_ms": round(1000 * percentile(latencies, 99), 1) if latencies else None,
+                    "pieces_per_second": (
+                        round(sum((r[3] + 6) / 8 for r in rows) / elapsed) if args.stream else None
+                    ),
+                    "first_piece_p50_ms": (
+                        round(1000 * percentile(firsts, 50), 1) if firsts else None
+                    ),
+                    "first_piece_p95_ms": (
+                        round(1000 * percentile(firsts, 95), 1) if firsts else None
+                    ),
                     "errors": sum(1 for r in rows if r[1] != 200),
                     "wrong_answers": sum(1 for r in rows if r[1] == 200 and not r[2]),
                     "leaks": after["leaks"] - before["leaks"],
@@ -311,6 +369,8 @@ def main() -> None:
         "python": platform.python_version(),
         "credgate": credgate.__version__,
         "proxy_workers": args.workers,
+        "streaming": args.stream,
+        "server": args.server,
         "seconds_per_run": seconds,
         "audit_records": check.records,
         "audit_chain_intact": check.ok,
@@ -318,17 +378,23 @@ def main() -> None:
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps({"meta": meta, "results": results}, indent=2) + "\n")
     print(f"\n{meta}\n")
+    first = " | Pieces/s | First piece p50 ms" if args.stream else ""
     print(
         "| Request size | Clients | Requests/s | Records/s | MB/s"
-        " | p50 ms | p95 ms | p99 ms | Errors | Wrong | Leaks |"
+        f" | p50 ms | p95 ms | p99 ms{first} | Errors | Wrong | Leaks |"
     )
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    print(
+        "|---|---:|---:|---:|---:|---:|---:|---:|"
+        + ("---:|---:|" if args.stream else "")
+        + "---:|---:|---:|"
+    )
     for r in results:
+        cell = f" | {r['pieces_per_second']} | {r['first_piece_p50_ms']}" if args.stream else ""
         print(
             f"| {r['size']} ({r['kb_per_request']} KB) | {r['clients']} | "
             f"{r['requests_per_second']} | "
             f"{r['records_per_second']} | {r['mb_per_second']} | {r['p50_ms']} | {r['p95_ms']} | "
-            f"{r['p99_ms']} | {r['errors']} | {r['wrong_answers']} | {r['leaks']} |"
+            f"{r['p99_ms']}{cell} | {r['errors']} | {r['wrong_answers']} | {r['leaks']} |"
         )
 
 
