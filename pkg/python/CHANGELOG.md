@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-11-02)
+
+The proxy and whole-database inventories. The proxy puts the policy between
+people's tools and model endpoints, with the audit log and tokens restored
+in answers; whole databases are inventoried table by table. Documentation:
+https://dwarpal.github.io/credgate/
 
 - Proxy (phase 1): `credgate proxy serve` puts the policy between tools and
   OpenAI-compatible model endpoints (`/v1/chat/completions`, `/v1/models`).
