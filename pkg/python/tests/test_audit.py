@@ -224,3 +224,11 @@ def test_audit_files_are_private(tmp_path):
         pytest.skip("POSIX permissions")
     for file in tmp_path.iterdir():
         assert stat.S_IMODE(file.stat().st_mode) == 0o600, file.name
+
+
+def test_the_logs_folder_is_created_if_it_does_not_exist(tmp_path):
+    # As in R: a log in a folder that does not exist yet is not an error.
+    path = tmp_path / "logs" / "2026" / "audit.jsonl"
+    credgate.AuditLog(path, rotate=True).record(DECISION)
+    assert path.exists()
+    assert credgate.audit_verify(path).ok
