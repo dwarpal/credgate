@@ -44,9 +44,30 @@ nav:
       - Large data: large-data.md
       - Threat model: threat-model.md
   - Specification: spec.md
+  - Blog:
+      - blog/index.md
 
 plugins:
   - search
+  # Posts are Markdown files in docs/blog/posts/, reviewed in pull requests
+  # like everything else. A post with `draft: true` is shown by `mkdocs serve`
+  # but not published.
+  - blog:
+      blog_toc: true
+      post_url_format: "{slug}"
+      post_date_format: long
+      archive: false
+  # RSS feeds (blog/feed_rss_created.xml) for R-bloggers, R Weekly and
+  # readers. Dates come from each post's front matter: the build has no git
+  # history.
+  - rss:
+      match_path: "blog/posts/.*"
+      date_from_meta:
+        as_creation: date.created
+      use_git: false
+      categories:
+        - categories
+      abstract_chars_count: 400
   - mkdocstrings:
       handlers:
         python:
