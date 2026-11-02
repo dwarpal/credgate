@@ -200,7 +200,12 @@ credgate proxy serve --policy bank-default.yaml --audit audit.jsonl
 # model "vllm-gpu/llama-3.1-70b" (endpoint/model)
 ```
 
-See the [proxy guide](docs/proxy.md).
+One worker process checks about 40 requests of 5 KB (or 300 short messages)
+per second on a 2019 laptop core, adding a few milliseconds per request;
+`--workers N` uses more cores, and instances can run behind a load balancer
+(`/healthz`, graceful drain). Latency and throughput under load:
+[benchmark/README.md](benchmark/README.md#proxy-throughput). See the
+[proxy guide](docs/proxy.md).
 
 ## Audit log
 
