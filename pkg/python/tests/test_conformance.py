@@ -343,6 +343,8 @@ def _rotated_copy(tmp_path):
 
     folder = tmp_path / "rotated"
     shutil.copytree(credgate.spec_path() / "conformance" / Path(ROTATED["path"]).parent, folder)
+    for file in folder.iterdir():
+        file.chmod(0o644)  # installed files can be read-only
     return folder / Path(ROTATED["path"]).name
 
 

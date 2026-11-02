@@ -363,6 +363,7 @@ rotated_copy <- function() {
   dir <- withr::local_tempdir(.local_envir = parent.frame())
   src <- file.path(cg_spec_path(), "conformance", dirname(rotated$path))
   file.copy(list.files(src, full.names = TRUE), dir)
+  Sys.chmod(list.files(dir, full.names = TRUE), "644") # installed files can be read-only
   file.path(dir, basename(rotated$path))
 }
 
