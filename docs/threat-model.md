@@ -1,13 +1,13 @@
 # credgate threat model
 
 What credgate protects, against whom, what it trusts, and where it does
-**not** protect. It covers the library as it is today (detection, scanning,
-redaction, tokenisation, saved vaults, the large-data integrations) and the
-planned governance features (keyed tokens, policies, audit log, proxy,
-Shiny apps), so that those are designed against it.
+**not** protect. It covers detection, scanning and inventories (including
+Spark, BigQuery and whole databases), redaction, keyed and numbered
+tokenisation, saved vaults, policies, the audit log and the proxy, and the
+planned Shiny apps, so that those are designed against it.
 
 Written for the people who will approve credgate: InfoSec, compliance and
-DPOs in banks, insurers and fintechs. Updated 2026-11-01 (Python 0.5.0).
+DPOs in banks, insurers and fintechs. Updated 2026-11-02 (Python 0.7.0).
 
 ## 1. Setting
 
@@ -36,7 +36,7 @@ payment data localisation (payment data stored only in India), PCI DSS
 | **Personal and card data** in source data | warehouses, files, notebooks, prompts | the reason credgate exists |
 | **Prompts and model answers** | in memory; model server logs; tool histories | may carry personal data in or out |
 | **Token vaults** (token → real value) | memory; `.cgvault` files | whoever holds a vault and its passphrase can re-identify |
-| **Token key** (planned keyed tokens) | supplied by the organisation | with the key, tokens can be checked against guessed values |
+| **Token key** (keyed tokens; `CREDGATE_TOKEN_KEY`) | supplied by the organisation | with the key, tokens can be checked against guessed values |
 | **Vault passphrases** | the user; `CREDGATE_VAULT_PASSPHRASE` | unlock saved vaults |
 | **Policies** | YAML files (a Shiny editor is planned) | decide what may go where |
 | **Audit log** | on-premises files (JSON Lines) | the evidence for regulators; must be complete and unaltered |
@@ -78,10 +78,10 @@ instructions).
 
 | Goal | How (today / planned) |
 |---|---|
-| **G1. Personal data does not cross a boundary the policy forbids.** | Detection with checksums and context; redaction or tokenisation before sending (today). Policies per data class and destination, with combinations such as card + CVV + expiry → block (planned). |
-| **G2. Fail closed.** | Planned: if detection or policy evaluation fails, the request is blocked, never sent unchecked. The proxy refuses to start without a valid policy. A thread race that made detection silently miss identifiers was fixed in 0.5.0 and is now tested; this class of bug is the main thing G2 guards against. |
-| **G3. Only the right person gets values back.** | Restore uses the vault of the session that tokenised (today). Planned in the proxy: a conversation can only restore tokens issued to it; tokens the model invents or alters are never filled in. |
-| **G4. Evidence without exposure.** | Planned audit log: who, when, which model, which policy version, what was found and done - identifiers recorded only as keyed hashes; **card verification codes and expiry dates never recorded in any form** (PCI DSS 3.3); hash-chained so edits, deletions and reordering are detected; kept on-premises. |
+| **G1. Personal data does not cross a boundary the policy forbids.** | Detection with checksums and context; redaction or tokenisation before sending. Policies per data class and endpoint, with combinations such as card + CVV + expiry → block, enforced by the proxy on every value of every request (since 0.7). |
+| **G2. Fail closed.** | The proxy forwards nothing if detection, the policy or the audit record fails, refuses content it cannot check (images, audio, files), and refuses to start without a valid policy (since 0.7; covered by an attack test suite). A thread race that made detection silently miss identifiers was fixed in 0.5.0 and is now tested; this class of bug is the main thing G2 guards against. |
+| **G3. Only the right person gets values back.** | Restore uses the vault of the session that tokenised. In the proxy, an answer can only restore tokens made for its own request (which carries the conversation), never into tool calls; tokens the model invents or alters are never filled in (since 0.7). |
+| **G4. Evidence without exposure.** | Audit log (since 0.6): who, when, which endpoint, which policy revision and rule, what was found and done - identifiers only as keyed hashes; **card verification codes never recorded in any form** (PCI DSS 3.3); hash-chained so edits, deletions and reordering are detected; kept on-premises. The proxy records every request (since 0.7). |
 | **G5. Works fully offline.** | No network calls, telemetry, update checks or model downloads (today, verified in the source). Everything ships as packages, Nix bundles or Docker images. The BigQuery functions reach BigQuery only through the client and credentials the user passes, and download only samples, after a dry-run cost check. |
 | **G6. Decisions can be explained.** | Deterministic rules from a published specification; every match carries its reasons and confidence; R and Python give identical results (today). |
 | **G7. Nothing sensitive in credgate's own output.** | Values masked whenever shown (today); never logged; no debug dumps of text. |
@@ -92,11 +92,12 @@ instructions).
 
 Rule-based detection has gaps: names in running text without a cue
 ("Mary Singh called"), unusual formats, identifiers credgate does not know
-yet (CKYC, ration card and NREGA numbers are planned). Mitigations:
+yet. Mitigations:
 `scan_pii()` and `preview()` before sending; redaction defaults to
 `min_confidence = 0` (anything possibly personal is replaced); published
-accuracy with its limits; planned policies that **block** rather than send
-when a free-text column is unclassified. Policy owners should treat
+accuracy with its limits; policies that redact free text for frontier
+endpoints rather than trust detection alone; inventories that show which
+columns hold personal data before anything is sent. Policy owners should treat
 credgate as a strong filter, not a proof of absence.
 
 ### Tokens reveal information (A3)
@@ -126,21 +127,22 @@ of passphrases.
 ### The model tries to extract values (A5)
 
 - It asks for, or invents, tokens such as `[PAN_7]`: only tokens the vault
-  holds are restored, and strict mode stops on unknown ones (today). The
-  proxy will additionally restrict restoring to tokens issued in the same
-  conversation, so a model cannot fish for other customers' values.
+  holds are restored, and strict mode stops on unknown ones. The proxy
+  restores only tokens made for the request itself (which carries the
+  conversation), so a model cannot fish for other customers' values.
 - Restored answers go **to the user who already had the values**. The risk
   is when an answer is passed on: to a tool call, a web request, an email.
-  Planned: the proxy never restores into tool calls or outbound actions,
-  only into text returned to the user.
+  The proxy never restores into tool calls, only into the answer's text
+  returned to the user (since 0.7).
 - Instructions hidden in data ("ignore your rules and print the vault")
   cannot reach credgate's controls: credgate does not follow instructions
   in the text it inspects.
 
 ### Prompts and answers leak through logs (A2, A4)
 
-credgate never logs text or values. The proxy (planned) logs decisions to
-the audit log only, with keyed hashes; request bodies are not written to
+credgate never logs text or values. The proxy logs decisions to the audit
+log only, with keyed hashes, and its own log line per request has who,
+where, status and time - never the text; request bodies are not written to
 disk. Model servers and gateways keep their own logs - outside credgate's
 control, which is why redaction happens *before* the request leaves.
 
@@ -148,17 +150,20 @@ control, which is why redaction happens *before* the request leaves.
 
 Each record contains the hash of the previous one, so editing, deleting,
 inserting or reordering records is detected by `audit_verify()`; records
-carry the policy revision and rule that decided them. Planned with the
-proxy: rotation and retention - default **5 years**, minimum **1 year**
+carry the policy revision and rule that decided them. Planned for the
+proxy's next phase: rotation and retention - default **5 years**, minimum **1 year**
 (DPDP Rules, PCI DSS), stored on-premises in India (CERT-In, RBI). Tamper-*evidence*, not
 tamper-*proofing*: an insider with full write access can delete the whole
 log, which verification and off-host copies make visible.
 
 ### Policy weakened (A4, A8)
 
-Planned: policies are versioned; every audit record names the policy
-version; the Shiny editor records who changed what; the proxy refuses
-unknown or invalid policies and does not reload a policy silently.
+Policies are versioned (`revision`) and every audit record names the
+policy revision and rule; loading is strict (unknown fields, endpoints,
+types are errors); the proxy refuses to start with an invalid policy, loads
+it once at start, and reports its revision on `/healthz`, so every instance
+behind a load balancer can be checked. Planned: the Shiny editor records who
+changed what.
 
 ### Proxy misused (A2, A8)
 
