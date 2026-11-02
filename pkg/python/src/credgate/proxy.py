@@ -343,9 +343,10 @@ def _stderr(message: str) -> None:
 
 
 class _ProxyError(Exception):
-    def __init__(self, status: int, code: str, message: str) -> None:
+    def __init__(self, status: int, code: str, message: str, detail: str = "") -> None:
         super().__init__(message)
         self.status, self.code, self.message = status, code, message
+        self.detail = detail  # for the proxy's log: a name, never request text
 
 
 class _ClientGone(Exception):
@@ -424,7 +425,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(status, payload)
             note = self._note or note
         except _ProxyError as e:
-            status, note = e.status, e.code
+            status, note = e.status, e.code + (f"({e.detail})" if e.detail else "")
             self._send(e.status, _error(self._api, e.code, e.message))
         except Exception as e:  # fail closed: never forward after an error
             status, note = 500, "credgate_error"
@@ -848,10 +849,12 @@ _Slots = list[tuple[Callable[[], str], Callable[[str], None]]]
 
 
 def _refuse(kind: Any) -> _ProxyError:
+    name = re.sub(r"[^A-Za-z0-9_.-]", "?", str(kind))[:40]
     return _ProxyError(
         400,
         "unsupported_content",
         f"Content of type {kind!r} cannot be checked for personal data; not sent.",
+        name,
     )
 
 

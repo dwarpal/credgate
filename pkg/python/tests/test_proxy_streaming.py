@@ -584,13 +584,16 @@ def test_anthropic_tools_thinking_and_results_are_handled_exactly(proxy):
     ],
 )
 def test_anthropic_content_that_cannot_be_checked_is_refused(proxy, block):
-    base, _ = proxy()
+    base, server = proxy()
     status, _, body = _post(base, "/v1/messages", _anthropic("frontier/claude-x", [block]))
     assert status == 400
     error = json.loads(body)
     assert error["type"] == "error"  # Anthropic's error shape, which its SDKs read
     assert error["error"]["type"] == "unsupported_content"
     assert FakeEverything.received == []
+    # the proxy's log names the type refused (a name, never the content)
+    kind = block["content"][0]["type"] if block["type"] == "tool_result" else block["type"]
+    assert _logged(server, f"unsupported_content({kind})")
 
 
 def test_anthropic_token_counting_is_governed_too(proxy):
