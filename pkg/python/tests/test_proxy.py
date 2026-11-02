@@ -266,19 +266,6 @@ def test_bad_requests_and_errors_fail_closed(proxy):
     assert FakeModel.received == []
 
 
-def test_streaming_clients_get_the_answer_as_events(proxy):
-    base, _ = proxy()
-    status, content_type, body = _call(base, _chat("frontier/gpt", f"PAN {PAN}", stream=True))
-    assert status == 200
-    assert content_type == "text/event-stream"
-    assert "stream" not in FakeModel.received[-1]["body"]
-    events = [line[6:] for line in body.decode().splitlines() if line.startswith("data: ")]
-    assert events[-1] == "[DONE]"
-    first = json.loads(events[0])
-    assert first["object"] == "chat.completion.chunk"
-    assert first["choices"][0]["delta"]["content"] == f"Noted: PAN {PAN}"
-
-
 def test_models_are_listed_per_endpoint(proxy):
     base, _ = proxy()
     status, _, body = _call(base, path="/models")

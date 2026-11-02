@@ -23,9 +23,20 @@ Two modes:
   users with :func:`add_user` (``credgate proxy add-user``). Use TLS
   (``certfile``/``keyfile``) or a TLS-terminating reverse proxy.
 
-Phase 1: ``POST /v1/chat/completions`` and ``GET /v1/models``. Streaming
-requests (``"stream": true``) get the complete answer as a single streamed
-message; token-by-token streaming comes later.
+Three APIs, each forwarded to an endpoint that speaks the same API:
+
+- **OpenAI** chat completions: ``POST /v1/chat/completions``,
+  ``GET /v1/models``. Forwarded to ``<url>/chat/completions``.
+- **Anthropic** messages: ``POST /v1/messages`` and
+  ``/v1/messages/count_tokens`` (Claude Code, the Anthropic SDKs).
+  Forwarded to ``<url>/messages``, with the endpoint's key as ``x-api-key``.
+- **Ollama**: ``POST /api/chat``, ``/api/generate``, ``/api/show`` and
+  ``GET /api/tags``, ``/api/version`` (Ollama clients, VS Code Copilot Chat
+  with Ollama models). Forwarded to the endpoint's URL without its ``/v1``.
+
+Answers stream as the model writes them (``"stream": true``; Ollama streams
+unless told not to). Tokens are put back as they arrive: a piece of text that
+could still be the start of a token is held back until it is complete.
 
 Only the Python standard library is used.
 """
@@ -49,7 +60,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -93,6 +104,9 @@ class ProxyConfig:
             :class:`~credgate.AuditLog`).
         audit_retention_years: Remove monthly audit files older than this
             (at least 1; 0 keeps them all), at start and once a day.
+        default_endpoint: The endpoint for models asked for without one (no
+            ``<endpoint>/``), e.g. ``claude`` so that Claude Code works with
+            its own model names.
         drain_seconds: On SIGTERM, how long to keep serving while reporting
             "draining" on ``/healthz``, so a load balancer stops routing here;
             then requests in progress are finished and the proxy exits.
@@ -112,6 +126,7 @@ class ProxyConfig:
     drain_seconds: float = 5
     audit_rotate: bool = True
     audit_retention_years: int = 5
+    default_endpoint: str | None = None
     _users: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -142,6 +157,8 @@ class ProxyConfig:
         if self.token_key is None:
             self.token_key = os.environ.get("CREDGATE_TOKEN_KEY") or secrets.token_bytes(32)
         Vault(self.token_key)  # validates the key now, not on the first request
+        if self.default_endpoint and self.default_endpoint not in self.policy.destinations:
+            raise ValueError(f"Default endpoint {self.default_endpoint!r} is not in the policy.")
         for name, dest in self.policy.destinations.items():
             if dest.url and urllib.parse.urlsplit(dest.url).scheme not in ("http", "https"):
                 raise ValueError(f"Endpoint {name!r}: the URL must be http:// or https://.")
@@ -261,7 +278,7 @@ def make_server(
     """The proxy's HTTP server, not yet serving (port 0 picks a free port)."""
     attrs = {"config": config, "log": staticmethod(log or _stderr)}
     handler = type("CredgateProxyHandler", (_Handler,), attrs)
-    server = ThreadingHTTPServer((config.host, config.port), handler)
+    server = _Server((config.host, config.port), handler)
     if config.certfile:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -273,6 +290,13 @@ def make_server(
     # Accepted connections are blocking again (Python resets them).
     server.socket.settimeout(0.5)
     return server
+
+
+class _Server(ThreadingHTTPServer):
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return  # a client that went away is not an error worth a traceback
+        super().handle_error(request, client_address)
 
 
 def add_user(keys: str | os.PathLike[str], name: str) -> str:
@@ -324,6 +348,10 @@ class _ProxyError(Exception):
         self.status, self.code, self.message = status, code, message
 
 
+class _ClientGone(Exception):
+    """The client closed the connection while the answer was streaming."""
+
+
 class _Handler(BaseHTTPRequestHandler):
     config: ProxyConfig
     log: Callable[[str], Any]
@@ -332,16 +360,24 @@ class _Handler(BaseHTTPRequestHandler):
     timeout = 120  # seconds a client may take to send its request
 
     def do_GET(self) -> None:
-        if self.path.rstrip("/") in ("/healthz", "/v1/healthz"):
+        path = self.path.split("?", 1)[0].rstrip("/")
+        if path in ("/healthz", "/v1/healthz"):
             self._health()
             return
-        self._handle(self._models if self.path.rstrip("/") == "/v1/models" else None)
+        self._api = "ollama" if path.startswith("/api/") else "openai"
+        routes = {
+            "/v1/models": self._models,
+            "/api/tags": self._ollama_tags,
+            "/api/version": self._ollama_version,
+        }
+        self._handle(routes.get(path))
 
     def _health(self) -> None:
         """For load balancers: no key needed, nothing sensitive."""
         policy: Policy = self.config.policy  # type: ignore[assignment]
         draining = _DRAINING.is_set()
         self._body_read = True
+        self._api = "openai"
         self._send(
             503 if draining else 200,
             {
@@ -351,13 +387,31 @@ class _Handler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:
-        handler = self._chat if self.path.rstrip("/") == "/v1/chat/completions" else None
-        self._handle(handler)
+        path = self.path.split("?", 1)[0].rstrip("/")
+        self._api = (
+            "anthropic"
+            if path.startswith("/v1/messages")
+            else "ollama"
+            if path.startswith("/api/")
+            else "openai"
+        )
+        routes = {
+            "/v1/chat/completions": self._chat,
+            "/v1/messages": lambda user: self._messages(user, "/messages"),
+            "/v1/messages/count_tokens": lambda user: self._messages(
+                user, "/messages/count_tokens"
+            ),
+            "/api/chat": lambda user: self._ollama(user, "chat"),
+            "/api/generate": lambda user: self._ollama(user, "generate"),
+            "/api/show": self._ollama_show,
+        }
+        self._handle(routes.get(path))
 
     def _handle(self, handler: Callable[[str], tuple[int, Any, str]] | None) -> None:
         started = time.monotonic()
         user, status, note = "-", 500, ""
         self._body_read = self.command == "GET"  # per request: connections are reused
+        self._note = ""
         request_id = self.headers.get("X-Request-ID", "")
         self._request_id = request_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", request_id) else ""
         with _IN_FLIGHT_LOCK:
@@ -368,13 +422,15 @@ class _Handler(BaseHTTPRequestHandler):
                 raise _ProxyError(404, "not_found", f"Unknown path {self.path}.")
             status, payload, note = handler(user)
             self._send(status, payload)
+            note = self._note or note
         except _ProxyError as e:
             status, note = e.status, e.code
-            self._send(e.status, _error(e.code, e.message))
+            self._send(e.status, _error(self._api, e.code, e.message))
         except Exception as e:  # fail closed: never forward after an error
             status, note = 500, "credgate_error"
             self._send(
-                500, _error("credgate_error", f"credgate could not process the request: {e}")
+                500,
+                _error(self._api, "credgate_error", f"credgate could not process the request: {e}"),
             )
         finally:
             ms = round(1000 * (time.monotonic() - started))
@@ -389,8 +445,10 @@ class _Handler(BaseHTTPRequestHandler):
         users = self.config._users
         if not users:
             return _os_user()
+        # Bearer (OpenAI, Ollama clients) or x-api-key (Anthropic clients).
         header = self.headers.get("Authorization", "")
         key = header[7:].strip() if header.lower().startswith("bearer ") else ""
+        key = key or self.headers.get("x-api-key", "").strip()
         digest = "sha256:" + hashlib.sha256(key.encode()).hexdigest()
         for name, stored in users.items():
             if hmac.compare_digest(digest, stored):
@@ -411,9 +469,13 @@ class _Handler(BaseHTTPRequestHandler):
             data += [{"id": f"{name}/{i}", "object": "model", "owned_by": name} for i in ids]
         return 200, {"object": "list", "data": data}, ""
 
-    def _chat(self, user: str) -> tuple[int, Any, str]:
-        body = self._read_json()
-        model = body.get("model")
+    # --- requests: route, govern, forward --------------------------------------
+
+    def _route(self, model: Any) -> tuple[str, Any, str]:
+        """The policy endpoint and the endpoint's own model name."""
+        default = self.config.default_endpoint
+        if default and isinstance(model, str) and model and "/" not in model:
+            model = f"{default}/{model}"
         if not isinstance(model, str) or "/" not in model:
             raise _ProxyError(
                 400,
@@ -433,8 +495,20 @@ class _Handler(BaseHTTPRequestHandler):
             raise _ProxyError(
                 502, "no_endpoint_url", f"Endpoint {destination!r} has no `url` in the policy."
             )
+        return destination, dest, upstream_model
 
-        slots = _text_slots(body)
+    def _credentials(self, destination: str) -> dict[str, str]:
+        """In localhost mode, when the proxy holds no key for the endpoint, the
+        client's own key goes on: it is the user's (e.g. Claude Code signed in
+        to their account). Never in shared mode, where the client's key is
+        its credgate key."""
+        if self.config._users or os.environ.get(_key_env(destination)):
+            return {}
+        return {h: self.headers[h] for h in ("Authorization", "x-api-key") if self.headers.get(h)}
+
+    def _govern(self, user: str, slots: list[Any], destination: str) -> Vault:
+        """Apply the policy to every slot, in place; raises if blocked."""
+        policy: Policy = self.config.policy  # type: ignore[assignment]
         vault = Vault(self.config.token_key)
         audit = AuditLog(
             self.config.audit,
@@ -455,16 +529,28 @@ class _Handler(BaseHTTPRequestHandler):
             )
         for (_, set_), text in zip(slots, decision.texts or [], strict=True):
             set_(text)
+        return vault
 
-        stream = bool(body.pop("stream", False))
-        body.pop("stream_options", None)
+    def _chat(self, user: str) -> tuple[int, Any, str]:
+        body = self._read_json()
+        model = body.get("model")
+        destination, dest, upstream_model = self._route(model)
+        vault = self._govern(user, _openai_slots(body), destination)
+
         body["model"] = upstream_model
+        creds = self._credentials(destination)
+        url = dest.url.rstrip("/") + "/chat/completions"
+        if body.get("stream"):
+            response = _upstream_open(
+                "POST", url, body, destination, self.config.timeout, "openai", creds
+            )
+            return (
+                200,
+                _Live("text/event-stream", _openai_stream(response, vault, model), response),
+                "stream",
+            )
         answer = _upstream_json(
-            "POST",
-            dest.url.rstrip("/") + "/chat/completions",
-            body,
-            destination,
-            self.config.timeout,
+            "POST", url, body, destination, self.config.timeout, "openai", creds
         )
         for choice in answer.get("choices", []):
             message = choice.get("message") or {}
@@ -472,9 +558,128 @@ class _Handler(BaseHTTPRequestHandler):
             if isinstance(message.get("content"), str):
                 message["content"] = restore(message["content"], vault)
         answer["model"] = model
-        if stream:
-            return 200, _as_stream(answer), "stream"
         return 200, answer, ""
+
+    def _messages(self, user: str, path: str) -> tuple[int, Any, str]:
+        body = self._read_json()
+        model = body.get("model")
+        destination, dest, upstream_model = self._route(model)
+        vault = self._govern(user, _anthropic_slots(body), destination)
+
+        body["model"] = upstream_model
+        url = dest.url.rstrip("/") + path
+        headers = {
+            "anthropic-version": self.headers.get("anthropic-version") or "2023-06-01",
+        } | self._credentials(destination)
+        if self.headers.get("anthropic-beta"):
+            headers["anthropic-beta"] = self.headers["anthropic-beta"]
+        if body.get("stream"):
+            response = _upstream_open(
+                "POST", url, body, destination, self.config.timeout, "anthropic", headers
+            )
+            return (
+                200,
+                _Live("text/event-stream", _anthropic_stream(response, vault, model), response),
+                "stream",
+            )
+        answer = _upstream_json(
+            "POST", url, body, destination, self.config.timeout, "anthropic", headers
+        )
+        for block in answer.get("content", []) if isinstance(answer, dict) else []:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            ):
+                block["text"] = restore(block["text"], vault)
+        if isinstance(answer, dict) and "model" in answer:
+            answer["model"] = model
+        return 200, answer, ""
+
+    def _ollama(self, user: str, kind: str) -> tuple[int, Any, str]:
+        body = self._read_json()
+        model = body.get("model")
+        destination, dest, upstream_model = self._route(model)
+        vault = self._govern(user, _ollama_slots(body, kind), destination)
+
+        body["model"] = upstream_model
+        creds = self._credentials(destination)
+        url = _ollama_base(dest.url) + "/api/" + kind
+        field = "response" if kind == "generate" else None
+        if body.get("stream", True):  # Ollama streams unless told not to
+            body["stream"] = True
+            response = _upstream_open(
+                "POST", url, body, destination, self.config.timeout, "openai", creds
+            )
+            return (
+                200,
+                _Live(
+                    "application/x-ndjson", _ollama_stream(response, vault, model, field), response
+                ),
+                "stream",
+            )
+        answer = _upstream_json(
+            "POST", url, body, destination, self.config.timeout, "openai", creds
+        )
+        if isinstance(answer, dict):
+            text = _ollama_text(answer, field)
+            if text is not None:
+                _ollama_set(answer, field, restore(text, vault))
+            answer["model"] = model
+        return 200, answer, ""
+
+    def _ollama_show(self, user: str) -> tuple[int, Any, str]:
+        """Model details (context length, capabilities): no request text."""
+        body = self._read_json()
+        destination, dest, upstream_model = self._route(body.get("model") or body.get("name"))
+        if dest.blocked:
+            raise _ProxyError(403, "policy_blocked", f"Endpoint {destination!r} is blocked.")
+        answer = _upstream_json(
+            "POST",
+            _ollama_base(dest.url) + "/api/show",
+            {"model": upstream_model},
+            destination,
+            30,
+            "openai",
+            self._credentials(destination),
+        )
+        return 200, answer, ""
+
+    def _ollama_tags(self, user: str) -> tuple[int, Any, str]:
+        policy: Policy = self.config.policy  # type: ignore[assignment]
+        models = []
+        for name, dest in policy.destinations.items():
+            if dest.blocked or not dest.url:
+                continue
+            try:
+                upstream = _upstream_json(
+                    "GET", _ollama_base(dest.url) + "/api/tags", None, name, 10
+                )
+                found = [m for m in upstream.get("models", []) if isinstance(m, dict)]
+            except Exception:  # not an Ollama server, or down: not listed
+                found = []
+            for m in found:
+                m = dict(m)
+                for k in ("name", "model"):
+                    if isinstance(m.get(k), str):
+                        m[k] = f"{name}/{m[k]}"
+                models.append(m)
+        return 200, {"models": models}, ""
+
+    def _ollama_version(self, user: str) -> tuple[int, Any, str]:
+        policy: Policy = self.config.policy  # type: ignore[assignment]
+        for name, dest in policy.destinations.items():
+            if dest.blocked or not dest.url:
+                continue
+            try:
+                return (
+                    200,
+                    _upstream_json("GET", _ollama_base(dest.url) + "/api/version", None, name, 5),
+                    "",
+                )
+            except Exception:
+                continue
+        raise _ProxyError(502, "endpoint_unreachable", "No Ollama endpoint answered.")
 
     def _read_json(self) -> dict[str, Any]:
         if self.headers.get("Transfer-Encoding"):
@@ -502,15 +707,18 @@ class _Handler(BaseHTTPRequestHandler):
         return body
 
     def _send(self, status: int, payload: Any) -> None:
-        if isinstance(payload, _Stream):
-            data = payload.data
-            content_type = "text/event-stream"
-        else:
-            data = json.dumps(payload).encode()
-            content_type = "application/json"
+        if isinstance(payload, _Live):
+            self._send_live(payload)
+            return
+        data = json.dumps(payload).encode()
         self.send_response(status)
-        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
+        self._common_headers(status)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _common_headers(self, status: int) -> None:
         self.send_header("Cache-Control", "no-store")
         if getattr(self, "_request_id", ""):
             self.send_header("X-Request-ID", self._request_id)
@@ -518,8 +726,60 @@ class _Handler(BaseHTTPRequestHandler):
             # Never read leftover bytes of a rejected request as a new one.
             self.send_header("Connection", "close")
             self.close_connection = True
+
+    def _send_live(self, live: _Live) -> None:
+        """Pieces of the answer as they arrive, in chunked encoding. Once the
+        first byte is sent the status cannot change: an error that comes later
+        ends the stream with an error event in the API's own format."""
+        self.send_response(200)
+        self.send_header("Content-Type", live.content_type)
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("X-Accel-Buffering", "no")  # nginx: pass pieces on at once
+        self._common_headers(200)
         self.end_headers()
-        self.wfile.write(data)
+        sent = 0
+        try:
+            try:
+                for piece in live.pieces:
+                    sent += len(piece)
+                    if sent > MAX_ANSWER:
+                        raise _ProxyError(502, "endpoint_error", "The endpoint answered too much.")
+                    self._chunk(piece)
+            except _ClientGone:
+                raise
+            except _ProxyError as e:
+                self._note = e.code
+                self._chunk(_stream_error(self._api, e.code, e.message))
+            except (TimeoutError, OSError) as e:  # reading from the endpoint
+                self._note = "endpoint_unreachable"
+                self._chunk(
+                    _stream_error(
+                        self._api, "endpoint_unreachable", f"The endpoint stopped answering: {e}"
+                    )
+                )
+            except Exception as e:  # an answer credgate cannot read: end it, never pass it on
+                self._note = "endpoint_error"
+                self._chunk(
+                    _stream_error(
+                        self._api, "endpoint_error", f"The endpoint's answer could not be read: {e}"
+                    )
+                )
+            self._chunk(b"", last=True)
+        except _ClientGone:
+            self._note = "client_closed"  # the client went away: stop reading the endpoint
+            self.close_connection = True
+        finally:
+            live.close()
+
+    def _chunk(self, data: bytes, last: bool = False) -> None:
+        try:
+            if data:
+                self.wfile.write(f"{len(data):X}\r\n".encode() + data + b"\r\n")
+            if last:
+                self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+        except OSError as e:
+            raise _ClientGone from e
 
     def log_message(self, format: str, *args: Any) -> None:
         pass  # our own log line instead, without the request text
@@ -540,6 +800,7 @@ _STRUCTURAL = {
     "type",
     "id",
     "tool_call_id",
+    "tool_use_id",
     "object",
     "finish_reason",
     "format",
@@ -550,6 +811,8 @@ _STRUCTURAL = {
     "modalities",
     "parallel_tool_calls",
     "strict",
+    "signature",  # Anthropic thinking blocks: checked by the provider, opaque
+    "keep_alive",
 }
 # Numeric settings, which are never personal data.
 _NUMERIC = {
@@ -566,19 +829,34 @@ _NUMERIC = {
     "top_k",
     "min_p",
     "repetition_penalty",
+    "budget_tokens",
+    "num_ctx",
+    "num_predict",
+    "num_batch",
+    "num_keep",
+    "num_gpu",
+    "num_thread",
 }
 # Content parts credgate cannot check are refused, not forwarded.
 _TEXT_PARTS = {"text"}
+# Anthropic content blocks that carry only text (or values walked below);
+# images, documents and anything new are refused.
+_ANTHROPIC_BLOCKS = {"text", "tool_use", "tool_result", "thinking", "redacted_thinking"}
 _MAX_DEPTH = 64
 
+_Slots = list[tuple[Callable[[], str], Callable[[str], None]]]
 
-def _text_slots(body: dict[str, Any]) -> list[tuple[Callable[[], str], Callable[[str], None]]]:
-    """Every value in the request that could carry personal data, as (get, set)
-    pairs: all strings - message contents, tool results and arguments, names,
-    metadata, stop sequences, any field the proxy does not know - except
-    structural ones, and whole numbers of 6 digits or more (an Aadhaar number
-    can be sent as a number). Field names with personal data, and content
-    credgate cannot check (images, audio, files), are refused."""
+
+def _refuse(kind: Any) -> _ProxyError:
+    return _ProxyError(
+        400,
+        "unsupported_content",
+        f"Content of type {kind!r} cannot be checked for personal data; not sent.",
+    )
+
+
+def _openai_slots(body: dict[str, Any]) -> _Slots:
+    """The values of an OpenAI chat request that could carry personal data."""
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         raise _ProxyError(400, "invalid_request", "`messages` must be a non-empty list.")
@@ -596,27 +874,90 @@ def _text_slots(body: dict[str, Any]) -> list[tuple[Callable[[], str], Callable[
                 and part.get("type") in _TEXT_PARTS
                 and isinstance(part.get("text"), str)
             ):
-                kind = part.get("type") if isinstance(part, dict) else type(part).__name__
-                raise _ProxyError(
-                    400,
-                    "unsupported_content",
-                    f"Content of type {kind!r} cannot be checked for personal data; not sent.",
-                )
+                raise _refuse(part.get("type") if isinstance(part, dict) else type(part).__name__)
     modalities = body.get("modalities")
     if isinstance(modalities, list) and "audio" in modalities:
         raise _ProxyError(400, "unsupported_content", "Audio cannot be checked, so it is not sent.")
+    return _slots(body)
 
-    slots: list[tuple[Callable[[], str], Callable[[str], None]]] = []
+
+def _anthropic_slots(body: dict[str, Any]) -> _Slots:
+    """The values of an Anthropic messages request that could carry personal
+    data: the system prompt, every text, tool input and tool result."""
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise _ProxyError(400, "invalid_request", "`messages` must be a non-empty list.")
+
+    def check(blocks: Any) -> None:
+        if blocks is None or isinstance(blocks, str):
+            return
+        if not isinstance(blocks, list):
+            raise _ProxyError(
+                400, "unsupported_content", "Content must be text or a list of blocks."
+            )
+        for block in blocks:
+            if not isinstance(block, dict) or block.get("type") not in _ANTHROPIC_BLOCKS:
+                raise _refuse(
+                    block.get("type") if isinstance(block, dict) else type(block).__name__
+                )
+            if block["type"] == "tool_result":
+                check(block.get("content"))
+
+    for message in messages:
+        if not isinstance(message, dict):
+            raise _ProxyError(400, "invalid_request", "Each message must be an object.")
+        check(message.get("content"))
+    check(body.get("system"))
+    return _slots(body)
+
+
+def _ollama_slots(body: dict[str, Any], kind: str) -> _Slots:
+    """The values of an Ollama chat or generate request that could carry
+    personal data. Images cannot be checked and are refused."""
+    if kind == "chat":
+        messages = body.get("messages")
+        if not isinstance(messages, list) or not messages:
+            raise _ProxyError(400, "invalid_request", "`messages` must be a non-empty list.")
+        for message in messages:
+            if not isinstance(message, dict):
+                raise _ProxyError(400, "invalid_request", "Each message must be an object.")
+            if message.get("images"):
+                raise _refuse("image")
+            if message.get("content") is not None and not isinstance(message["content"], str):
+                raise _ProxyError(400, "unsupported_content", "Message content must be text.")
+    else:
+        if not isinstance(body.get("prompt", ""), str):
+            raise _ProxyError(400, "invalid_request", "`prompt` must be text.")
+        if body.get("images"):
+            raise _refuse("image")
+    return _slots(body)
+
+
+def _slots(body: dict[str, Any]) -> _Slots:
+    """Every value in the request that could carry personal data, as (get, set)
+    pairs: all strings - message contents, tool results and arguments, names,
+    metadata, stop sequences, any field the proxy does not know - except
+    structural ones, and whole numbers of 6 digits or more (an Aadhaar number
+    can be sent as a number). Field names with personal data are refused."""
+    slots: _Slots = []
     keys: list[str] = []
 
     def walk(obj: Any, key: str | None, parent: str | None, depth: int) -> None:
         if depth > _MAX_DEPTH:
             raise _ProxyError(400, "invalid_request", "The request is nested too deeply.")
         if isinstance(obj, dict):
+            kind = obj.get("type")
             for k, v in obj.items():
                 keys.append(k)
-                if k == "logit_bias" or (k == "name" and key == "function"):
-                    continue  # token ids; function names must stay exact
+                if k in ("logit_bias", "context"):
+                    continue  # token ids (OpenAI logit_bias, Ollama context)
+                if k == "name" and (
+                    key in ("function", "tools", "tool_choice")
+                    or kind in ("tool_use", "tool", "server_tool_use")
+                ):
+                    continue  # tool and function names must stay exact
+                if k == "data" and kind == "redacted_thinking":
+                    continue  # encrypted by the provider, readable by no one
                 if k in _STRUCTURAL and not isinstance(v, (dict, list)):
                     continue
                 if isinstance(v, str):
@@ -662,43 +1003,101 @@ def _number_setter(obj: Any, k: Any) -> Callable[[str], None]:
     return set_
 
 
-def _upstream_json(method: str, url: str, body: Any, destination: str, timeout: float) -> Any:
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    env = "CREDGATE_UPSTREAM_KEY_" + re.sub(r"[^A-Z0-9]", "_", destination.upper())
+def _key_env(destination: str) -> str:
+    """The environment variable with the proxy's key for an endpoint."""
+    return "CREDGATE_UPSTREAM_KEY_" + re.sub(r"[^A-Z0-9]", "_", destination.upper())
+
+
+def _ollama_base(url: str) -> str:
+    """Ollama's own API lives beside its OpenAI-compatible one (``/v1``)."""
+    url = url.rstrip("/")
+    return url[:-3] if url.endswith("/v1") else url
+
+
+def _upstream_request(
+    method: str,
+    url: str,
+    body: Any,
+    destination: str,
+    api: str,
+    headers: dict[str, str] | None,
+) -> urllib.request.Request:
+    all_headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    env = _key_env(destination)
     if os.environ.get(env):
-        headers["Authorization"] = f"Bearer {os.environ[env]}"
+        if api == "anthropic":
+            all_headers["x-api-key"] = os.environ[env]
+        else:
+            all_headers["Authorization"] = f"Bearer {os.environ[env]}"
+    all_headers |= headers or {}
     data = None if body is None else json.dumps(body).encode()
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    return urllib.request.Request(url, data=data, headers=all_headers, method=method)
+
+
+def _upstream_open(
+    method: str,
+    url: str,
+    body: Any,
+    destination: str,
+    timeout: float,
+    api: str = "openai",
+    headers: dict[str, str] | None = None,
+) -> Any:
+    """The endpoint's response, open for reading as it arrives. Errors before
+    the answer starts (refused, unreachable) are raised here, before the client
+    gets anything."""
+    request = _upstream_request(method, url, body, destination, api, headers)
     try:
-        with _OPENER.open(request, timeout=timeout) as response:
-            raw = response.read(MAX_ANSWER + 1)
-            if len(raw) > MAX_ANSWER:
-                raise _ProxyError(
-                    502, "endpoint_error", f"Endpoint {destination!r} answered too much."
-                )
-            return json.loads(raw)
+        return _OPENER.open(request, timeout=timeout)
     except urllib.error.HTTPError as e:
-        if 300 <= e.code < 400:
-            raise _ProxyError(
-                502,
-                "endpoint_redirect",
-                f"Endpoint {destination!r} redirected to {e.headers.get('Location')!r}; "
-                "the proxy does not follow redirects (set the final URL in the policy).",
-            ) from None
-        detail = e.read()[:2000].decode("utf-8", "replace")
-        raise _ProxyError(
-            e.code if 400 <= e.code < 600 else 502,
-            "endpoint_error",
-            f"Endpoint {destination!r} answered {e.code}: {detail}",
-        ) from None
+        raise _endpoint_error(e, destination) from None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise _ProxyError(
             502, "endpoint_unreachable", f"Endpoint {destination!r} unreachable: {e}"
         ) from None
-    except json.JSONDecodeError:
+
+
+def _upstream_json(
+    method: str,
+    url: str,
+    body: Any,
+    destination: str,
+    timeout: float,
+    api: str = "openai",
+    headers: dict[str, str] | None = None,
+) -> Any:
+    response = _upstream_open(method, url, body, destination, timeout, api, headers)
+    try:
+        with response:
+            raw = response.read(MAX_ANSWER + 1)
+    except (TimeoutError, OSError) as e:
+        raise _ProxyError(
+            502, "endpoint_unreachable", f"Endpoint {destination!r} unreachable: {e}"
+        ) from None
+    if len(raw) > MAX_ANSWER:
+        raise _ProxyError(502, "endpoint_error", f"Endpoint {destination!r} answered too much.")
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise _ProxyError(
             502, "endpoint_error", f"Endpoint {destination!r} did not answer JSON."
         ) from None
+
+
+def _endpoint_error(e: urllib.error.HTTPError, destination: str) -> _ProxyError:
+    if 300 <= e.code < 400:
+        return _ProxyError(
+            502,
+            "endpoint_redirect",
+            f"Endpoint {destination!r} redirected to {e.headers.get('Location')!r}; "
+            "the proxy does not follow redirects (set the final URL in the policy).",
+        )
+    detail = e.read()[:2000].decode("utf-8", "replace")
+    return _ProxyError(
+        e.code if 400 <= e.code < 600 else 502,
+        "endpoint_error",
+        f"Endpoint {destination!r} answered {e.code}: {detail}",
+    )
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -713,38 +1112,220 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect())
 
 
+# --- streaming ---------------------------------------------------------------
+
+
 @dataclass
-class _Stream:
-    data: bytes
+class _Live:
+    """An answer sent on as it arrives: its pieces, and the endpoint response
+    to close when the client is done (or gone)."""
+
+    content_type: str
+    pieces: Iterator[bytes]
+    response: Any
+
+    def close(self) -> None:
+        with contextlib.suppress(Exception):
+            self.response.close()
 
 
-def _as_stream(answer: dict[str, Any]) -> _Stream:
-    """The complete answer as server-sent events, as streaming clients expect."""
-    base = {k: answer.get(k) for k in ("id", "created", "model")} | {
-        "object": "chat.completion.chunk"
-    }
-    events = []
-    for choice in answer.get("choices", []):
-        message = choice.get("message") or {}
-        delta = {k: message[k] for k in ("role", "content", "tool_calls") if k in message}
-        events.append(base | {"choices": [{"index": choice.get("index", 0), "delta": delta}]})
-        events.append(
-            base
-            | {
-                "choices": [
+# The longest text that could still turn into a token: a type name and a
+# 13-character key, with spaces inside the brackets. Longer runs are passed on.
+_HOLD = 96
+_WORD_TAIL = re.compile(r"\w*\Z")
+
+
+class _Restorer:
+    """Puts tokens back into text that arrives in pieces. The end of a piece
+    that could be the start of a token (``[PAN_`` or ``PAN_rl``) is held back
+    until the next piece shows whether it is one, so a token split across
+    pieces is restored like any other."""
+
+    def __init__(self, vault: Vault) -> None:
+        self.vault = vault
+        self.pending = ""
+        self.before = ""  # the last character passed on: a token needs a boundary
+
+    def feed(self, text: str) -> str:
+        self.pending += text
+        cut = len(self.pending)
+        bracket = self.pending.rfind("[")
+        if bracket >= 0 and "]" not in self.pending[bracket:] and cut - bracket <= _HOLD:
+            cut = bracket
+        tail = _WORD_TAIL.search(self.pending)
+        if tail and cut - tail.start() <= _HOLD:
+            cut = min(cut, tail.start())
+        ready, self.pending = self.pending[:cut], self.pending[cut:]
+        return self._restore(ready)
+
+    def flush(self) -> str:
+        ready, self.pending = self.pending, ""
+        return self._restore(ready)
+
+    def _restore(self, text: str) -> str:
+        if not text:
+            return ""
+        if "_" not in text:  # every token has one: nothing to restore
+            self.before = text[-1]
+            return text
+        out = restore(self.before + text, self.vault)[len(self.before) :]
+        self.before = text[-1]
+        return out
+
+
+def _sse_events(response: Any) -> Iterator[tuple[str | None, str | None, bytes]]:
+    """Server-sent events as (event name, data, raw bytes)."""
+    lines: list[bytes] = []
+    while True:
+        line = response.readline(MAX_ANSWER)
+        if not line:
+            if lines:
+                yield _sse_parse(lines)
+            return
+        if line in (b"\n", b"\r\n"):
+            if lines:
+                yield _sse_parse(lines)
+                lines = []
+            continue
+        lines.append(line)
+
+
+def _sse_parse(lines: list[bytes]) -> tuple[str | None, str | None, bytes]:
+    event = data = None
+    for line in lines:
+        text = line.decode("utf-8", "replace").rstrip("\r\n")
+        if text.startswith("event:"):
+            event = text[6:].strip()
+        elif text.startswith("data:"):
+            piece = text[5:].lstrip(" ")
+            data = piece if data is None else data + "\n" + piece
+    return event, data, b"".join(lines) + b"\n"
+
+
+def _sse(data: Any, event: str | None = None) -> bytes:
+    head = f"event: {event}\n" if event else ""
+    return f"{head}data: {json.dumps(data)}\n\n".encode()
+
+
+def _openai_stream(response: Any, vault: Vault, model: str) -> Iterator[bytes]:
+    restorers: dict[int, _Restorer] = {}
+    last: dict[str, Any] = {}
+    for _, data, raw in _sse_events(response):
+        if data is None:
+            yield raw  # comments, keep-alives
+            continue
+        if data.strip() == "[DONE]":
+            break
+        chunk = json.loads(data)
+        if not isinstance(chunk, dict):
+            continue
+        if "model" in chunk:
+            chunk["model"] = model
+        last = {k: chunk[k] for k in ("id", "created", "model", "object") if k in chunk}
+        for choice in chunk.get("choices") or []:
+            r = restorers.setdefault(choice.get("index", 0), _Restorer(vault))
+            delta = choice.get("delta") or {}
+            text = r.feed(delta["content"]) if isinstance(delta.get("content"), str) else ""
+            if choice.get("finish_reason"):
+                text += r.flush()
+            # Values go back into the text for the user, never into tool calls.
+            if isinstance(delta.get("content"), str) or text:
+                delta["content"] = text
+                choice["delta"] = delta
+        yield _sse(chunk)
+    for index, r in restorers.items():
+        rest = r.flush()
+        if rest:
+            yield _sse(last | {"choices": [{"index": index, "delta": {"content": rest}}]})
+    yield b"data: [DONE]\n\n"
+
+
+def _anthropic_stream(response: Any, vault: Vault, model: str) -> Iterator[bytes]:
+    restorers: dict[int, _Restorer] = {}
+    for event, data, raw in _sse_events(response):
+        if data is None:
+            yield raw
+            continue
+        message = json.loads(data)
+        kind = message.get("type") if isinstance(message, dict) else None
+        if kind == "message_start" and isinstance(message.get("message"), dict):
+            message["message"]["model"] = model
+        elif (
+            kind == "content_block_delta"
+            and (message.get("delta") or {}).get("type") == "text_delta"
+        ):
+            r = restorers.setdefault(message.get("index", 0), _Restorer(vault))
+            message["delta"]["text"] = r.feed(message["delta"].get("text") or "")
+        elif kind == "content_block_stop":
+            r = restorers.pop(message.get("index", 0), None)
+            rest = r.flush() if r else ""
+            if rest:
+                yield _sse(
                     {
-                        "index": choice.get("index", 0),
-                        "delta": {},
-                        "finish_reason": choice.get("finish_reason"),
-                    }
-                ]
-            }
-        )
-    if "usage" in answer:
-        events.append(base | {"choices": [], "usage": answer["usage"]})
-    lines = [f"data: {json.dumps(e)}\n\n" for e in events] + ["data: [DONE]\n\n"]
-    return _Stream("".join(lines).encode())
+                        "type": "content_block_delta",
+                        "index": message.get("index", 0),
+                        "delta": {"type": "text_delta", "text": rest},
+                    },
+                    "content_block_delta",
+                )
+        yield _sse(message, event or kind)
 
 
-def _error(code: str, message: str) -> dict[str, Any]:
+def _ollama_text(piece: dict[str, Any], field: str | None) -> str | None:
+    """The answer text of an Ollama reply: ``response`` (generate) or
+    ``message.content`` (chat)."""
+    value = piece.get(field) if field else (piece.get("message") or {}).get("content")
+    return value if isinstance(value, str) else None
+
+
+def _ollama_set(piece: dict[str, Any], field: str | None, text: str) -> None:
+    if field:
+        piece[field] = text
+    else:
+        message = piece.get("message")
+        if not isinstance(message, dict):
+            message = piece["message"] = {"role": "assistant"}
+        message["content"] = text
+
+
+def _ollama_stream(response: Any, vault: Vault, model: str, field: str | None) -> Iterator[bytes]:
+    """Ollama streams one JSON object per line; the last has ``done: true``."""
+    r = _Restorer(vault)
+    while True:
+        line = response.readline(MAX_ANSWER)
+        if not line:
+            break
+        if not line.strip():
+            continue
+        piece = json.loads(line)
+        if not isinstance(piece, dict):
+            continue
+        text = _ollama_text(piece, field)
+        out = r.feed(text or "") + (r.flush() if piece.get("done") else "")
+        if text is not None or out:
+            _ollama_set(piece, field, out)
+        piece["model"] = model
+        yield json.dumps(piece).encode() + b"\n"
+    rest = r.flush()
+    if rest:  # the endpoint stopped without a last ("done") line
+        piece = {"model": model, "done": False}
+        _ollama_set(piece, field, rest)
+        yield json.dumps(piece).encode() + b"\n"
+
+
+def _error(api: str, code: str, message: str) -> dict[str, Any]:
+    """An error in the shape the client's SDK expects."""
+    if api == "anthropic":
+        return {"type": "error", "error": {"type": code, "message": message}}
+    if api == "ollama":
+        return {"error": message, "code": code}
     return {"error": {"message": message, "type": code, "code": code}}
+
+
+def _stream_error(api: str, code: str, message: str) -> bytes:
+    """An error after the answer started: the last event of the stream."""
+    if api == "anthropic":
+        return _sse(_error(api, code, message), "error")
+    if api == "ollama":
+        return json.dumps(_error(api, code, message)).encode() + b"\n"
+    return _sse(_error(api, code, message)) + b"data: [DONE]\n\n"

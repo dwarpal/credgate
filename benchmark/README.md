@@ -259,6 +259,43 @@ detection made one worker slower under load than alone (17 instead of 38
 requests per second at 8 clients), fixed by taking turns; and workers waiting
 on the shared socket could miss a shutdown, fixed with an accept timeout.
 
+### Streamed answers
+
+`proxy_load.py --stream`: the same requests with `"stream": true`. The fake
+endpoint sends its echo in 8-character pieces, one event each, as models
+do, so every token is split across pieces and must be put back together.
+The time to the first piece is measured too. 1 worker, 10 seconds per run
+(4,530 requests, audit chain intact):
+
+| Request | Clients | Requests/s | Pieces/s | p50 ms | p95 ms | First piece p50 ms | Errors | Wrong | Leaks |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 record (0.3 KB) | 1 | 145.6 | 4,827 | 6.0 | 9.5 | 3.8 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 8 | 137.8 | 4,569 | 53.2 | 71.1 | 48.1 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 32 | 114.1 | 3,783 | 226.7 | 422.9 | 221.4 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 1 | 9.9 | 6,463 | 84.6 | 141.8 | 33.2 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 8 | 12.5 | 8,154 | 579.3 | 722.4 | 511.8 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 32 | 12.9 | 8,425 | 2,394.0 | 2,524.7 | 2,321.8 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 1 | 1.4 | 9,457 | 657.6 | 714.2 | 271.9 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 8 | 1.4 | 8,961 | 5,682.9 | 5,724.4 | 4,966.1 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 32 | 1.4 | 9,081 | 16,909.1 | 22,829.1 | 16,199.4 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 1 | 0.3 | 9,209 | 3,446.8 | 3,466.2 | 1,543.2 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 8 | 0.3 | 9,029 | 20,228.2 | 29,951.3 | 16,448.1 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 32 | 0.3 | 8,997 | 61,400.4 | 115,399.0 | 57,741.3 | 0 | 0 | 0 |
+
+**Every streamed answer was correct**: no errors, every answer restored
+exactly despite tokens split across pieces, and no identifier reached the
+endpoint.
+
+**Reading it.** Here the endpoint sends every piece at once, so the proxy's
+own cost per piece is what is measured: one worker passes on about 9,000
+pieces per second. A real model writes about 30-100 pieces per second per
+answer, so one worker keeps up with roughly 100-300 answers streaming at
+the same time, and more with `--workers`. Checking the request comes before
+the first piece, so the first piece arrives a few milliseconds after the
+model sends it for a short message (3.8 ms here). The first-piece times
+under load above are the queue behind other answers, which a real model's
+pace would spread out.
+
 ## BigQuery sampling cost
 
 [`bigquery_tablesample_cost.py`](bigquery_tablesample_cost.py) measures
