@@ -316,3 +316,196 @@ def test_shared_mode_needs_keys_and_records_users(proxy, upstream, tmp_path, cap
     assert _call(base, _chat("local/x", "hi"), key=other)[0] == 200
     actors = [r["actor"] for r in credgate.audit_read(tmp_path / "audit.jsonl")]
     assert actors == ["priya", "rahul"]
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="workers need fork")
+def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path):
+    import os
+    import signal
+    import socket
+    import subprocess
+    import sys
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "policy": "credgate-policy",
+                "version": 1,
+                "id": "w",
+                "revision": 1,
+                "destinations": {"frontier": {"tier": "frontier", "url": upstream}},
+                "rules": [],
+                "default_action": "tokenise",
+            }
+        )
+    )
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "from credgate.cli import main; main()",
+            "proxy",
+            "serve",
+            "--policy",
+            str(policy),
+            "--audit",
+            str(tmp_path / "audit.jsonl"),
+            "--port",
+            str(port),
+            "--workers",
+            "3",
+        ],
+        env=env,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(100):
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        base = f"http://127.0.0.1:{port}/v1"
+        with ThreadPoolExecutor(12) as pool:
+            results = list(
+                pool.map(lambda i: _call(base, _chat("frontier/m", f"PAN {PAN} #{i}")), range(30))
+            )
+        assert all(status == 200 for status, _, _ in results)
+        assert all(PAN not in r["body"]["messages"][0]["content"] for r in FakeModel.received)
+        check = credgate.audit_verify(tmp_path / "audit.jsonl")
+        assert check.ok
+        assert check.records == 30
+        children = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True)
+        assert len(children.stdout.split()) == 2
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=20)
+    time.sleep(0.5)
+    with pytest.raises(ConnectionRefusedError):  # no worker left listening
+        socket.create_connection(("127.0.0.1", port), timeout=1).close()
+
+
+def test_health_needs_no_key_and_reveals_nothing(proxy, tmp_path):
+    keys = tmp_path / "keys.json"
+    add_user(keys, "priya")
+    base, _ = proxy(keys=keys)
+    for path in ("/healthz", "/healthz/"):
+        status, _, body = _call(base.removesuffix("/v1"), path=path)
+        assert status == 200
+        assert json.loads(body) == {"status": "ok", "policy": {"id": "test", "revision": 3}}
+    assert _call(base, path="/models")[0] == 401  # everything else still needs a key
+
+
+def test_request_ids_are_echoed_and_sanitised(proxy):
+    base, _ = proxy()
+    for sent, echoed in (
+        ("lb-7f3a:42", "lb-7f3a:42"),
+        ("bad id\r\nX-Evil: 1", None),
+        ("x" * 200, None),
+    ):
+        req = urllib.request.Request(
+            base + "/chat/completions",
+            method="POST",
+            data=json.dumps(_chat("local/m", "hi")).encode(),
+        )
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-Request-ID", sent.replace("\r\n", " "))
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert r.headers.get("X-Request-ID") == echoed
+
+
+class SlowModel(FakeModel):
+    def do_POST(self):
+        import time
+
+        time.sleep(2)
+        super().do_POST()
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="workers need fork")
+def test_sigterm_drains_for_load_balancers(tmp_path):
+    import os
+    import signal
+    import socket
+    import subprocess
+    import sys
+    import time
+
+    slow = _start(ThreadingHTTPServer(("127.0.0.1", 0), SlowModel))
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "policy": "credgate-policy",
+                "version": 1,
+                "id": "d",
+                "revision": 1,
+                "destinations": {
+                    "slow": {
+                        "tier": "local",
+                        "url": f"http://127.0.0.1:{slow.server_address[1]}/v1",
+                    }
+                },
+                "rules": [],
+                "default_action": "allow",
+            }
+        )
+    )
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "from credgate.cli import main; main()",
+            "proxy",
+            "serve",
+            "--policy",
+            str(policy),
+            "--audit",
+            str(tmp_path / "audit.jsonl"),
+            "--port",
+            str(port),
+            "--workers",
+            "2",
+            "--drain-seconds",
+            "1",
+        ],
+        env=dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path)),
+        stderr=subprocess.DEVNULL,
+    )
+    base = f"http://127.0.0.1:{port}"
+    try:
+        for _ in range(100):
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        result = {}
+        slow_request = threading.Thread(
+            target=lambda: result.update(answer=_call(base + "/v1", _chat("slow/m", "hello")))
+        )
+        slow_request.start()
+        time.sleep(0.5)  # the request is now waiting for the slow endpoint
+        proc.send_signal(signal.SIGTERM)
+        time.sleep(0.3)
+        status, _, body = _call(base, path="/healthz")
+        assert status == 503
+        assert json.loads(body)["status"] == "draining"
+        slow_request.join(timeout=10)
+        assert result["answer"][0] == 200  # finished, not cut off
+        assert proc.wait(timeout=10) == 0
+        assert subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True).stdout == b""
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        slow.shutdown()

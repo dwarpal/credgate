@@ -88,6 +88,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     ps.add_argument("--certfile", help="TLS certificate (PEM)")
     ps.add_argument("--keyfile", help="TLS private key (PEM)")
     ps.add_argument("--timeout", type=float, default=300, help="seconds to wait for an endpoint")
+    ps.add_argument(
+        "--workers", type=int, default=1, help="worker processes (one core each; Linux, macOS)"
+    )
+    ps.add_argument(
+        "--drain-seconds",
+        type=float,
+        default=5,
+        help="on SIGTERM, keep serving this long while /healthz reports draining",
+    )
     pa = px_sub.add_parser("add-user", help="add a user to a keys file and print their key")
     pa.add_argument("name", help="user name, recorded in the audit log")
     pa.add_argument("--keys", required=True, help="keys file (created if missing)")
@@ -130,6 +139,8 @@ def _proxy(args: argparse.Namespace) -> int:
             certfile=args.certfile,
             keyfile=args.keyfile,
             timeout=args.timeout,
+            workers=args.workers,
+            drain_seconds=args.drain_seconds,
         )
     except (ValueError, OSError) as e:
         print(f"credgate proxy: {e}", file=sys.stderr)

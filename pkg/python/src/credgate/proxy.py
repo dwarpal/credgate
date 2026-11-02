@@ -32,6 +32,7 @@ Only the Python standard library is used.
 
 from __future__ import annotations
 
+import contextlib
 import getpass
 import hashlib
 import hmac
@@ -40,8 +41,10 @@ import json
 import os
 import re
 import secrets
+import signal
 import ssl
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -58,6 +61,10 @@ from .tokenise import Vault, restore
 
 MAX_BODY = 20 * 1024 * 1024
 MAX_ANSWER = 50 * 1024 * 1024
+# Detection is CPU work in Python, which runs one thread at a time per
+# process: threads competing for it are slower in total than taking turns.
+# Waiting for endpoints still overlaps; more cores need more workers.
+_CPU = threading.Lock()
 _KEY_PREFIX = "cgk_"
 
 
@@ -79,6 +86,12 @@ class ProxyConfig:
         audit_key: Key for hashing identifiers in the audit log; default
             ``CREDGATE_AUDIT_KEY``.
         timeout: Seconds to wait for an endpoint.
+        workers: Processes serving requests (Linux and macOS). Detection is
+            CPU work, and one Python process uses one core for it; with
+            several workers the proxy uses several cores.
+        drain_seconds: On SIGTERM, how long to keep serving while reporting
+            "draining" on ``/healthz``, so a load balancer stops routing here;
+            then requests in progress are finished and the proxy exits.
     """
 
     policy: Policy | str | os.PathLike[str]
@@ -91,6 +104,8 @@ class ProxyConfig:
     token_key: str | bytes | None = None
     audit_key: str | bytes | None = None
     timeout: float = 300
+    workers: int = 1
+    drain_seconds: float = 5
     _users: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -108,6 +123,10 @@ class ProxyConfig:
                 raise ValueError(
                     f"No users in {self.keys}; add one with `credgate proxy add-user`."
                 )
+        if not 1 <= self.workers <= 64:
+            raise ValueError("`workers` must be between 1 and 64.")
+        if self.workers > 1 and not hasattr(os, "fork"):
+            raise ValueError("Several workers need fork (Linux, macOS); run one per port instead.")
         if (self.certfile is None) != (self.keyfile is None):
             raise ValueError("`certfile` and `keyfile` go together.")
         if self.token_key is None:
@@ -125,15 +144,84 @@ def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
     mode = "shared" if config.keys else "localhost"
     host, port = server.server_address[:2]
     (log or _stderr)(
-        f"credgate proxy ({mode} mode) on {scheme}://{host}:{port}/v1 - policy "
-        f"{config.policy.id} revision {config.policy.revision}, audit log {config.audit}"
+        f"credgate proxy ({mode} mode, {config.workers} worker(s)) on {scheme}://{host}:{port}/v1"
+        f" - policy {config.policy.id} revision {config.policy.revision}, audit log {config.audit}"
     )
+    # Workers share the listening socket; each request is self-contained, and
+    # the audit log takes concurrent writers.
+    parent = os.getpid()
+    children = []
+    for _ in range(config.workers - 1):
+        pid = os.fork()
+        if pid == 0:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGTERM, lambda *_: _drain(server, config.drain_seconds))
+            threading.Thread(target=_exit_with_parent, args=(parent,), daemon=True).start()
+            try:
+                server.serve_forever()
+                _wait_for_requests(config.timeout)
+            finally:
+                os._exit(0)
+        children.append(pid)
+
+    def terminate(signum: int, frame: Any) -> None:
+        for pid in children:
+            _signal(pid, signal.SIGTERM)  # each worker drains on its own
+        _drain(server, config.drain_seconds)
+
+    signal.signal(signal.SIGTERM, terminate)
     try:
-        server.serve_forever()
+        server.serve_forever()  # returns when drained; Ctrl-C stops at once
+        _wait_for_requests(config.timeout)
     except KeyboardInterrupt:
-        pass
+        for pid in children:
+            _signal(pid, signal.SIGKILL)
     finally:
+        for pid in children:
+            with contextlib.suppress(OSError):
+                os.waitpid(pid, 0)
         server.server_close()
+
+
+# Load balancers: on SIGTERM the proxy reports "draining" on /healthz (so the
+# balancer stops routing to it) while it keeps serving for `drain_seconds`,
+# then stops accepting and finishes the requests in progress.
+_DRAINING = threading.Event()
+_IN_FLIGHT = [0]
+_IN_FLIGHT_LOCK = threading.Lock()
+
+
+def _drain(server: Any, seconds: float) -> None:
+    if _DRAINING.is_set():
+        return
+    _DRAINING.set()
+
+    def later() -> None:
+        time.sleep(seconds)
+        server.shutdown()
+
+    threading.Thread(target=later, daemon=True).start()
+
+
+def _wait_for_requests(timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with _IN_FLIGHT_LOCK:
+            if _IN_FLIGHT[0] == 0:
+                return
+        time.sleep(0.05)
+
+
+def _signal(pid: int, sig: int) -> None:
+    with contextlib.suppress(OSError):
+        os.kill(pid, sig)
+
+
+def _exit_with_parent(parent: int) -> None:
+    """A worker stops when the main process is gone, even if it was killed."""
+    while os.getppid() == parent:
+        time.sleep(1)
+    os._exit(0)
 
 
 def make_server(
@@ -148,6 +236,11 @@ def make_server(
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(config.certfile, config.keyfile)
         server.socket = context.wrap_socket(server.socket, server_side=True)
+    # Workers share this socket and are all woken for each connection; the
+    # ones that lose the race must not wait in accept() forever (they would
+    # never see a shutdown), so accept() times out and the loop checks again.
+    # Accepted connections are blocking again (Python resets them).
+    server.socket.settimeout(0.5)
     return server
 
 
@@ -208,7 +301,23 @@ class _Handler(BaseHTTPRequestHandler):
     timeout = 120  # seconds a client may take to send its request
 
     def do_GET(self) -> None:
+        if self.path.rstrip("/") in ("/healthz", "/v1/healthz"):
+            self._health()
+            return
         self._handle(self._models if self.path.rstrip("/") == "/v1/models" else None)
+
+    def _health(self) -> None:
+        """For load balancers: no key needed, nothing sensitive."""
+        policy: Policy = self.config.policy  # type: ignore[assignment]
+        draining = _DRAINING.is_set()
+        self._body_read = True
+        self._send(
+            503 if draining else 200,
+            {
+                "status": "draining" if draining else "ok",
+                "policy": {"id": policy.id, "revision": policy.revision},
+            },
+        )
 
     def do_POST(self) -> None:
         handler = self._chat if self.path.rstrip("/") == "/v1/chat/completions" else None
@@ -218,6 +327,10 @@ class _Handler(BaseHTTPRequestHandler):
         started = time.monotonic()
         user, status, note = "-", 500, ""
         self._body_read = self.command == "GET"  # per request: connections are reused
+        request_id = self.headers.get("X-Request-ID", "")
+        self._request_id = request_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", request_id) else ""
+        with _IN_FLIGHT_LOCK:
+            _IN_FLIGHT[0] += 1
         try:
             user = self._authenticate()
             if handler is None:
@@ -236,7 +349,10 @@ class _Handler(BaseHTTPRequestHandler):
             ms = round(1000 * (time.monotonic() - started))
             # Never the request or answer text: who, where, outcome.
             stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
-            self.log(f"{stamp} {user} {self.command} {self.path} {status} {note} {ms}ms")
+            rid = f" request-id={self._request_id}" if self._request_id else ""
+            self.log(f"{stamp} {user} {self.command} {self.path} {status} {note} {ms}ms{rid}")
+            with _IN_FLIGHT_LOCK:
+                _IN_FLIGHT[0] -= 1
 
     def _authenticate(self) -> str:
         users = self.config._users
@@ -290,7 +406,10 @@ class _Handler(BaseHTTPRequestHandler):
         slots = _text_slots(body)
         vault = Vault(self.config.token_key)
         audit = AuditLog(self.config.audit, key=self.config.audit_key, actor=user)
-        decision = policy.apply([get() for get, _ in slots], destination, vault=vault, audit=audit)
+        with _CPU:
+            decision = policy.apply(
+                [get() for get, _ in slots], destination, vault=vault, audit=audit
+            )
         if not decision.allowed:
             raise _ProxyError(
                 403,
@@ -357,6 +476,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        if getattr(self, "_request_id", ""):
+            self.send_header("X-Request-ID", self._request_id)
         if status >= 400 or not self._body_read:
             # Never read leftover bytes of a rejected request as a new one.
             self.send_header("Connection", "close")

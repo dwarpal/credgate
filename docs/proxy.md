@@ -118,6 +118,50 @@ client gets an error. Requests go only to the URL in the policy (`http` or
 clients are dropped after 2 minutes, and answers above 50 MB are refused. The proxy's own log line per
 request has who, where, the status and the time taken - never the text.
 
+## Performance and scaling
+
+Detection is CPU work: one worker process checks about 0.2-0.4 MB of text
+per second, depending on the core - about 40 requests of 5 KB, or 300 short
+messages, per second. `--workers N` runs N processes on one port, one core
+each (Linux and macOS). Measured on a 4-core 2019 laptop
+([details](https://github.com/dwarpal/credgate/blob/main/benchmark/README.md#proxy-throughput)):
+
+| Request | 1 worker | 4 workers |
+|---|---:|---:|
+| One customer record (0.3 KB) | 330 requests/s | 757 requests/s |
+| 20 records (5 KB) | 42 requests/s | 139 requests/s |
+| 200 records (51 KB) | 5 requests/s | 15 requests/s |
+
+In those runs (47,410 requests, up to 32 clients in parallel) every answer
+was restored exactly, no identifier reached the endpoint, and the audit
+chain stayed intact. With a real model its own time dominates: the proxy
+adds a few milliseconds to a short message.
+
+## Behind a load balancer
+
+Every request is self-contained - it carries its whole conversation, is
+tokenised with its own vault and audited on its own - so any instance can
+take any request: no sticky sessions, no shared state.
+
+- **Health checks**: `GET /healthz` answers `200 {"status": "ok", "policy":
+  {"id": ..., "revision": ...}}` without a key, so a balancer can poll it;
+  checking the revision also shows every instance runs the same policy.
+- **Rolling restarts**: on SIGTERM an instance answers `503 draining` on
+  `/healthz` while it keeps serving for `--drain-seconds` (default 5; set it
+  above the balancer's health-check interval), then stops accepting and
+  finishes the requests in progress. Ctrl-C stops at once.
+- **Tracing**: an `X-Request-ID` header from the balancer is written to the
+  proxy's log line and returned.
+- **TLS**: terminate it at the balancer, or give each instance
+  `--certfile`/`--keyfile`.
+- **Shared mode**: instances listen on a network address, so each needs the
+  keys file; share the same keys file and policy.
+- **Audit logs**: one file per instance (for example
+  `--audit /var/log/credgate/audit-$(hostname).jsonl`). Concurrent writers
+  are safe on a local disk, but file locking is unreliable on network file
+  systems, and one chain per instance stays verifiable; collect them
+  afterwards.
+
 ## What it does not protect
 
 - **Deliberate evasion.** Someone determined to get data out can disguise

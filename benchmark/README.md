@@ -188,6 +188,77 @@ it runs inside DuckDB, Polars and Arrow pipelines (see
 compiled matching engine (such as PCRE2 with its JIT compiler) is being
 considered.
 
+## Proxy throughput
+
+[`proxy_load.py`](proxy_load.py) puts the proxy under parallel load and
+checks every answer. Three processes: a fake OpenAI-compatible endpoint that
+answers at once by echoing what it received (so the proxy's own cost is
+measured, not a model's) and counts identifier-shaped strings in what
+reaches it (each one a leak); the proxy (`credgate proxy serve`) with a
+policy that tokenises every identifier; and the load generator, whose
+clients send synthetic customer records over kept-alive connections. Each
+answer must be restored exactly to the original text; after each run the
+audit chain is verified. Raw results: [`results/`](results/).
+
+Measured 2026-11-02 on the 2019 laptop above (4 cores, 8 threads), with the
+clients and the fake endpoint on the same machine, so the numbers are
+conservative. A record is one customer line with name, PAN, Aadhaar,
+mobile, e-mail, account, IFSC, card and address (about 260 characters);
+each run lasts 15 seconds.
+
+**1 worker** (16,151 requests, audit chain intact, 44 MB memory):
+
+| Request | Clients | Requests/s | Records/s | p50 ms | p95 ms | p99 ms | Errors | Wrong | Leaks |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 record (0.3 KB) | 1 | 278.6 | 279 | 3.3 | 4.2 | 7.8 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 8 | 315.7 | 316 | 24.4 | 27.2 | 30.7 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 32 | 330.0 | 330 | 90.2 | 111.4 | 194.6 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 1 | 39.0 | 781 | 23.8 | 31.1 | 34.8 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 8 | 42.5 | 850 | 182.1 | 204.9 | 218.8 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 32 | 42.4 | 848 | 724.1 | 758.8 | 793.5 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 1 | 4.6 | 918 | 209.2 | 228.7 | 248.1 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 8 | 4.9 | 983 | 1,555.6 | 1,660.8 | 1,684.3 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 32 | 5.0 | 995 | 6,243.3 | 6,331.4 | 6,335.8 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 1 | 0.8 | 788 | 1,250.7 | 1,254.3 | 1,271.6 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 8 | 0.8 | 839 | 9,183.4 | 9,372.1 | 9,484.8 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 32 | 0.8 | 841 | 27,459.0 | 37,671.3 | 37,863.5 | 0 | 0 | 0 |
+
+**4 workers** (`--workers 4`; 31,259 requests, audit chain intact, 47 MB
+per process):
+
+| Request | Clients | Requests/s | Records/s | p50 ms | p95 ms | p99 ms | Errors | Wrong | Leaks |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 record (0.3 KB) | 1 | 242.8 | 243 | 3.9 | 5.2 | 6.8 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 8 | 756.8 | 757 | 10.0 | 16.7 | 17.7 | 0 | 0 | 0 |
+| 1 record (0.3 KB) | 32 | 729.9 | 730 | 41.8 | 50.6 | 53.2 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 1 | 38.4 | 768 | 24.5 | 31.4 | 34.8 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 8 | 138.6 | 2,772 | 56.3 | 88.7 | 94.1 | 0 | 0 | 0 |
+| 20 records (5.1 KB) | 32 | 128.8 | 2,575 | 228.6 | 341.1 | 375.2 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 1 | 4.5 | 900 | 206.0 | 227.7 | 305.2 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 8 | 15.2 | 3,036 | 519.9 | 559.3 | 574.1 | 0 | 0 | 0 |
+| 200 records (50.9 KB) | 32 | 14.4 | 2,890 | 2,090.7 | 2,473.8 | 2,516.2 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 1 | 0.8 | 799 | 1,214.1 | 1,218.1 | 1,220.6 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 8 | 2.5 | 2,538 | 3,051.5 | 3,330.8 | 3,509.8 | 0 | 0 | 0 |
+| 1,000 records (255.1 KB) | 32 | 2.4 | 2,374 | 11,335.1 | 14,520.2 | 14,615.1 | 0 | 0 | 0 |
+
+**Every request was correct**: no errors, every answer restored exactly,
+and no identifier reached the endpoint, across 47,410 requests.
+
+**What limits it.** Detection is CPU work: about 0.22 MB of text per second
+per worker on this laptop (one core), so a worker handles about 40 requests
+of 5 KB per second. Python runs one thread at a time per process, so each
+worker takes turns for the policy step (waiting for the model still
+overlaps), and more cores need more workers: 4 workers gave 3-3.5x the
+throughput of one. Beyond one machine, run instances behind a load balancer
+(see [the proxy guide](../docs/proxy.md)). With a real model, its own time
+(seconds per answer) dominates; the proxy adds about 4 ms for a short
+message and 25 ms for 5 KB of text.
+
+Two findings from these runs went into the proxy: threads competing for
+detection made one worker slower under load than alone (17 instead of 38
+requests per second at 8 clients), fixed by taking turns; and workers waiting
+on the shared socket could miss a shutdown, fixed with an accept timeout.
+
 ## BigQuery sampling cost
 
 [`bigquery_tablesample_cost.py`](bigquery_tablesample_cost.py) measures
