@@ -15,7 +15,9 @@ detection rules, so both languages find exactly the same matches.
 the [R package site](https://dwarpal.github.io/credgate/r/), guides and the
 shared specification.
 
-> **Status: early development (pre-alpha).** Working today: PII detection,
+> **Status: alpha.** The main path is built and tested, but no one outside
+> the project relies on it yet, so formats and APIs may still change.
+> Working today: PII detection,
 > column scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
 > vault file), policies and the policy editor for InfoSec (R Shiny), the

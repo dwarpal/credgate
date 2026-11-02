@@ -325,6 +325,15 @@ are built in dependency order, so nothing is built twice or retrofitted
    and a safe-context helper for data frames (structure and a redacted
    sample, ready for any tool).
 
+### Status: alpha (2026-11-02)
+
+credgate moved from pre-alpha to alpha at 0.8.1: the main path (detection,
+policies, audit log, proxy, policy editor) is built, tested and released,
+but no one outside the project relies on it yet, and formats and APIs may
+still change. **Beta** needs: a written stability promise for the policy
+and audit formats and the main functions; at least one real pilot; CRAN
+acceptance and better name detection.
+
 ### Decision: no chat assistant (2026-11-02)
 
 The assistant package (section 2, "assistant") is dropped. When it was
