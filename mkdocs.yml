@@ -35,9 +35,11 @@ nav:
       - "API: inventory and discovery": python/api/inventory.md
       - "API: policies and audit log": python/api/policies.md
       - "API: integrations": python/api/integrations.md
+      - "API: proxy": python/api/proxy.md
       - "API: evaluation and test data": python/api/evaluation.md
   - R: https://dwarpal.github.io/credgate/r/
   - Guides:
+      - Proxy: proxy.md
       - Large data: large-data.md
       - Threat model: threat-model.md
   - Specification: spec.md

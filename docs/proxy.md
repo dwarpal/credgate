@@ -1,0 +1,182 @@
+# The proxy
+
+The credgate proxy sits between people's tools and the model endpoints. Every
+request goes through the policy: what may be sent is sent, identifiers are
+redacted or tokenised as the policy says, requests the policy blocks never
+leave, and every decision is written to the audit log. Tokenised values are
+put back into the answer, so people see the real values while the model
+never did.
+
+```
+Positron / VS Code / Jupyter / scripts ──► credgate proxy ──► Ollama · vLLM · SGLang · gateway
+                                           policy: allow / redact / tokenise / block
+                                           values restored in the answer
+                                           audit log
+```
+
+It speaks the **OpenAI-compatible API** (`POST /v1/chat/completions`,
+`GET /v1/models`), which vLLM, SGLang, Ollama (`/v1`), LM Studio and most
+company gateways use, and which most tools can be pointed at. It needs only
+the Python standard library.
+
+## Set up the endpoints
+
+The endpoints are the destinations of the [policy](https://github.com/dwarpal/credgate/blob/main/examples/policies/bank-default.yaml),
+each with its tier and its OpenAI-compatible base URL:
+
+```yaml
+destinations:
+  ollama-local: {tier: local, url: "http://localhost:11434/v1"}
+  vllm-gpu: {tier: internal, url: "https://llm.bank.internal/v1"}
+  claude: {tier: frontier, url: "https://ai-gateway.bank.internal/anthropic/v1"}
+  copilot: {tier: frontier, blocked: true}
+```
+
+The endpoints' own API keys stay with the proxy, in environment variables
+named after the destination: `CREDGATE_UPSTREAM_KEY_VLLM_GPU`,
+`CREDGATE_UPSTREAM_KEY_CLAUDE`. People using the proxy never see them.
+
+## Run it
+
+**On each analyst's machine** (localhost mode): the proxy listens on
+`127.0.0.1` only, and requests are recorded as the operating-system user.
+
+```sh
+credgate proxy serve --policy bank-default.yaml --audit audit.jsonl
+```
+
+**For a team** (shared mode): the proxy listens on a network address and
+every client needs its own key; requests are recorded by user name. The proxy
+refuses to start on a network address without a keys file.
+
+```sh
+credgate proxy add-user priya --keys keys.json      # prints Priya's key, once
+credgate proxy serve --policy bank-default.yaml --audit audit.jsonl \
+  --host 0.0.0.0 --keys keys.json --certfile proxy.pem --keyfile proxy.key
+```
+
+The keys file holds only hashes of the keys. Use TLS (`--certfile`,
+`--keyfile`) or put the proxy behind the organisation's TLS-terminating
+reverse proxy.
+
+## Point tools at it
+
+Clients ask for a model as `<endpoint>/<model>`:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8790/v1", api_key="unused")  # shared mode: the user's key
+client.chat.completions.create(
+    model="vllm-gpu/llama-3.1-70b",
+    messages=[{"role": "user", "content": "Summarise: customer PAN ABCPN1234K wants ..."}],
+)
+```
+
+In R with ellmer:
+
+```r
+chat <- ellmer::chat_openai_compatible(
+  base_url = "http://127.0.0.1:8790/v1", model = "ollama-local/gemma3:1b",
+  credentials = function() "unused"   # shared mode: function() Sys.getenv("CREDGATE_PROXY_KEY")
+)
+chat$chat("Summarise this call note: ...")
+```
+
+Any tool with an "OpenAI-compatible base URL" setting works the same way.
+
+## What it does with a request
+
+1. **Who**: the operating-system user (localhost mode) or the user whose key
+   was sent (shared mode); otherwise `401`.
+2. **Where**: the endpoint named in `model`; an endpoint not in the policy is
+   refused (`404`).
+3. **What**: every value in the request is checked with the policy for that
+   endpoint - message contents and text parts, tool results, tool-call
+   arguments from earlier turns, names, `metadata`, `user`, stop sequences,
+   tool and schema descriptions, and any field the proxy does not know -
+   except structural ones (`model`, `role`, `type`, ids, function names).
+   Whole numbers of 6 digits or more are checked too (an Aadhaar number can
+   be sent as a number); a numeric setting shaped like an identifier would
+   be redacted and the request fail, never leak. Requests with personal data
+   in a field name, content credgate cannot read (images, audio, files) or
+   unexpected shapes are refused (`400`) rather than sent unchecked.
+4. **Decision**: blocked requests get `403` with the rule that blocked them
+   and are never forwarded; otherwise identifiers are redacted or tokenised
+   as the policy says. Every decision, blocked or not, is written to the
+   audit log - without the text or the values.
+5. **Answer**: tokens in the answer's text are replaced by their values -
+   only tokens made for this request, never in tool calls (which the tool
+   would run with real values). Streaming requests get the complete answer as
+   one streamed message (token-by-token streaming comes in a later version).
+
+It fails closed: if anything goes wrong before the request is forwarded -
+including a failure to write the audit record - nothing is sent and the
+client gets an error. Requests go only to the URL in the policy (`http` or
+`https`): redirects are not followed. Bodies must have a `Content-Length`
+(at most 20 MB), connections are closed after any refused request, slow
+clients are dropped after 2 minutes, and answers above 50 MB are refused. The proxy's own log line per
+request has who, where, the status and the time taken - never the text.
+
+## Performance and scaling
+
+Detection is CPU work: one worker process checks about 0.2-0.4 MB of text
+per second, depending on the core - about 40 requests of 5 KB, or 300 short
+messages, per second. `--workers N` runs N processes on one port, one core
+each (Linux and macOS). Measured on a 4-core 2019 laptop
+([details](https://github.com/dwarpal/credgate/blob/main/benchmark/README.md#proxy-throughput)):
+
+| Request | 1 worker | 4 workers |
+|---|---:|---:|
+| One customer record (0.3 KB) | 330 requests/s | 757 requests/s |
+| 20 records (5 KB) | 42 requests/s | 139 requests/s |
+| 200 records (51 KB) | 5 requests/s | 15 requests/s |
+
+In those runs (47,410 requests, up to 32 clients in parallel) every answer
+was restored exactly, no identifier reached the endpoint, and the audit
+chain stayed intact. With a real model its own time dominates: the proxy
+adds a few milliseconds to a short message.
+
+## Behind a load balancer
+
+Every request is self-contained - it carries its whole conversation, is
+tokenised with its own vault and audited on its own - so any instance can
+take any request: no sticky sessions, no shared state.
+
+- **Health checks**: `GET /healthz` answers `200 {"status": "ok", "policy":
+  {"id": ..., "revision": ...}}` without a key, so a balancer can poll it;
+  checking the revision also shows every instance runs the same policy.
+- **Rolling restarts**: on SIGTERM an instance answers `503 draining` on
+  `/healthz` while it keeps serving for `--drain-seconds` (default 5; set it
+  above the balancer's health-check interval), then stops accepting and
+  finishes the requests in progress. Ctrl-C stops at once.
+- **Tracing**: an `X-Request-ID` header from the balancer is written to the
+  proxy's log line and returned.
+- **TLS**: terminate it at the balancer, or give each instance
+  `--certfile`/`--keyfile`.
+- **Shared mode**: instances listen on a network address, so each needs the
+  keys file; share the same keys file and policy.
+- **Audit logs**: one file per instance (for example
+  `--audit /var/log/credgate/audit-$(hostname).jsonl`). Concurrent writers
+  are safe on a local disk, but file locking is unreliable on network file
+  systems, and one chain per instance stays verifiable; collect them
+  afterwards.
+
+## What it does not protect
+
+- **Deliberate evasion.** Someone determined to get data out can disguise
+  it (spelling a PAN with spaces between letters, splitting it across
+  messages, encoding it). Detection handles accidental variation (case,
+  invisible characters, full-width and Indic digits), not an insider trying
+  to evade it; network rules and the audit log address that.
+- **What detection misses.** The policy can only act on what credgate
+  detects. Names without a cue ("Customer Priya Nair called", rather than
+  "Name: Priya Nair") are often not detected and would be sent as they are.
+  Test your prompts with `credgate preview`, and prefer policies that redact
+  free text for frontier models.
+- **Requests that do not go through it.** Network rules, not credgate, must
+  make the proxy the only way to reach frontier endpoints.
+- **The model's own behaviour.** A model can still answer badly or leak what
+  it was legitimately sent; the policy decides what it is sent.
+
+See also the [threat model](threat-model.md).

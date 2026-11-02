@@ -162,11 +162,18 @@ unknown or invalid policies and does not reload a policy silently.
 
 ### Proxy misused (A2, A8)
 
-Planned: listens on localhost by default; shared deployments require
-authentication; upstream calls use TLS; model credentials only from the
-environment; streaming answers are restored without ever emitting half a
-token. Users can still call a model directly and bypass the proxy - network
-rules, not credgate, enforce that the proxy is the only way out.
+Since 0.7 (phase 1): listens on localhost by default and records the
+operating-system user; on any other address it refuses to start without a
+keys file, and every client then needs its own key (only hashes are stored)
+and is recorded by name; TLS directly or behind a reverse proxy; endpoint
+credentials only from the environment, never seen by clients; content it
+cannot check (images, audio) is refused, not forwarded; it fails closed;
+its log has no request text. Values are restored only into the answer's
+text, only from the tokens made for that request, never into tool calls.
+Planned: token-by-token streaming that never emits half a token, audit
+rotation and retention. Users can still call a model directly and bypass
+the proxy - network rules, not credgate, enforce that the proxy is the only
+way out.
 
 ### Supply chain (A7)
 

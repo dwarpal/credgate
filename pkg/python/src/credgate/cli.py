@@ -77,6 +77,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="exit with status 1 if any column contains PII",
     )
 
+    px = sub.add_parser("proxy", help="run the policy-enforcing proxy for model endpoints")
+    px_sub = px.add_subparsers(dest="proxy_command", required=True)
+    ps = px_sub.add_parser("serve", help="run the proxy (OpenAI-compatible, on /v1)")
+    ps.add_argument("--policy", required=True, help="policy file (YAML)")
+    ps.add_argument("--audit", required=True, help="audit log file (JSON Lines)")
+    ps.add_argument("--host", default="127.0.0.1", help="address to listen on (default: localhost)")
+    ps.add_argument("--port", type=int, default=8790)
+    ps.add_argument("--keys", help="keys file; required unless listening on localhost")
+    ps.add_argument("--certfile", help="TLS certificate (PEM)")
+    ps.add_argument("--keyfile", help="TLS private key (PEM)")
+    ps.add_argument("--timeout", type=float, default=300, help="seconds to wait for an endpoint")
+    ps.add_argument(
+        "--workers", type=int, default=1, help="worker processes (one core each; Linux, macOS)"
+    )
+    ps.add_argument(
+        "--drain-seconds",
+        type=float,
+        default=5,
+        help="on SIGTERM, keep serving this long while /healthz reports draining",
+    )
+    pa = px_sub.add_parser("add-user", help="add a user to a keys file and print their key")
+    pa.add_argument("name", help="user name, recorded in the audit log")
+    pa.add_argument("--keys", required=True, help="keys file (created if missing)")
+
     sub.add_parser("detectors", help="list the registered detectors")
     sub.add_parser("spec-path", help="print the path of the shipped detection spec")
 
@@ -90,9 +114,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "scan":
         return _scan(args)
+    if args.command == "proxy":
+        return _proxy(args)
     if args.command in ("redact", "preview"):
         return _redact(args)
     return _detect(args)
+
+
+def _proxy(args: argparse.Namespace) -> int:
+    from .proxy import ProxyConfig, add_user, serve
+
+    if args.proxy_command == "add-user":
+        key = add_user(args.keys, args.name)
+        print(f"Added {args.name} to {args.keys}. Their key (shown only once):", file=sys.stderr)
+        print(key)
+        return 0
+    try:
+        config = ProxyConfig(
+            policy=args.policy,
+            audit=args.audit,
+            host=args.host,
+            port=args.port,
+            keys=args.keys,
+            certfile=args.certfile,
+            keyfile=args.keyfile,
+            timeout=args.timeout,
+            workers=args.workers,
+            drain_seconds=args.drain_seconds,
+        )
+    except (ValueError, OSError) as e:
+        print(f"credgate proxy: {e}", file=sys.stderr)
+        return 2
+    serve(config)
+    return 0
 
 
 def _read(source: str) -> str:

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Proxy (phase 1): `credgate proxy serve` puts the policy between tools and
+  OpenAI-compatible model endpoints (`/v1/chat/completions`, `/v1/models`).
+  Each request is allowed, redacted, tokenised or blocked per endpoint and
+  recorded in the audit log; tokenised values are restored in the answer
+  (never in tool calls). Localhost mode by default; shared mode with
+  per-user keys (`credgate proxy add-user`) and TLS. Fails closed, refuses
+  content it cannot check, keeps endpoint keys from clients. Every value
+  in a request is checked (not just messages), redirects are not followed,
+  and an attack test suite with a leak oracle covers hidden fields,
+  obfuscation, hostile HTTP and endpoints, and concurrency. Standard
+  library only. See docs/proxy.md.
+- Proxy scaling: `--workers N` runs N processes on one port (one core each;
+  Linux, macOS); within a process the policy step takes turns, which keeps
+  throughput steady under parallel load. Load balancers: `GET /healthz`
+  (no key), graceful drain on SIGTERM (`--drain-seconds`), `X-Request-ID`
+  in the log and the answer. Load benchmark (benchmark/proxy_load.py): on a
+  4-core laptop, 4 workers handle 757 short or 139 5-KB requests per
+  second, with every answer correct and no leaks across 47,410 requests.
 - Whole-database inventories: `inventory_database()` scans every table of a
   database through a connection (SQLAlchemy in Python, DBI in R): Postgres,
   DuckDB, SQLite, MySQL, IBM Db2 and others. Each table is sampled by the

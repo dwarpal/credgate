@@ -19,7 +19,7 @@ shared specification.
 > scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
 > vault file), policies, the audit log and the PII inventory (data frames,
-> Spark, BigQuery) work today. Proxy mode and the IDE assistant are planned;
+> Spark, BigQuery, databases) and the proxy work today. The IDE assistant is planned;
 > see [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
@@ -184,6 +184,28 @@ Everything is checked when the policy is loaded - an unknown field, tier,
 action or identifier type is an error, never a silent "allow" - and every
 decision names the policy revision and the rule behind each action, ready
 for the audit log. The format is specified in [spec/README.md](spec/README.md#policies-policy).
+
+## Proxy
+
+The proxy puts the policy between people's tools and the model endpoints:
+tools talk to it as to any OpenAI-compatible server, and every request is
+allowed, redacted, tokenised or blocked by the policy, recorded in the audit
+log, and tokenised values are put back into the answer. It runs on each
+analyst's machine or, with per-user keys, as a shared server; it needs only
+the Python standard library.
+
+```sh
+credgate proxy serve --policy bank-default.yaml --audit audit.jsonl
+# then, in any OpenAI-compatible client: base_url http://127.0.0.1:8790/v1,
+# model "vllm-gpu/llama-3.1-70b" (endpoint/model)
+```
+
+One worker process checks about 40 requests of 5 KB (or 300 short messages)
+per second on a 2019 laptop core, adding a few milliseconds per request;
+`--workers N` uses more cores, and instances can run behind a load balancer
+(`/healthz`, graceful drain). Latency and throughput under load:
+[benchmark/README.md](benchmark/README.md#proxy-throughput). See the
+[proxy guide](docs/proxy.md).
 
 ## Audit log
 
