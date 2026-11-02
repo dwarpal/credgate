@@ -296,6 +296,40 @@ model sends it for a short message (3.8 ms here). The first-piece times
 under load above are the queue behind other answers, which a real model's
 pace would spread out.
 
+### On uvicorn
+
+`proxy_load.py --server uvicorn`: the same runs on the production server
+(`credgate[server]`), 10 seconds each. Raw results:
+[`proxy_load_uvicorn.json`](results/proxy_load_uvicorn.json),
+[`..._workers4.json`](results/proxy_load_uvicorn_workers4.json),
+[`proxy_load_stream_uvicorn.json`](results/proxy_load_stream_uvicorn.json).
+31,991 requests in all, every answer correct, no leaks, audit chains intact,
+52-57 MB per process. Requests per second, 8 clients:
+
+| Request | Standard, 1 worker | uvicorn, 1 worker | Standard, 4 workers | uvicorn, 4 workers |
+|---|---:|---:|---:|---:|
+| One customer record (0.3 KB) | 316 | 291 | 757 | 526 |
+| 20 records (5.1 KB) | 42.5 | 44.8 | 139 | 110 |
+| 200 records (50.9 KB) | 4.9 | 2.4-4.2 | 15.2 | 11.0 |
+| Streamed, 20 records (pieces/s) | 8,154 | 9,878 | | |
+| Streamed, 1,000 records, 32 clients (pieces/s) | 8,997 | 9,594 | | |
+
+With one worker the two servers are alike: detection is the limit. With four
+workers uvicorn handles 70-80% of the standard server's requests on this
+laptop, as each request passes between uvicorn's event loop and a thread.
+Streamed answers are slightly faster on uvicorn, which sends whatever pieces
+have arrived as one write. With a real model, whose seconds per answer
+dominate, the difference does not show; what uvicorn adds is a production
+HTTP layer, a limit on requests in progress, and noticing at once a client
+that leaves.
+
+Two findings from these runs went into the uvicorn server: handing each
+streamed piece to the event loop separately halved streaming throughput (and
+the heaviest run timed out), fixed by reading the endpoint in one thread and
+sending whatever has queued up together; and reading the request body from
+the request's thread cost a second hand-over, fixed by reading it on the
+event loop once the client's key checks out.
+
 ## BigQuery sampling cost
 
 [`bigquery_tablesample_cost.py`](bigquery_tablesample_cost.py) measures

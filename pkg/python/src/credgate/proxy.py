@@ -38,7 +38,17 @@ Answers stream as the model writes them (``"stream": true``; Ollama streams
 unless told not to). Tokens are put back as they arrive: a piece of text that
 could still be the start of a token is held back until it is complete.
 
-Only the Python standard library is used.
+Two servers:
+
+- **standard** (default): the Python standard library only - nothing to
+  install, for one person on their own machine.
+- **uvicorn** (``server="uvicorn"``; ``pip install 'credgate[server]'``): a
+  production HTTP server (BSD-3-licensed) for a shared proxy: keep-alive,
+  a limit on requests in progress (``concurrency``; more get ``503``), and a
+  client that leaves is noticed even while the model is still thinking.
+
+Both run the same code for everything else - policy, audit, streaming - and
+the same tests.
 """
 
 from __future__ import annotations
@@ -53,6 +63,7 @@ import os
 import re
 import secrets
 import signal
+import socket
 import ssl
 import sys
 import threading
@@ -107,6 +118,10 @@ class ProxyConfig:
         default_endpoint: The endpoint for models asked for without one (no
             ``<endpoint>/``), e.g. ``claude`` so that Claude Code works with
             its own model names.
+        server: ``"standard"`` (the Python standard library) or ``"uvicorn"``
+            (production HTTP server; needs ``credgate[server]``).
+        concurrency: With uvicorn, the requests one worker handles at once;
+            more are answered ``503`` so a load balancer can try elsewhere.
         drain_seconds: On SIGTERM, how long to keep serving while reporting
             "draining" on ``/healthz``, so a load balancer stops routing here;
             then requests in progress are finished and the proxy exits.
@@ -127,6 +142,8 @@ class ProxyConfig:
     audit_rotate: bool = True
     audit_retention_years: int = 5
     default_endpoint: str | None = None
+    server: str = "standard"
+    concurrency: int = 256
     _users: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -148,6 +165,17 @@ class ProxyConfig:
             raise ValueError(
                 "`audit_retention_years` must be at least 1 (or 0 to keep everything)."
             )
+        if self.server not in ("standard", "uvicorn"):
+            raise ValueError('`server` must be "standard" or "uvicorn".')
+        if self.server == "uvicorn":
+            try:
+                import uvicorn  # noqa: F401
+            except ImportError:
+                raise ValueError(
+                    "The uvicorn server needs uvicorn: pip install 'credgate[server]'."
+                ) from None
+        if not 1 <= self.concurrency <= 100_000:
+            raise ValueError("`concurrency` must be between 1 and 100000.")
         if not 1 <= self.workers <= 64:
             raise ValueError("`workers` must be between 1 and 64.")
         if self.workers > 1 and not hasattr(os, "fork"):
@@ -171,28 +199,44 @@ def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
     mode = "shared" if config.keys else "localhost"
     host, port = server.server_address[:2]
     (log or _stderr)(
-        f"credgate proxy ({mode} mode, {config.workers} worker(s)) on {scheme}://{host}:{port}/v1"
+        f"credgate proxy ({mode} mode, {config.server} server, {config.workers} worker(s)) "
+        f"on {scheme}://{host}:{port}/v1"
         f" - policy {config.policy.id} revision {config.policy.revision}, audit log {config.audit}"
     )
     # Workers share the listening socket; each request is self-contained, and
     # the audit log takes concurrent writers.
     parent = os.getpid()
-    children = []
+    children: list[int] = []
+    uvicorn = config.server == "uvicorn"
     for _ in range(config.workers - 1):
         pid = os.fork()
         if pid == 0:
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-            signal.signal(signal.SIGTERM, lambda *_: _drain(server, config.drain_seconds))
+            if not uvicorn:  # uvicorn handles its signals (and the drain) itself
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
+                signal.signal(signal.SIGTERM, lambda *_: _drain(server, config.drain_seconds))
             threading.Thread(target=_exit_with_parent, args=(parent,), daemon=True).start()
             try:
                 server.serve_forever()
-                _wait_for_requests(config.timeout)
+                if not uvicorn:
+                    _wait_for_requests(config.timeout)
             finally:
                 os._exit(0)
         children.append(pid)
 
     if config.audit_rotate and config.audit_retention_years:
         threading.Thread(target=_retention, args=(config, log or _stderr), daemon=True).start()
+
+    if uvicorn:
+        # Signals reach the main process; each worker drains on its own.
+        server.server.on_signal = lambda sig: [_signal(pid, sig) for pid in children]
+        try:
+            server.serve_forever()
+        finally:
+            for pid in children:
+                with contextlib.suppress(OSError):
+                    os.waitpid(pid, 0)
+            server.server_close()
+        return
 
     def terminate(signum: int, frame: Any) -> None:
         for pid in children:
@@ -272,10 +316,13 @@ def _exit_with_parent(parent: int) -> None:
     os._exit(0)
 
 
-def make_server(
-    config: ProxyConfig, log: Callable[[str], Any] | None = None
-) -> ThreadingHTTPServer:
-    """The proxy's HTTP server, not yet serving (port 0 picks a free port)."""
+def make_server(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> Any:
+    """The proxy's HTTP server, not yet serving (port 0 picks a free port):
+    ``serve_forever()`` runs it, ``shutdown()`` stops it."""
+    if config.server == "uvicorn":
+        from ._proxy_asgi import UvicornServer
+
+        return UvicornServer(config, log or _stderr)
     attrs = {"config": config, "log": staticmethod(log or _stderr)}
     handler = type("CredgateProxyHandler", (_Handler,), attrs)
     server = _Server((config.host, config.port), handler)
@@ -353,94 +400,113 @@ class _ClientGone(Exception):
     """The client closed the connection while the answer was streaming."""
 
 
-class _Handler(BaseHTTPRequestHandler):
-    config: ProxyConfig
-    log: Callable[[str], Any]
-    protocol_version = "HTTP/1.1"
-    server_version = "credgate-proxy"
-    timeout = 120  # seconds a client may take to send its request
+class _Exchange:
+    """One request, whichever server received it: who sent it, where it goes,
+    what the policy does with it, and the answer - JSON, or pieces to stream.
+    ``read_body`` returns the request body (raising :class:`_ProxyError` if it
+    is missing or too large); it is called only once the client is known."""
 
-    def do_GET(self) -> None:
-        path = self.path.split("?", 1)[0].rstrip("/")
-        if path in ("/healthz", "/v1/healthz"):
-            self._health()
-            return
-        self._api = "ollama" if path.startswith("/api/") else "openai"
-        routes = {
-            "/v1/models": self._models,
-            "/api/tags": self._ollama_tags,
-            "/api/version": self._ollama_version,
-        }
-        self._handle(routes.get(path))
-
-    def _health(self) -> None:
-        """For load balancers: no key needed, nothing sensitive."""
-        policy: Policy = self.config.policy  # type: ignore[assignment]
-        draining = _DRAINING.is_set()
-        self._body_read = True
-        self._api = "openai"
-        self._send(
-            503 if draining else 200,
-            {
-                "status": "draining" if draining else "ok",
-                "policy": {"id": policy.id, "revision": policy.revision},
-            },
-        )
-
-    def do_POST(self) -> None:
-        path = self.path.split("?", 1)[0].rstrip("/")
+    def __init__(
+        self,
+        config: ProxyConfig,
+        method: str,
+        path: str,
+        headers: Any,
+        read_body: Callable[[], bytes],
+    ) -> None:
+        self.config = config
+        self.command = method
+        self.path = path
+        self.headers = headers
+        self._read_body = read_body
+        self._note = ""
+        route = path.split("?", 1)[0].rstrip("/")
+        self._route_path = route
         self._api = (
             "anthropic"
-            if path.startswith("/v1/messages")
+            if route.startswith("/v1/messages")
             else "ollama"
-            if path.startswith("/api/")
+            if route.startswith("/api/")
             else "openai"
         )
-        routes = {
-            "/v1/chat/completions": self._chat,
-            "/v1/messages": lambda user: self._messages(user, "/messages"),
-            "/v1/messages/count_tokens": lambda user: self._messages(
-                user, "/messages/count_tokens"
-            ),
-            "/api/chat": lambda user: self._ollama(user, "chat"),
-            "/api/generate": lambda user: self._ollama(user, "generate"),
-            "/api/show": self._ollama_show,
-        }
-        self._handle(routes.get(path))
+        request_id = headers.get("X-Request-ID", "") or ""
+        self.request_id = request_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", request_id) else ""
 
-    def _handle(self, handler: Callable[[str], tuple[int, Any, str]] | None) -> None:
-        started = time.monotonic()
-        user, status, note = "-", 500, ""
-        self._body_read = self.command == "GET"  # per request: connections are reused
-        self._note = ""
-        request_id = self.headers.get("X-Request-ID", "")
-        self._request_id = request_id if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", request_id) else ""
-        with _IN_FLIGHT_LOCK:
-            _IN_FLIGHT[0] += 1
+    def run(self) -> tuple[str, int, Any, str]:
+        """(user, status, payload, note); never raises: errors are answers."""
+        if self._route_path in ("/healthz", "/v1/healthz") and self.command == "GET":
+            return "-", *self._health()
+        routes: dict[str, Callable[[str], tuple[int, Any, str]]] = (
+            {
+                "/v1/models": self._models,
+                "/api/tags": self._ollama_tags,
+                "/api/version": self._ollama_version,
+            }
+            if self.command == "GET"
+            else {
+                "/v1/chat/completions": self._chat,
+                "/v1/messages": lambda user: self._messages(user, "/messages"),
+                "/v1/messages/count_tokens": lambda user: self._messages(
+                    user, "/messages/count_tokens"
+                ),
+                "/api/chat": lambda user: self._ollama(user, "chat"),
+                "/api/generate": lambda user: self._ollama(user, "generate"),
+                "/api/show": self._ollama_show,
+            }
+            if self.command == "POST"
+            else {}
+        )
+        user = "-"
         try:
             user = self._authenticate()
+            handler = routes.get(self._route_path)
             if handler is None:
                 raise _ProxyError(404, "not_found", f"Unknown path {self.path}.")
             status, payload, note = handler(user)
-            self._send(status, payload)
-            note = self._note or note
+            return user, status, payload, note
         except _ProxyError as e:
-            status, note = e.status, e.code + (f"({e.detail})" if e.detail else "")
-            self._send(e.status, _error(self._api, e.code, e.message))
+            note = e.code + (f"({e.detail})" if e.detail else "")
+            return user, e.status, _error(self._api, e.code, e.message), note
         except Exception as e:  # fail closed: never forward after an error
-            status, note = 500, "credgate_error"
-            self._send(
-                500,
-                _error(self._api, "credgate_error", f"credgate could not process the request: {e}"),
+            message = f"credgate could not process the request: {e}"
+            return user, 500, _error(self._api, "credgate_error", message), "credgate_error"
+
+    def _health(self) -> tuple[int, Any, str]:
+        """For load balancers: no key needed, nothing sensitive."""
+        policy: Policy = self.config.policy  # type: ignore[assignment]
+        draining = _DRAINING.is_set()
+        payload = {
+            "status": "draining" if draining else "ok",
+            "policy": {"id": policy.id, "revision": policy.revision},
+        }
+        return 503 if draining else 200, payload, ""
+
+    def pieces(self, live: _Live) -> Iterator[bytes]:
+        """A streamed answer's pieces. Once the first byte is sent the status
+        cannot change: an error that comes later ends the stream with an error
+        event in the API's own format (and is noted for the log)."""
+        sent = 0
+        try:
+            for piece in live.pieces:
+                sent += len(piece)
+                if sent > MAX_ANSWER:
+                    raise _ProxyError(502, "endpoint_error", "The endpoint answered too much.")
+                yield piece
+        except GeneratorExit:
+            raise
+        except _ProxyError as e:
+            self._note = e.code
+            yield _stream_error(self._api, e.code, e.message)
+        except (TimeoutError, OSError) as e:  # reading from the endpoint
+            self._note = "endpoint_unreachable"
+            yield _stream_error(
+                self._api, "endpoint_unreachable", f"The endpoint stopped answering: {e}"
             )
-        finally:
-            ms = round(1000 * (time.monotonic() - started))
-            # Never the request or answer text: who, where, outcome.
-            stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
-            rid = f" request-id={self._request_id}" if self._request_id else ""
-            self.log(f"{stamp} {user} {self.command} {self.path} {status} {note} {ms}ms{rid}")
-            with _IN_FLIGHT_LOCK:
-                _IN_FLIGHT[0] -= 1
+        except Exception as e:  # an answer credgate cannot read: end it, never pass it on
+            self._note = "endpoint_error"
+            yield _stream_error(
+                self._api, "endpoint_error", f"The endpoint's answer could not be read: {e}"
+            )
 
     def _authenticate(self) -> str:
         users = self.config._users
@@ -683,6 +749,63 @@ class _Handler(BaseHTTPRequestHandler):
         raise _ProxyError(502, "endpoint_unreachable", "No Ollama endpoint answered.")
 
     def _read_json(self) -> dict[str, Any]:
+        raw = self._read_body()
+        try:
+            body = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:
+            raise _ProxyError(400, "invalid_json", f"The body is not valid JSON: {e}") from None
+        if not isinstance(body, dict):
+            raise _ProxyError(400, "invalid_json", "The body must be a JSON object.")
+        return body
+
+
+def _log_line(
+    user: str, method: str, path: str, status: int, note: str, started: float, request_id: str
+) -> str:
+    """The proxy's own log line: who, where, outcome - never the text."""
+    ms = round(1000 * (time.monotonic() - started))
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+    rid = f" request-id={request_id}" if request_id else ""
+    return f"{stamp} {user} {method} {path} {status} {note} {ms}ms{rid}"
+
+
+class _Handler(BaseHTTPRequestHandler):
+    """The standard-library server's side of an exchange."""
+
+    config: ProxyConfig
+    log: Callable[[str], Any]
+    protocol_version = "HTTP/1.1"
+    server_version = "credgate-proxy"
+    timeout = 120  # seconds a client may take to send its request
+
+    def do_GET(self) -> None:
+        self._serve()
+
+    def do_POST(self) -> None:
+        self._serve()
+
+    def _serve(self) -> None:
+        started = time.monotonic()
+        self._body_read = self.command == "GET"  # per request: connections are reused
+        exchange = _Exchange(self.config, self.command, self.path, self.headers, self._read_raw)
+        self._request_id = exchange.request_id
+        with _IN_FLIGHT_LOCK:
+            _IN_FLIGHT[0] += 1
+        user, status, note = "-", 500, ""
+        try:
+            user, status, payload, note = exchange.run()
+            if isinstance(payload, _Live):
+                note = self._send_live(exchange, payload) or note
+            else:
+                self._send(status, payload)
+        finally:
+            self.log(
+                _log_line(user, self.command, self.path, status, note, started, exchange.request_id)
+            )
+            with _IN_FLIGHT_LOCK:
+                _IN_FLIGHT[0] -= 1
+
+    def _read_raw(self) -> bytes:
         if self.headers.get("Transfer-Encoding"):
             raise _ProxyError(411, "length_required", "Send the body with a Content-Length.")
         try:
@@ -699,18 +822,9 @@ class _Handler(BaseHTTPRequestHandler):
             raise _ProxyError(
                 400, "invalid_request", "The body is shorter than its Content-Length."
             )
-        try:
-            body = json.loads(raw)
-        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:
-            raise _ProxyError(400, "invalid_json", f"The body is not valid JSON: {e}") from None
-        if not isinstance(body, dict):
-            raise _ProxyError(400, "invalid_json", "The body must be a JSON object.")
-        return body
+        return raw
 
     def _send(self, status: int, payload: Any) -> None:
-        if isinstance(payload, _Live):
-            self._send_live(payload)
-            return
         data = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -728,49 +842,25 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.close_connection = True
 
-    def _send_live(self, live: _Live) -> None:
-        """Pieces of the answer as they arrive, in chunked encoding. Once the
-        first byte is sent the status cannot change: an error that comes later
-        ends the stream with an error event in the API's own format."""
+    def _send_live(self, exchange: _Exchange, live: _Live) -> str:
+        """Pieces of the answer as they arrive, in chunked encoding; returns
+        the note for the log."""
         self.send_response(200)
         self.send_header("Content-Type", live.content_type)
         self.send_header("Transfer-Encoding", "chunked")
         self.send_header("X-Accel-Buffering", "no")  # nginx: pass pieces on at once
         self._common_headers(200)
         self.end_headers()
-        sent = 0
         try:
-            try:
-                for piece in live.pieces:
-                    sent += len(piece)
-                    if sent > MAX_ANSWER:
-                        raise _ProxyError(502, "endpoint_error", "The endpoint answered too much.")
-                    self._chunk(piece)
-            except _ClientGone:
-                raise
-            except _ProxyError as e:
-                self._note = e.code
-                self._chunk(_stream_error(self._api, e.code, e.message))
-            except (TimeoutError, OSError) as e:  # reading from the endpoint
-                self._note = "endpoint_unreachable"
-                self._chunk(
-                    _stream_error(
-                        self._api, "endpoint_unreachable", f"The endpoint stopped answering: {e}"
-                    )
-                )
-            except Exception as e:  # an answer credgate cannot read: end it, never pass it on
-                self._note = "endpoint_error"
-                self._chunk(
-                    _stream_error(
-                        self._api, "endpoint_error", f"The endpoint's answer could not be read: {e}"
-                    )
-                )
+            for piece in exchange.pieces(live):
+                self._chunk(piece)
             self._chunk(b"", last=True)
         except _ClientGone:
-            self._note = "client_closed"  # the client went away: stop reading the endpoint
             self.close_connection = True
+            return "client_closed"  # the client went away: stop reading the endpoint
         finally:
             live.close()
+        return exchange._note
 
     def _chunk(self, data: bytes, last: bool = False) -> None:
         try:
@@ -1128,6 +1218,10 @@ class _Live:
     response: Any
 
     def close(self) -> None:
+        # Shut the connection down first: a read blocked in another thread
+        # wakes up at once (closing alone does not wake it on Linux).
+        with contextlib.suppress(Exception):
+            self.response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
         with contextlib.suppress(Exception):
             self.response.close()
 

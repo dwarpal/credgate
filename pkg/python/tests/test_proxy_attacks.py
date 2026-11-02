@@ -109,7 +109,7 @@ def _serve(handler):
 
 
 @pytest.fixture
-def env(tmp_path):
+def env(tmp_path, server_kind):
     Recorder.raw, Recorder.headers_seen = [], []
     servers = []
     ok, ok_url = _serve(Recorder)
@@ -149,6 +149,7 @@ def env(tmp_path):
 
     def start(**kwargs):
         kwargs.setdefault("audit", tmp_path / "audit.jsonl")
+        kwargs.setdefault("server", server_kind)
         config = ProxyConfig(policy=policy, port=0, **kwargs)
         server = make_server(config, log=lambda line: None)
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -389,7 +390,7 @@ def _raw_http(port, data, shutdown_write=False):
         return b"".join(chunks)
 
 
-def test_chunked_and_lying_lengths(env):
+def test_chunked_and_lying_lengths(env, server_kind):
     _, port = env()
     body = json.dumps(chat(f"PAN {PAN}")).encode()
     chunked = (
@@ -400,11 +401,20 @@ def test_chunked_and_lying_lengths(env):
         + body
         + b"\r\n0\r\n\r\n"
     )
-    assert _raw_http(port, chunked).startswith(b"HTTP/1.1 411")
+    if server_kind == "standard":
+        # The standard library cannot read chunked bodies: refused.
+        assert _raw_http(port, chunked).startswith(b"HTTP/1.1 411")
+    else:
+        # uvicorn reads them properly: governed like any other request.
+        assert _raw_http(port, chunked).startswith(b"HTTP/1.1 200")
+        assert all(PAN.encode() not in raw for raw in Recorder.raw)
+        Recorder.raw.clear()
     bad = b"POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: ten\r\n\r\n"
     assert _raw_http(port, bad).startswith(b"HTTP/1.1 400")
     short = b"POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 999\r\n\r\n" + body
-    assert _raw_http(port, short, shutdown_write=True).startswith(b"HTTP/1.1 400")
+    answer = _raw_http(port, short, shutdown_write=True)
+    # Refused (standard) or the connection dropped (uvicorn): never forwarded.
+    assert answer.startswith(b"HTTP/1.1 400") or (server_kind == "uvicorn" and answer == b"")
     assert Recorder.raw == []
 
 
@@ -429,7 +439,7 @@ def test_no_request_smuggling_after_a_rejected_request(env, tmp_path):
     answer = _raw_http(port, first)
     assert answer.startswith(b"HTTP/1.1 401")
     assert answer.count(b"HTTP/1.1") == 1  # the hidden request was never answered
-    assert b"Connection: close" in answer
+    assert b"connection: close" in answer.lower()
     assert Recorder.raw == []
 
 

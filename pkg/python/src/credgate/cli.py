@@ -103,6 +103,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="remove monthly audit files older than this (min 1; 0 keeps all; default 5)",
     )
     ps.add_argument(
+        "--server",
+        choices=["standard", "uvicorn"],
+        default="standard",
+        help="HTTP server: standard library (default) or uvicorn (needs credgate[server])",
+    )
+    ps.add_argument(
+        "--concurrency",
+        type=int,
+        default=256,
+        help="uvicorn: requests one worker handles at once; more get 503 (default 256)",
+    )
+    ps.add_argument(
         "--default-endpoint",
         help="endpoint for models asked for without one (e.g. claude, for Claude Code)",
     )
@@ -157,6 +169,8 @@ def _proxy(args: argparse.Namespace) -> int:
             workers=args.workers,
             drain_seconds=args.drain_seconds,
             default_endpoint=args.default_endpoint,
+            server=args.server,
+            concurrency=args.concurrency,
             audit_rotate=not args.no_audit_rotate,
             audit_retention_years=args.audit_retention_years,
         )

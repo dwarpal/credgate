@@ -77,6 +77,35 @@ The keys file holds only hashes of the keys. Use TLS (`--certfile`,
 `--keyfile`) or put the proxy behind the organisation's TLS-terminating
 reverse proxy.
 
+## Choose the server
+
+The proxy runs on one of two HTTP servers, with the same code for
+everything else (policy, audit, streaming) and the same tests:
+
+| | `--server standard` (default) | `--server uvicorn` |
+|---|---|---|
+| For | one person, on their own machine | a shared proxy for a team |
+| Needs | nothing: the Python standard library | `pip install 'credgate[server]'` |
+| HTTP | Python's `http.server`, hardened by credgate | [uvicorn](https://www.uvicorn.org) (BSD-3), a production server |
+| Requests in progress | unlimited | `--concurrency` per worker (default 256); more get `503` with `Retry-After` |
+| A client that leaves | noticed at the next piece of the answer | noticed at once, even while the model is still thinking |
+| Request bodies | `Content-Length` only | `Content-Length` or chunked |
+
+Python's own documentation does not recommend `http.server` for
+production, so run shared proxies on uvicorn:
+
+```sh
+pip install 'credgate[server]'
+credgate proxy serve --server uvicorn --workers 4 --policy bank-default.yaml \
+  --audit /var/log/credgate/audit.jsonl --host 0.0.0.0 --keys keys.json \
+  --certfile proxy.pem --keyfile proxy.key
+```
+
+`credgate[server]` adds uvicorn and its parsers (httptools, uvloop), all
+BSD-3 or MIT licensed. For a proxy reachable from outside a trusted network,
+put a reverse proxy such as nginx (BSD-2), Envoy or Caddy (Apache-2.0) in
+front for TLS and slow-client protection, as is usual for any Python server.
+
 ## Point tools at it
 
 Clients ask for a model as `<endpoint>/<model>`:
@@ -184,6 +213,11 @@ each (Linux and macOS). Measured on a 4-core 2019 laptop
 | 20 records (5 KB) | 42 requests/s | 139 requests/s |
 | 200 records (51 KB) | 5 requests/s | 15 requests/s |
 
+On uvicorn (`--server uvicorn`) one worker handles about the same; with
+four workers about 70-80% of the requests of the standard server, and
+streamed answers slightly faster
+([details](https://github.com/dwarpal/credgate/blob/main/benchmark/README.md#on-uvicorn)).
+
 Streamed answers: one worker passes on about 9,000 pieces per second -
 roughly 100-300 answers streaming at once at a real model's pace - and the
 first piece of a short answer arrives about 4 ms after the model sends it.
@@ -206,6 +240,9 @@ take any request: no sticky sessions, no shared state.
   `/healthz` while it keeps serving for `--drain-seconds` (default 5; set it
   above the balancer's health-check interval), then stops accepting and
   finishes the requests in progress. Ctrl-C stops at once.
+- **Overload**: on uvicorn, a worker with `--concurrency` requests in
+  progress answers further ones `503` at once, with `Retry-After: 1`, so
+  the balancer can send them elsewhere; `/healthz` is always answered.
 - **Tracing**: an `X-Request-ID` header from the balancer is written to the
   proxy's log line and returned.
 - **TLS**: terminate it at the balancer, or give each instance

@@ -32,6 +32,7 @@ class FakeEverything(BaseHTTPRequestHandler):
     stopped: ClassVar[threading.Event] = threading.Event()
     garbage_after: ClassVar[int | None] = None  # send something unreadable after this many
     reset_after: ClassVar[int | None] = None  # drop the connection after this many
+    first_delay: ClassVar[float] = 0.0  # the model "thinking" before its first piece
 
     def do_GET(self):
         if self.path == "/api/tags":
@@ -144,6 +145,8 @@ class FakeEverything(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Connection", "close")
         self.end_headers()
+        self.wfile.flush()
+        time.sleep(type(self).first_delay)
         try:
             for i, part in enumerate(parts):
                 if type(self).stall_after is not None and i >= type(self).stall_after:
@@ -211,6 +214,7 @@ def upstream():
     FakeEverything.stopped = threading.Event()
     FakeEverything.garbage_after = None
     FakeEverything.reset_after = None
+    FakeEverything.first_delay = 0.0
     server = _start(ThreadingHTTPServer(("127.0.0.1", 0), FakeEverything))
     yield f"http://127.0.0.1:{server.server_address[1]}/v1"
     server.shutdown()
@@ -252,10 +256,11 @@ def _policy(url):
 
 
 @pytest.fixture
-def proxy(upstream, tmp_path):
+def proxy(upstream, tmp_path, server_kind):
     servers = []
 
     def start(**kwargs):
+        kwargs.setdefault("server", server_kind)
         config = ProxyConfig(
             policy=_policy(upstream), audit=tmp_path / "audit.jsonl", port=0, **kwargs
         )
@@ -850,3 +855,57 @@ def test_an_endpoint_that_drops_mid_answer_is_not_mistaken_for_the_client(proxy)
     # an abrupt reset reads as an error or as the end of the answer; either
     # way the stream ends properly and the client is not blamed
     assert not any("client_closed" in line for line in server.log_lines)
+
+
+# --- uvicorn: what only a production server does ---------------------------------------
+
+
+def _stream_request(base, model="local/m", text="hello"):
+    host, port = base.removeprefix("http://").split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=30)
+    body = {"model": model, "stream": True, "messages": [{"role": "user", "content": text}]}
+    conn.request(
+        "POST", "/v1/chat/completions", json.dumps(body), {"Content-Type": "application/json"}
+    )
+    return conn, conn.getresponse()
+
+
+def test_uvicorn_notices_a_client_that_leaves_while_the_model_thinks(proxy, server_kind):
+    if server_kind != "uvicorn":
+        pytest.skip("the standard server notices at the next piece")
+    FakeEverything.first_delay = 4
+    base, server = proxy()
+    conn, response = _stream_request(base)
+    assert response.status == 200
+    time.sleep(0.3)
+    left = time.monotonic()
+    response.close()
+    conn.close()
+    assert _logged(server, "client_closed", seconds=3)
+    assert time.monotonic() - left < 2  # not after the model's 4 seconds
+
+
+def test_uvicorn_limits_requests_in_progress(proxy, server_kind):
+    if server_kind != "uvicorn":
+        pytest.skip("uvicorn only")
+    FakeEverything.first_delay = 2
+    base, _ = proxy(concurrency=2)
+    results = []
+
+    def one():
+        try:
+            conn, response = _stream_request(base)
+            results.append(response.status)
+            response.read()
+            conn.close()
+        except Exception as e:  # pragma: no cover - reported below
+            results.append(repr(e))
+
+    threads = [threading.Thread(target=one) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(20)
+    assert sorted(results).count(200) >= 1
+    assert 503 in results  # more than allowed at once: refused, so a balancer can retry
+    assert set(results) <= {200, 503}, results

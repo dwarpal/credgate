@@ -124,8 +124,9 @@ def _policy(url):
 
 
 @pytest.fixture
-def proxy(upstream, tmp_path):
+def proxy(upstream, tmp_path, server_kind):
     def start(**kwargs):
+        kwargs.setdefault("server", server_kind)
         config = ProxyConfig(
             policy=_policy(upstream), audit=tmp_path / "audit.jsonl", port=0, **kwargs
         )
@@ -306,7 +307,7 @@ def test_shared_mode_needs_keys_and_records_users(proxy, upstream, tmp_path, cap
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="workers need fork")
-def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path):
+def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path, server_kind):
     import os
     import signal
     import socket
@@ -348,6 +349,8 @@ def test_worker_processes_serve_together_and_stop_together(upstream, tmp_path):
             str(port),
             "--workers",
             "3",
+            "--server",
+            server_kind,
         ],
         env=env,
         stderr=subprocess.DEVNULL,
@@ -415,7 +418,7 @@ class SlowModel(FakeModel):
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="workers need fork")
-def test_sigterm_drains_for_load_balancers(tmp_path):
+def test_sigterm_drains_for_load_balancers(tmp_path, server_kind):
     import os
     import signal
     import socket
@@ -463,6 +466,8 @@ def test_sigterm_drains_for_load_balancers(tmp_path):
             "2",
             "--drain-seconds",
             "1",
+            "--server",
+            server_kind,
         ],
         env=dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path)),
         stderr=subprocess.DEVNULL,

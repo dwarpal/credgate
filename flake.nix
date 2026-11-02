@@ -40,7 +40,9 @@
           dependencies = with python3Packages; [ regex pyyaml ];
           # PyNaCl (saved vaults) on 3.12+: in nixpkgs 26.05 its docs need a
           # Sphinx that no longer supports 3.11. The vault tests skip without it.
-          nativeCheckInputs = [ python3Packages.pytestCheckHook ]
+          # uvicorn (credgate[server]) on every Python: every proxy test also
+          # runs on it.
+          nativeCheckInputs = [ python3Packages.pytestCheckHook python3Packages.uvicorn python3Packages.httptools ]
             ++ nixpkgs.lib.optional (python3Packages.pythonAtLeast "3.12") python3Packages.pynacl
             # Integrations, where nixpkgs has them prebuilt (3.13+; Arrow and
             # DuckDB are marked broken on x86_64-darwin). Their tests skip

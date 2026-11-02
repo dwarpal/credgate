@@ -27,6 +27,17 @@
   - In localhost mode, a client's own key goes on to endpoints the proxy
     holds no key for. Shared mode never passes client keys on.
   - Clients authenticate with `Authorization: Bearer` or `x-api-key`.
+- The proxy can run on **uvicorn**, a production HTTP server (BSD-3):
+  `credgate proxy serve --server uvicorn`, with `pip install
+  'credgate[server]'` (uvicorn, httptools and uvloop; all BSD-3 or MIT).
+  Policy, audit and streaming are the same code on both servers, and every
+  proxy test runs on both.
+  - `--concurrency` limits requests in progress per worker (default 256).
+    More get `503` with `Retry-After`; health checks are never refused.
+  - A client that leaves is noticed even while the model is still thinking.
+  - Chunked request bodies are read.
+  - Workers and the load-balancer drain work as on the standard server.
+  The standard-library server stays the default, with nothing to install.
 
 - Audit log rotation and retention: with rotation, each month's records go
   to their own file (`<stem>.YYYY-MM.jsonl`) and the hash chain runs on

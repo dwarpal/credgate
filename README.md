@@ -374,6 +374,7 @@ remotes::install_github("dwarpal/credgate", subdir = "pkg/credgate")
 
 ```sh
 pip install credgate
+pip install 'credgate[server]'   # the proxy on uvicorn, for a shared proxy
 ```
 
 ## Accuracy, and how it compares

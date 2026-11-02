@@ -18,6 +18,7 @@ the original. After each run the audit chain is verified.
     python benchmark/proxy_load.py --quick              # a short check
     python benchmark/proxy_load.py --workers 4          # proxy worker processes
     python benchmark/proxy_load.py --stream             # answers streamed in pieces
+    python benchmark/proxy_load.py --server uvicorn     # the production server
 
 With ``--stream`` the endpoint streams its echo in 8-character pieces (one
 event each, as models do), every token is split across pieces, and the time
@@ -251,9 +252,12 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=1, help="proxy worker processes")
     parser.add_argument("--quick", action="store_true", help="a short check")
     parser.add_argument("--stream", action="store_true", help="streamed answers")
+    parser.add_argument("--server", default="standard", choices=["standard", "uvicorn"])
     parser.add_argument("--out", default=None, help="results file (JSON)")
     args = parser.parse_args()
-    name = "proxy_load_stream" if args.stream else "proxy_load"
+    name = "proxy_load" + ("_stream" if args.stream else "")
+    name += "" if args.server == "standard" else f"_{args.server}"
+    name += f"_workers{args.workers}" if args.workers > 1 else ""
     args.out = args.out or str(ROOT / "benchmark" / "results" / f"{name}.json")
     sizes = {"20 records": 20} if args.quick else SIZES
     concurrency = [1, 8] if args.quick else CONCURRENCY
@@ -297,6 +301,7 @@ def main() -> None:
     ]
     if args.workers > 1:
         command += ["--workers", str(args.workers)]
+    command += ["--server", args.server]
     proxy = subprocess.Popen(command, env=env, stderr=subprocess.DEVNULL)
     wait_for(proxy_port)
 
@@ -365,6 +370,7 @@ def main() -> None:
         "credgate": credgate.__version__,
         "proxy_workers": args.workers,
         "streaming": args.stream,
+        "server": args.server,
         "seconds_per_run": seconds,
         "audit_records": check.records,
         "audit_chain_intact": check.ok,
