@@ -101,7 +101,6 @@ class AuditLog:
             when = (time or datetime.now(UTC)).astimezone(UTC)
             stamp = when.strftime("%Y-%m-%dT%H:%M:%S.") + f"{when.microsecond // 1000:03d}Z"
             size = os.fstat(f.fileno()).st_size
-            last = _last_line(self.path) if size else None
             first_month = _month(_first_line(self.path)) if size else None
             if self.rotate and first_month is not None and stamp[:7] > first_month:
                 segment = _segment_path(self.path, first_month)
@@ -111,8 +110,10 @@ class AuditLog:
                 old, f = f, _open_active(self.path)
                 _unlock(old)
                 old.close()
-            elif last is None:
-                last = _predecessor(self.path)
+                # A writer that arrived between the rename and our lock may
+                # already have written to the new file: number after it.
+                size = os.fstat(f.fileno()).st_size
+            last = _last_line(self.path) if size else _predecessor(self.path)
             if last is None:
                 seq, prev = 1, _GENESIS
             elif isinstance(last, tuple):  # everything before was pruned

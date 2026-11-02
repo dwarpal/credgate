@@ -175,11 +175,26 @@ def test_pruning_is_careful(tmp_path):
 
 
 def _writer(args):
-    path, barrier = args
+    import os
+    import random
+    import time
+
+    path, barrier, seed = args
+    # Widen the moment between moving the full month away and creating the
+    # new file, and let some writers arrive in it: they must not number their
+    # records as if the other were not there (this process only).
+    rename = os.rename
+
+    def slow_rename(a, b):
+        rename(a, b)
+        time.sleep(0.05)
+
+    os.rename = slow_rename
     log = credgate.AuditLog(path, rotate=True)
     for _ in range(20):
         log.record(DECISION, time=_at(2026, 10, 15))
     barrier.wait()
+    time.sleep(random.Random(seed).random() * 0.1)
     for _ in range(20):
         log.record(DECISION, time=_at(2026, 11, 15))
 
@@ -191,7 +206,7 @@ def test_several_processes_rotate_safely(tmp_path):
     path = tmp_path / "audit.jsonl"
     barrier = ctx.Manager().Barrier(4)
     with ctx.Pool(4) as pool:
-        pool.map(_writer, [(path, barrier)] * 4)
+        pool.map(_writer, [(path, barrier, seed) for seed in range(4)])
     check = credgate.audit_verify(path)
     assert check.ok
     assert check.records == 160
