@@ -8,7 +8,10 @@
   recorded in the audit log; tokenised values are restored in the answer
   (never in tool calls). Localhost mode by default; shared mode with
   per-user keys (`credgate proxy add-user`) and TLS. Fails closed, refuses
-  content it cannot check, keeps endpoint keys from clients. Standard
+  content it cannot check, keeps endpoint keys from clients. Every value
+  in a request is checked (not just messages), redirects are not followed,
+  and an attack test suite with a leak oracle covers hidden fields,
+  obfuscation, hostile HTTP and endpoints, and concurrency. Standard
   library only. See docs/proxy.md.
 - Whole-database inventories: `inventory_database()` scans every table of a
   database through a connection (SQLAlchemy in Python, DBI in R): Postgres,

@@ -44,6 +44,7 @@ import ssl
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -56,6 +57,7 @@ from .policy import Policy
 from .tokenise import Vault, restore
 
 MAX_BODY = 20 * 1024 * 1024
+MAX_ANSWER = 50 * 1024 * 1024
 _KEY_PREFIX = "cgk_"
 
 
@@ -111,6 +113,9 @@ class ProxyConfig:
         if self.token_key is None:
             self.token_key = os.environ.get("CREDGATE_TOKEN_KEY") or secrets.token_bytes(32)
         Vault(self.token_key)  # validates the key now, not on the first request
+        for name, dest in self.policy.destinations.items():
+            if dest.url and urllib.parse.urlsplit(dest.url).scheme not in ("http", "https"):
+                raise ValueError(f"Endpoint {name!r}: the URL must be http:// or https://.")
 
 
 def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
@@ -200,6 +205,7 @@ class _Handler(BaseHTTPRequestHandler):
     log: Callable[[str], Any]
     protocol_version = "HTTP/1.1"
     server_version = "credgate-proxy"
+    timeout = 120  # seconds a client may take to send its request
 
     def do_GET(self) -> None:
         self._handle(self._models if self.path.rstrip("/") == "/v1/models" else None)
@@ -211,6 +217,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _handle(self, handler: Callable[[str], tuple[int, Any, str]] | None) -> None:
         started = time.monotonic()
         user, status, note = "-", 500, ""
+        self._body_read = self.command == "GET"  # per request: connections are reused
         try:
             user = self._authenticate()
             if handler is None:
@@ -267,6 +274,8 @@ class _Handler(BaseHTTPRequestHandler):
                 'Ask for a model as "<endpoint>/<model>", e.g. "vllm-gpu/llama-3.1-70b".',
             )
         destination, _, upstream_model = model.partition("/")
+        if not destination or not upstream_model:
+            raise _ProxyError(400, "invalid_model", 'Ask for a model as "<endpoint>/<model>".')
         policy: Policy = self.config.policy  # type: ignore[assignment]
         dest = policy.destinations.get(destination)
         if dest is None:
@@ -313,15 +322,26 @@ class _Handler(BaseHTTPRequestHandler):
         return 200, answer, ""
 
     def _read_json(self) -> dict[str, Any]:
-        length = int(self.headers.get("Content-Length") or 0)
+        if self.headers.get("Transfer-Encoding"):
+            raise _ProxyError(411, "length_required", "Send the body with a Content-Length.")
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise _ProxyError(400, "invalid_request", "Invalid Content-Length.") from None
         if length <= 0 or length > MAX_BODY:
             raise _ProxyError(
                 413 if length > MAX_BODY else 400, "invalid_request", "Missing or too large body."
             )
+        raw = self.rfile.read(length)
+        self._body_read = True
+        if len(raw) < length:
+            raise _ProxyError(
+                400, "invalid_request", "The body is shorter than its Content-Length."
+            )
         try:
-            body = json.loads(self.rfile.read(length))
-        except json.JSONDecodeError as e:
-            raise _ProxyError(400, "invalid_json", f"The body is not JSON: {e}") from None
+            body = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:
+            raise _ProxyError(400, "invalid_json", f"The body is not valid JSON: {e}") from None
         if not isinstance(body, dict):
             raise _ProxyError(400, "invalid_json", "The body must be a JSON object.")
         return body
@@ -337,6 +357,10 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        if status >= 400 or not self._body_read:
+            # Never read leftover bytes of a rejected request as a new one.
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
         self.wfile.write(data)
 
@@ -351,39 +375,134 @@ def _os_user() -> str:
         return "unknown"
 
 
+# Values that must reach the endpoint exactly as sent: they name things or
+# set behaviour, and never carry free text.
+_STRUCTURAL = {
+    "model",
+    "role",
+    "type",
+    "id",
+    "tool_call_id",
+    "object",
+    "finish_reason",
+    "format",
+    "detail",
+    "service_tier",
+    "reasoning_effort",
+    "voice",
+    "modalities",
+    "parallel_tool_calls",
+    "strict",
+}
+# Numeric settings, which are never personal data.
+_NUMERIC = {
+    "temperature",
+    "top_p",
+    "n",
+    "max_tokens",
+    "max_completion_tokens",
+    "presence_penalty",
+    "frequency_penalty",
+    "seed",
+    "top_logprobs",
+    "logprobs",
+    "top_k",
+    "min_p",
+    "repetition_penalty",
+}
+# Content parts credgate cannot check are refused, not forwarded.
+_TEXT_PARTS = {"text"}
+_MAX_DEPTH = 64
+
+
 def _text_slots(body: dict[str, Any]) -> list[tuple[Callable[[], str], Callable[[str], None]]]:
-    """Every piece of text in the messages that could carry personal data, as
-    (get, set) pairs: message contents (strings and text parts), and tool-call
-    arguments that earlier answers put in the conversation."""
+    """Every value in the request that could carry personal data, as (get, set)
+    pairs: all strings - message contents, tool results and arguments, names,
+    metadata, stop sequences, any field the proxy does not know - except
+    structural ones, and whole numbers of 6 digits or more (an Aadhaar number
+    can be sent as a number). Field names with personal data, and content
+    credgate cannot check (images, audio, files), are refused."""
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         raise _ProxyError(400, "invalid_request", "`messages` must be a non-empty list.")
-    slots = []
-
-    def slot(obj: dict[str, Any], key: str) -> None:
-        if isinstance(obj.get(key), str):
-            slots.append((lambda: obj[key], lambda v: obj.__setitem__(key, v)))
-
     for message in messages:
         if not isinstance(message, dict):
             raise _ProxyError(400, "invalid_request", "Each message must be an object.")
         content = message.get("content")
-        if isinstance(content, str):
-            slot(message, "content")
-        elif isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    slot(part, "text")
-                elif isinstance(part, dict) and part.get("type") != "text":
-                    raise _ProxyError(
-                        400,
-                        "unsupported_content",
-                        f"Content of type {part.get('type')!r} is not supported.",
+        if content is not None and not isinstance(content, (str, list)):
+            raise _ProxyError(
+                400, "unsupported_content", "Message content must be text or a list of parts."
+            )
+        for part in content if isinstance(content, list) else []:
+            if not (
+                isinstance(part, dict)
+                and part.get("type") in _TEXT_PARTS
+                and isinstance(part.get("text"), str)
+            ):
+                kind = part.get("type") if isinstance(part, dict) else type(part).__name__
+                raise _ProxyError(
+                    400,
+                    "unsupported_content",
+                    f"Content of type {kind!r} cannot be checked for personal data; not sent.",
+                )
+    modalities = body.get("modalities")
+    if isinstance(modalities, list) and "audio" in modalities:
+        raise _ProxyError(400, "unsupported_content", "Audio cannot be checked, so it is not sent.")
+
+    slots: list[tuple[Callable[[], str], Callable[[str], None]]] = []
+    keys: list[str] = []
+
+    def walk(obj: Any, key: str | None, parent: str | None, depth: int) -> None:
+        if depth > _MAX_DEPTH:
+            raise _ProxyError(400, "invalid_request", "The request is nested too deeply.")
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                keys.append(k)
+                if k == "logit_bias" or (k == "name" and key == "function"):
+                    continue  # token ids; function names must stay exact
+                if k in _STRUCTURAL and not isinstance(v, (dict, list)):
+                    continue
+                if isinstance(v, str):
+                    slots.append(
+                        (lambda o=obj, k=k: o[k], lambda t, o=obj, k=k: o.__setitem__(k, t))
                     )
-        for call in message.get("tool_calls") or []:
-            if isinstance(call, dict) and isinstance(call.get("function"), dict):
-                slot(call["function"], "arguments")
+                elif _number_like(v) and k not in _NUMERIC:
+                    slots.append((lambda o=obj, k=k: str(o[k]), _number_setter(obj, k)))
+                else:
+                    walk(v, k, key, depth + 1)
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                if isinstance(v, str) and key not in _STRUCTURAL:
+                    slots.append(
+                        (lambda o=obj, i=i: o[i], lambda t, o=obj, i=i: o.__setitem__(i, t))
+                    )
+                elif _number_like(v) and key not in _NUMERIC:
+                    slots.append((lambda o=obj, i=i: str(o[i]), _number_setter(obj, i)))
+                else:
+                    walk(v, key, parent, depth + 1)
+
+    walk(body, None, None, 0)
+    from .detect import detect_pii
+
+    if detect_pii(keys):
+        raise _ProxyError(
+            400,
+            "personal_data_in_field_name",
+            "A field name contains personal data; it is not sent.",
+        )
     return slots
+
+
+def _number_like(v: Any) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and abs(v) >= 100_000
+
+
+def _number_setter(obj: Any, k: Any) -> Callable[[str], None]:
+    def set_(text: str) -> None:
+        if text != str(obj[k]):  # redacted or tokenised: the number becomes text
+            obj[k] = text
+
+    return set_
 
 
 def _upstream_json(method: str, url: str, body: Any, destination: str, timeout: float) -> Any:
@@ -394,9 +513,21 @@ def _upstream_json(method: str, url: str, body: Any, destination: str, timeout: 
     data = None if body is None else json.dumps(body).encode()
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read())
+        with _OPENER.open(request, timeout=timeout) as response:
+            raw = response.read(MAX_ANSWER + 1)
+            if len(raw) > MAX_ANSWER:
+                raise _ProxyError(
+                    502, "endpoint_error", f"Endpoint {destination!r} answered too much."
+                )
+            return json.loads(raw)
     except urllib.error.HTTPError as e:
+        if 300 <= e.code < 400:
+            raise _ProxyError(
+                502,
+                "endpoint_redirect",
+                f"Endpoint {destination!r} redirected to {e.headers.get('Location')!r}; "
+                "the proxy does not follow redirects (set the final URL in the policy).",
+            ) from None
         detail = e.read()[:2000].decode("utf-8", "replace")
         raise _ProxyError(
             e.code if 400 <= e.code < 600 else 502,
@@ -407,6 +538,22 @@ def _upstream_json(method: str, url: str, body: Any, destination: str, timeout: 
         raise _ProxyError(
             502, "endpoint_unreachable", f"Endpoint {destination!r} unreachable: {e}"
         ) from None
+    except json.JSONDecodeError:
+        raise _ProxyError(
+            502, "endpoint_error", f"Endpoint {destination!r} did not answer JSON."
+        ) from None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Requests go only to the URL in the policy, never where a redirect points."""
+
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+# Only HTTP(S) and no redirects; proxies from the environment (HTTPS_PROXY,
+# NO_PROXY) are honoured, as an organisation's egress may need them.
+_OPENER = urllib.request.build_opener(_NoRedirect())
 
 
 @dataclass

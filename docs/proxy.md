@@ -91,10 +91,16 @@ Any tool with an "OpenAI-compatible base URL" setting works the same way.
    was sent (shared mode); otherwise `401`.
 2. **Where**: the endpoint named in `model`; an endpoint not in the policy is
    refused (`404`).
-3. **What**: every text the request carries - message contents, text parts,
-   tool results, and tool-call arguments from earlier turns - is checked
-   with the policy for that endpoint. Content credgate cannot read (images,
-   audio) is refused (`400`) rather than sent unchecked.
+3. **What**: every value in the request is checked with the policy for that
+   endpoint - message contents and text parts, tool results, tool-call
+   arguments from earlier turns, names, `metadata`, `user`, stop sequences,
+   tool and schema descriptions, and any field the proxy does not know -
+   except structural ones (`model`, `role`, `type`, ids, function names).
+   Whole numbers of 6 digits or more are checked too (an Aadhaar number can
+   be sent as a number); a numeric setting shaped like an identifier would
+   be redacted and the request fail, never leak. Requests with personal data
+   in a field name, content credgate cannot read (images, audio, files) or
+   unexpected shapes are refused (`400`) rather than sent unchecked.
 4. **Decision**: blocked requests get `403` with the rule that blocked them
    and are never forwarded; otherwise identifiers are redacted or tokenised
    as the policy says. Every decision, blocked or not, is written to the
@@ -104,12 +110,21 @@ Any tool with an "OpenAI-compatible base URL" setting works the same way.
    would run with real values). Streaming requests get the complete answer as
    one streamed message (token-by-token streaming comes in a later version).
 
-It fails closed: if anything goes wrong before the request is forwarded,
-nothing is sent and the client gets an error. The proxy's own log line per
+It fails closed: if anything goes wrong before the request is forwarded -
+including a failure to write the audit record - nothing is sent and the
+client gets an error. Requests go only to the URL in the policy (`http` or
+`https`): redirects are not followed. Bodies must have a `Content-Length`
+(at most 20 MB), connections are closed after any refused request, slow
+clients are dropped after 2 minutes, and answers above 50 MB are refused. The proxy's own log line per
 request has who, where, the status and the time taken - never the text.
 
 ## What it does not protect
 
+- **Deliberate evasion.** Someone determined to get data out can disguise
+  it (spelling a PAN with spaces between letters, splitting it across
+  messages, encoding it). Detection handles accidental variation (case,
+  invisible characters, full-width and Indic digits), not an insider trying
+  to evade it; network rules and the audit log address that.
 - **What detection misses.** The policy can only act on what credgate
   detects. Names without a cue ("Customer Priya Nair called", rather than
   "Name: Priya Nair") are often not detected and would be sent as they are.
