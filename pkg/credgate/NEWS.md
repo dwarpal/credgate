@@ -1,5 +1,8 @@
 # credgate (development version)
 
+* `cg_audit_log()` documents that one R process at a time should write a
+  given log: R has no file locks. Give each process its own file; Python
+  processes (such as the proxy's workers) can share one.
 * Policy editor: `policy_editor()` is a Shiny app for InfoSec to change a
   policy without editing YAML. It edits endpoints and rules (in order, since
   the first matching rule decides), tries sample text against the unsaved

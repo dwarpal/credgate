@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix: with audit rotation, a writer arriving just as another started the
+  new month's file could give its record the same sequence number as the
+  other's (seen once in CI with four processes; `audit_verify()` reported
+  it). After rotating, a writer now reads the new file before numbering.
 - Audit log rotation and retention: with rotation, each month's records go
   to their own file (`<stem>.YYYY-MM.jsonl`) and the hash chain runs on
   across files; `audit_verify()` and `audit_read()` cover all of them, and a
