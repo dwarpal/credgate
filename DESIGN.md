@@ -303,8 +303,9 @@ are built in dependency order, so nothing is built twice or retrofitted
 5. **Audit log** in the spec (done): one record per decision, keyed
    identifier hashes (never for card verification data), hash chain with a
    head to keep elsewhere, policy revision and endpoint per record; R and
-   Python write and verify the same files. Rotation and retention (default 5
-   years, minimum 1, on-premises) come with the proxy.
+   Python write and verify the same files. Monthly rotation with the chain
+   across files, and retention (default 5 years, minimum 1, on-premises),
+   are done; the proxy applies them by default.
 6. **Discovery at scale** (done): a shared inventory format; Spark
    (PySpark, sparklyr), BigQuery tables and datasets, and whole databases
    (SQLAlchemy, DBI), each sampled where the data lives.

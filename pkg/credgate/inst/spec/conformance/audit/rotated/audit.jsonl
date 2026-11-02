@@ -1,0 +1,1 @@
+{"v":1,"seq":9,"time":"2026-12-01T09:30:00.000Z","actor":"written-by-r","policy":{"id":"rotation","revision":1},"destination":{"name":"claude","tier":"frontier","provider":"anthropic"},"allowed":true,"blocked_by":[],"items":[{"type":"pan","action":"redact","rule":"redact-ids"}],"prev":"8b49fc21387c73f2042e0f93fc0ae4ba04cf0871fb0ce48f9a98251e6d8f3f3b"}

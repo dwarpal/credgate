@@ -357,3 +357,37 @@ for (case in conformance("database.yaml")$cases) {
     expect_equal(got$fetch, case$fetch)
   })
 }
+
+rotated <- audit_spec$rotated
+rotated_copy <- function() {
+  dir <- withr::local_tempdir(.local_envir = parent.frame())
+  src <- file.path(cg_spec_path(), "conformance", dirname(rotated$path))
+  file.copy(list.files(src, full.names = TRUE), dir)
+  file.path(dir, basename(rotated$path))
+}
+
+test_that("rotated audit log written by both verifies", {
+  skip_if_not_installed("openssl")
+  check <- audit_verify(rotated_copy())
+  expect_true(check$ok)
+  expect_identical(check$records, as.integer(rotated$records))
+  expect_identical(check$files, as.integer(rotated$files))
+  expect_identical(check$head, rotated$head)
+})
+
+for (case in rotated$tamper) {
+  test_that(paste("rotated audit log tampering detected:", case$id), {
+    skip_if_not_installed("openssl")
+    path <- rotated_copy()
+    dir <- dirname(path)
+    if (!is.null(case$delete)) unlink(file.path(dir, case$delete))
+    if (!is.null(case$rename)) file.rename(file.path(dir, case$rename[[1]]), file.path(dir, case$rename[[2]]))
+    if (!is.null(case$replace)) {
+      f <- file.path(dir, case$replace[[1]])
+      text <- readChar(f, file.size(f), useBytes = TRUE)
+      expect_true(grepl(case$replace[[2]], text, fixed = TRUE))
+      writeBin(charToRaw(sub(case$replace[[2]], case$replace[[3]], text, fixed = TRUE)), f)
+    }
+    expect_false(audit_verify(path)$ok)
+  })
+}

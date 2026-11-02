@@ -92,6 +92,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--workers", type=int, default=1, help="worker processes (one core each; Linux, macOS)"
     )
     ps.add_argument(
+        "--no-audit-rotate",
+        action="store_true",
+        help="keep one audit file (default: a new file each month)",
+    )
+    ps.add_argument(
+        "--audit-retention-years",
+        type=int,
+        default=5,
+        help="remove monthly audit files older than this (min 1; 0 keeps all; default 5)",
+    )
+    ps.add_argument(
         "--drain-seconds",
         type=float,
         default=5,
@@ -141,6 +152,8 @@ def _proxy(args: argparse.Namespace) -> int:
             timeout=args.timeout,
             workers=args.workers,
             drain_seconds=args.drain_seconds,
+            audit_rotate=not args.no_audit_rotate,
+            audit_retention_years=args.audit_retention_years,
         )
     except (ValueError, OSError) as e:
         print(f"credgate proxy: {e}", file=sys.stderr)

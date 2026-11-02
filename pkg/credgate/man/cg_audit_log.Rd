@@ -5,15 +5,18 @@
 \alias{audit_record}
 \alias{audit_verify}
 \alias{audit_read}
+\alias{audit_prune}
 \title{Audit log of policy decisions}
 \usage{
-cg_audit_log(path, key = NULL, actor = NULL)
+cg_audit_log(path, key = NULL, actor = NULL, rotate = FALSE)
 
-audit_record(log, decision)
+audit_record(log, decision, time = NULL)
 
 audit_verify(path)
 
 audit_read(path)
+
+audit_prune(path, keep_years = 5L, now = Sys.time())
 }
 \arguments{
 \item{path}{The log file (JSON Lines); created if missing.}
@@ -23,15 +26,24 @@ audit_read(path)
 
 \item{actor}{Who makes the requests; defaults to the operating-system user.}
 
+\item{rotate}{Start a new file each month (see Details).}
+
 \item{log}{A log from \code{cg_audit_log()}.}
 
 \item{decision}{A decision from \code{\link[=policy_decide]{policy_decide()}} or \code{\link[=policy_apply]{policy_apply()}}.}
+
+\item{time}{The record's time (\code{POSIXct}); defaults to now.}
+
+\item{keep_years}{Years to keep monthly files (at least 1).}
+
+\item{now}{The current time, for \code{audit_prune()}.}
 }
 \value{
 \code{cg_audit_log()}: a log. \code{audit_record()}: the record (a list),
 invisibly. \code{audit_verify()}: a list with \code{ok}, \code{records}, \code{head}, and for
 a broken log the failing \code{line} and the \code{error}. \code{audit_read()}: a data
 frame, one row per record, with the \code{items} as a list column.
+\code{audit_prune()}: the names of the removed files, invisibly.
 }
 \description{
 \code{cg_audit_log()} opens an append-only, hash-chained log; pass it to
@@ -48,6 +60,14 @@ involved. Card verification codes are never hashed.
 reordered; keep copies of the returned \code{head} elsewhere to detect records
 removed from the end. \code{audit_read()} returns the records. The same files
 are written and verified by the Python package. Needs the openssl package.
+
+With \code{rotate = TRUE} the log starts a new file each month (UTC): the active
+file at \code{path} is renamed \verb{<stem>.YYYY-MM.jsonl} when the first record of a
+new month arrives, and the chain continues in a new active file;
+\code{audit_verify()} and \code{audit_read()} cover all of them. \code{audit_prune()}
+removes monthly files older than the retention period (at least 1 year),
+only from the oldest end and only if the log verifies, and records them in
+\verb{<stem>.pruned.json}, from which the rest still verifies.
 }
 \examples{
 \dontshow{if (requireNamespace("openssl", quietly = TRUE)) withAutoprint(\{ # examplesIf}

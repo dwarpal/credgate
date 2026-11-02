@@ -34,3 +34,18 @@ tamper:
     - {id: swap-two-records, change: swap, at: 2, line: 2}
     - {id: edit-the-first-record, change: edit, at: 1, line: 2}
     - {id: insert-a-copy, change: duplicate, at: 2, line: 3}
+
+# A rotated log written by both implementations: Python wrote 2020-01,
+# 2026-09 and 2026-10 and pruned 2020-01 (audit.pruned.json); R continued
+# into 2026-11 and 2026-12, rotating it. It verifies as one chain; each
+# change below must make it fail.
+rotated:
+  path: audit/rotated/audit.jsonl
+  records: 7
+  files: 4
+  head: ca2e59e1c6190c355ade554399992ac2ac7bf39b61721100e5ed460c9df77579
+  tamper:
+    - {id: segment-deleted, delete: audit.2026-10.jsonl}
+    - {id: segment-renamed, rename: [audit.2026-11.jsonl, audit.2026-08.jsonl]}
+    - {id: anchor-altered, replace: [audit.pruned.json, '"last_seq": 2', '"last_seq": 1']}
+    - {id: record-edited, replace: [audit.2026-09.jsonl, '"allowed":true', '"allowed":false']}

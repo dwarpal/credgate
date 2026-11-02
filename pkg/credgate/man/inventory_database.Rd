@@ -51,8 +51,8 @@ table -> error message) and \code{skipped} (tables kept from an earlier run).
 \description{
 Scans every table of a database through a DBI connection and returns an
 inventory (see \code{\link[=pii_inventory]{pii_inventory()}}). Each table is sampled by the database
-where it can - Postgres and IBM Db2 with \verb{TABLESAMPLE SYSTEM}, DuckDB with
-\verb{USING SAMPLE} - and only the sample is read; other databases are read
+where it can - Postgres and IBM Db2 with \verb{TABLESAMPLE SYSTEM}, DuckDB with a
+reservoir sample - and only the sample is read; other databases are read
 from their first rows, and the inventory says so (\code{sample_method}
 \code{"first-rows"}). Only text and number columns are read. The rules are
 shared with the Python package (\code{credgate.database}; see the spec's

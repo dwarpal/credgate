@@ -156,6 +156,10 @@ take any request: no sticky sessions, no shared state.
   `--certfile`/`--keyfile`.
 - **Shared mode**: instances listen on a network address, so each needs the
   keys file; share the same keys file and policy.
+- **Audit retention**: the proxy starts a new audit file each month
+  (`audit.2026-11.jsonl`, ...; one chain across them) and removes months
+  older than `--audit-retention-years` (default 5, at least 1; 0 keeps all)
+  at start and once a day. `--no-audit-rotate` keeps one file.
 - **Audit logs**: one file per instance (for example
   `--audit /var/log/credgate/audit-$(hostname).jsonl`). Concurrent writers
   are safe on a local disk, but file locking is unreliable on network file

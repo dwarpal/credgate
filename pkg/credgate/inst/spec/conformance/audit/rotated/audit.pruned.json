@@ -1,0 +1,15 @@
+{
+ "credgate_audit_pruned": 1,
+ "segments": [
+  {
+   "name": "audit.2020-01.jsonl",
+   "first_seq": 1,
+   "last_seq": 2,
+   "first_time": "2020-01-01T09:30:00.000Z",
+   "last_time": "2020-01-02T09:30:00.000Z",
+   "head": "a0d829b1e57a4d1207963431ce9de71e992b352aa9725b6ef3b49d358ee0706e"
+  }
+ ],
+ "last_seq": 2,
+ "head": "a0d829b1e57a4d1207963431ce9de71e992b352aa9725b6ef3b49d358ee0706e"
+}

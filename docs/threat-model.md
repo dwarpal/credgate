@@ -150,9 +150,12 @@ control, which is why redaction happens *before* the request leaves.
 
 Each record contains the hash of the previous one, so editing, deleting,
 inserting or reordering records is detected by `audit_verify()`; records
-carry the policy revision and rule that decided them. Planned for the
-proxy's next phase: rotation and retention - default **5 years**, minimum **1 year**
-(DPDP Rules, PCI DSS), stored on-premises in India (CERT-In, RBI). Tamper-*evidence*, not
+carry the policy revision and rule that decided them. Logs rotate monthly
+with the chain running across files, so a removed or altered month is
+detected too. Retention (since 0.8): default **5 years**, minimum **1 year**
+(DPDP Rules, PCI DSS), stored on-premises in India (CERT-In, RBI); old months
+are removed only from the oldest end, never from a log that fails
+verification, and what was removed is recorded so the rest still verifies. Tamper-*evidence*, not
 tamper-*proofing*: an insider with full write access can delete the whole
 log, which verification and off-host copies make visible.
 
