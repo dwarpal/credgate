@@ -318,9 +318,29 @@ are built in dependency order, so nothing is built twice or retrofitted
    server (uvicorn, `credgate[server]`). Still to do: the Gemini API, a
    Nix-built image.
 8. **Shiny apps**: the policy editor for InfoSec and compliance is done (R
-   Shiny). The chat assistant is under review (2026-11-02): the proxy now
-   governs the tools people already use, so the assistant's remaining value
-   is in what only an app inside the session can do.
+   Shiny). The chat assistant is **dropped** (2026-11-02; see "Decision: no
+   chat assistant" below).
+9. **Candidates after name detection**: a read-only proxy activity panel
+   (each request: endpoint, what was found, what the policy did, audited),
+   and a safe-context helper for data frames (structure and a redacted
+   sample, ready for any tool).
+
+### Decision: no chat assistant (2026-11-02)
+
+The assistant package (section 2, "assistant") is dropped. When it was
+planned, the proxy did not exist; now Claude Code, VS Code Copilot Chat,
+Open WebUI, Jupyter AI, Continue, ellmer and the SDKs all go through it and
+are governed, so a chat of our own adds little that these tools lack. A
+chat app would also pull in what users expect of one - files, code
+execution, tools and MCP servers, skills, memory, agents - and become a
+general harness: the most crowded part of the field, where those tools move
+faster, and every tool it connects is a new way for data to leave that
+would itself need governing. credgate is the gate, not the room.
+
+What only credgate could offer is kept, without a chat: seeing what the
+policy does to each request (the proxy activity panel) and asking about a
+data frame safely (the safe-context helper). Both stay in credgate's lane -
+governance and visibility - and work with whatever tool people use.
 
 Inputs for this order came from user interviews (kept outside the
 repository) and a review of DPDP, RBI, CERT-In and PCI DSS obligations.

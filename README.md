@@ -23,8 +23,9 @@ shared specification.
 > frames, Spark, BigQuery, databases), and the proxy: OpenAI, Anthropic and
 > Ollama APIs with streaming, so Claude Code, VS Code Copilot Chat, Open
 > WebUI, ellmer and the SDKs can go through it, on the standard library or
-> uvicorn. Next: better detection of names without a cue. A built-in chat
-> assistant is under review. See [DESIGN.md](DESIGN.md) for the roadmap.
+> uvicorn. Next: better detection of names without a cue. credgate will not
+> have its own chat assistant: use any tool through the proxy. See
+> [DESIGN.md](DESIGN.md) for the roadmap.
 
 ## Use it with local LLMs (Ollama, vLLM)
 
