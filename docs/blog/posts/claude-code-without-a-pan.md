@@ -7,7 +7,7 @@ categories:
   - Proxy
   - Claude Code
 slug: claude-code-without-a-pan
-draft: true
+draft: false
 description: Running Claude Code on Indian customer data, with every PAN, Aadhaar and mobile number tokenised or redacted before it leaves the machine, and an audit trail to prove it.
 ---
 
@@ -71,6 +71,18 @@ proxy can turn back into the real value in the answer. **Redact** replaces
 it with a label such as `[MOBILE_IN]`, and the value is gone for good.
 **Block** refuses the whole request - here, a card number together with its
 CVV and expiry never reaches an external model at all.
+
+InfoSec does not have to edit YAML by hand. credgate's policy editor shows
+the rules in the order they are checked, and every save raises the revision
+and records who changed what, and why:
+
+![The policy editor: rules in the order they are checked, each with its conditions and action](../../images/policy-editor/rules.png)
+
+Its **Try it** tab runs the unsaved policy on sample text before anyone
+saves it. A card with its CVV and expiry, sent to `claude`, is blocked, and
+every value is masked even on this screen:
+
+![Try it: a card with its CVV and expiry is blocked for a frontier model](../../images/policy-editor/try-blocked.png)
 
 ## What happened
 
