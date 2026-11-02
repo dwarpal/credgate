@@ -121,3 +121,15 @@ test_that("pruning is careful", {
   expect_error(audit_prune(path, keep_years = 5, now = at(2026, 11, 2)), "broken")
   expect_true(file.exists(segment))
 })
+
+test_that("audit files are private", {
+  skip_if_not_installed("openssl")
+  skip_on_os("windows")
+  dir <- withr::local_tempdir()
+  path <- file.path(dir, "audit.jsonl")
+  write_months(path, list(c(2020, 1), c(2026, 10)))
+  audit_prune(path, keep_years = 5, now = at(2026, 11, 2))
+  for (f in list.files(dir, full.names = TRUE)) {
+    expect_identical(format(file.mode(f)), "600", info = basename(f))
+  }
+})

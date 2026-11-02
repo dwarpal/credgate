@@ -8,7 +8,8 @@
   the oldest end, never the active file, never from a log that fails
   verification; removed months are recorded in `<stem>.pruned.json`, from
   which the rest still verifies. Several writers rotate safely. R and
-  Python write and verify the same rotated logs.
+  Python write and verify the same rotated logs. Audit files are created
+  private to the account writing them (`0600`).
   `cg_audit_log(..., rotate = TRUE)`; `audit_record()` takes a `time`.
 * Whole-database inventories: `inventory_database()` scans every table of a
   database through a connection (SQLAlchemy in Python, DBI in R): Postgres,

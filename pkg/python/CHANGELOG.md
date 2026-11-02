@@ -10,7 +10,8 @@
   the oldest end, never the active file, never from a log that fails
   verification; removed months are recorded in `<stem>.pruned.json`, from
   which the rest still verifies. Several writers rotate safely. R and
-  Python write and verify the same rotated logs.
+  Python write and verify the same rotated logs. Audit files are created
+  private to the account writing them (`0600`).
   `AuditLog(..., rotate=True)`. The proxy rotates monthly and prunes at
   start and daily (`--audit-retention-years`, default 5; `--no-audit-rotate`).
 

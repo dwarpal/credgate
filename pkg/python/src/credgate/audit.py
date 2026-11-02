@@ -151,7 +151,9 @@ def _open_active(path: Path) -> Any:
     """The active file, opened and locked; reopened if another writer rotated
     it between our open and our lock."""
     while True:
-        f = path.open("a+b")
+        # Private to the account writing it (0600): no values, but who sent
+        # what kind of data where.
+        f = os.fdopen(os.open(path, os.O_RDWR | os.O_APPEND | os.O_CREAT, 0o600), "a+b")
         _lock(f)
         try:
             if os.fstat(f.fileno()).st_ino == os.stat(path).st_ino:
@@ -387,7 +389,9 @@ def audit_prune(
         manifest["last_seq"], manifest["head"] = last["seq"], head
     target = _manifest_path(path)
     tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(manifest, indent=1) + "\n")
     os.replace(tmp, target)
     for file in removable:
         file.unlink()

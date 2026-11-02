@@ -118,8 +118,14 @@ audit_record <- function(log, decision, time = NULL) {
     prev = prev
   )
   line <- as.character(jsonlite::toJSON(record, auto_unbox = TRUE, null = "null", na = "null", digits = NA))
+  new_file <- !file.exists(log$path)
   con <- file(log$path, open = "ab")
   on.exit(close(con), add = TRUE)
+  if (new_file) {
+    # Private to the account writing it: no values, but who sent what kind of
+    # data where.
+    Sys.chmod(log$path, "600")
+  }
   writeBin(c(charToRaw(enc2utf8(line)), as.raw(10L)), con)
   invisible(record)
 }
@@ -244,6 +250,7 @@ audit_prune <- function(path, keep_years = 5L, now = Sys.time()) {
   target <- audit_manifest_path(path)
   tmp <- paste0(target, ".tmp")
   writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE), tmp, useBytes = TRUE)
+  Sys.chmod(tmp, "600")
   file.rename(tmp, target)
   unlink(removable)
   invisible(basename(removable))

@@ -196,3 +196,16 @@ def test_several_processes_rotate_safely(tmp_path):
     assert check.ok
     assert check.records == 160
     assert check.files == 2
+
+
+def test_audit_files_are_private(tmp_path):
+    import os
+    import stat
+
+    path = tmp_path / "audit.jsonl"
+    _write_months(path, [(2020, 1), (2026, 10)])
+    credgate.audit_prune(path, keep_years=5, now=_at(2026, 11, 2))
+    if os.name != "posix":
+        pytest.skip("POSIX permissions")
+    for file in tmp_path.iterdir():
+        assert stat.S_IMODE(file.stat().st_mode) == 0o600, file.name
