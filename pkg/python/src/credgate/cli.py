@@ -130,6 +130,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="uvicorn: requests one worker handles at once; more get 503 (default 256)",
     )
     ps.add_argument(
+        "--watch",
+        type=float,
+        metavar="SECONDS",
+        help="reload the policy, its detectors and the keys file when they change, "
+        "checking this often (default: only on SIGHUP)",
+    )
+    ps.add_argument(
+        "--require-tests",
+        action="store_true",
+        help="refuse a policy without a tests file beside it (<policy>.tests.yaml)",
+    )
+    ps.add_argument(
         "--default-endpoint",
         help="endpoint for models asked for without one (e.g. claude, for Claude Code)",
     )
@@ -228,6 +240,8 @@ def _proxy(args: argparse.Namespace) -> int:
             concurrency=args.concurrency,
             audit_rotate=not args.no_audit_rotate,
             audit_retention_years=args.audit_retention_years,
+            watch=args.watch,
+            require_tests=args.require_tests,
         )
     except (ValueError, OSError) as e:
         print(f"credgate proxy: {e}", file=sys.stderr)

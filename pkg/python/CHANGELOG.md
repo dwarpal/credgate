@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **The proxy reloads a new policy revision without a restart**, on SIGHUP
+  or with `--watch SECONDS` (also the keys file, so a user added or removed
+  takes effect at once). Nothing broken goes live: the new revision must
+  load completely - policy, custom detector files with their examples,
+  endpoints - and pass its policy tests, or the running revision stays and
+  `/healthz` says why. A change without a new revision is refused; a
+  rollback is accepted and logged. Each request is checked by one revision,
+  recorded in the audit log. The same checks run at start, and
+  `--require-tests` refuses a policy without tests. With several workers,
+  each reloads; SIGHUP no longer stops the proxy.
+- **A policy owns its custom detectors**: `Policy.load()` compiles the files
+  it names for itself and no longer registers them globally (use
+  `load_detectors()` for that), so another revision never changes what a
+  loaded policy detects. `Policy.detector_ids` and `Policy.sources` (each
+  file with its SHA-256) are new.
+
 - **Policy editor** (R): Try it shows each match's confidence and reasons,
   and what looked like an identifier but was not reported, and why; a
   Detectors tab is a workbench for custom detector files with live matches

@@ -242,10 +242,10 @@ example_keyword <- function(pattern) {
 #' minimum, or a more confident overlapping match. Used by the policy
 #' editor's Try it.
 #' @noRd
-explain_pii <- function(text, min_confidence = 0) {
+explain_pii <- function(text, min_confidence = 0, detectors = get_detectors(NULL)) {
   misses <- new.env()
   misses$spans <- NULL
-  matches <- detect_with(get_detectors(NULL), text, min_confidence = min_confidence, misses = misses)
+  matches <- detect_with(detectors, text, min_confidence = min_confidence, misses = misses)
   m <- misses$spans
   if (is.null(m)) {
     m <- cbind(empty_spans(), why = character())

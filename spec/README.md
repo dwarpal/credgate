@@ -178,7 +178,12 @@ detectors:
 
 A policy may name custom detector files in a top-level `detectors` list of
 paths, relative to the policy file; they are loaded before the policy's
-rules are checked, so rules can name their types.
+rules are checked, so rules can name their types. They belong to the
+policy: it decides with the detectors registered when it was loaded plus its
+own files, and loading it registers nothing. So a policy loaded later -
+another revision, after a file changed - never changes what an earlier one
+detects, and two files may not define the same id. Policy tests check type
+names against the policy's own detectors.
 
 Custom patterns run on every text, like the built-in ones: avoid nested
 quantifiers such as `(a+)+`, which can be slow on long inputs.

@@ -238,8 +238,10 @@ tokenised with its own vault and audited on its own - so any instance can
 take any request: no sticky sessions, no shared state.
 
 - **Health checks**: `GET /healthz` answers `200 {"status": "ok", "policy":
-  {"id": ..., "revision": ...}}` without a key, so a balancer can poll it;
-  checking the revision also shows every instance runs the same policy.
+  {"id": ..., "revision": ...}, "loaded_at": ..., "last_reload": ...}`
+  without a key, so a balancer can poll it; checking the revision also shows
+  every instance runs the same policy (see [Rolling out a new
+  revision](#rolling-out-a-new-revision)).
 - **Rolling restarts**: on SIGTERM an instance answers `503 draining` on
   `/healthz` while it keeps serving for `--drain-seconds` (default 5; set it
   above the balancer's health-check interval), then stops accepting and
@@ -262,6 +264,59 @@ take any request: no sticky sessions, no shared state.
   are safe on a local disk, but file locking is unreliable on network file
   systems, and one chain per instance stays verifiable; collect them
   afterwards.
+
+## Rolling out a new revision
+
+A policy changes by saving a new revision - in the [policy
+editor](policy-editor.md), or in a reviewed pull request. A running proxy
+picks it up without a restart, and without dropping a request:
+
+- **On SIGHUP** (`systemctl reload credgate-proxy`, `kill -HUP <pid>`, an
+  Ansible handler): the main process passes it to every worker and each
+  reloads.
+- **With `--watch SECONDS`**: the proxy checks the policy, its custom
+  detector files and the keys file that often, and reloads when one
+  changes. Use it where files are updated in place - a Kubernetes
+  ConfigMap, a shared folder the editor saves to.
+
+**Nothing broken goes live.** The new revision is checked completely
+before it replaces the running one: the policy and every detector file it
+names (with their `examples`), its endpoints, and its [policy
+tests](policy-editor.md#policy-tests) if there is a tests file beside it.
+If anything fails - a half-written file, a failing example, a failing test -
+the running revision stays, the log says why, and `/healthz` shows
+`"last_reload": {"ok": false, "reason": ...}`. The same checks run when the
+proxy starts, so it never starts on a broken policy either.
+`--require-tests` also refuses a policy that has no tests file.
+
+**Every change is a revision.** A changed policy or detector file with the
+same `revision` is refused ("save a new revision"), so what runs is always
+a revision recorded in the change log. This also stops a detector file
+saved on its own from going live before the policy revision that goes with
+it. An older revision is accepted - a rollback - and logged as one.
+
+**Each request uses one revision.** A request is checked by the revision
+running when it arrived, from start to end, and the audit log records that
+revision with it. Each policy carries its own detectors, so a reload never
+changes them for a request in progress, and a detector removed from a file
+is gone from the new revision.
+
+**Keys** reload on the same signal or watch: a user added with `credgate
+proxy add-user`, or a key removed from the keys file, takes effect without
+a restart. A keys file that does not read, or has no users, is refused and
+the current keys stay.
+
+**Several workers and instances.** Each worker process and each instance
+reloads on its own, within a moment of the others (with `--watch`, within
+the interval). Every request is wholly under one revision and recorded, so
+the overlap is safe; `/healthz` shows each one's revision while it
+converges. For a fleet, keep policies in version control: CI runs
+`credgate policy test`, deployment copies the files to every instance and
+sends SIGHUP (or relies on `--watch`). For a single proxy, the editor can
+save straight into the folder the proxy watches.
+
+Files named on the command line with `--detectors` are read once, at start;
+name custom detector files in the policy so they reload with it.
 
 ## What it does not protect
 

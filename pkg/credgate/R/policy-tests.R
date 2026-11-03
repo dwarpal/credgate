@@ -41,7 +41,8 @@ run_policy_tests <- function(policy, tests = NULL) {
   } else {
     tests
   }
-  cases <- tryCatch(validate_policy_tests(data), error = function(e) {
+  types <- names(policy$detectors %||% get_detectors(NULL))
+  cases <- tryCatch(validate_policy_tests(data, types), error = function(e) {
     rlang::abort(paste0(name, ": ", conditionMessage(e)), call = NULL)
   })
   results <- lapply(cases, run_one_policy_test, policy = policy)
@@ -58,7 +59,7 @@ policy_tests_path <- function(policy_file) {
   file.path(dirname(policy_file), paste0(sub("\\.ya?ml$", "", basename(policy_file)), ".tests.yaml"))
 }
 
-validate_policy_tests <- function(data) {
+validate_policy_tests <- function(data, types = names(get_detectors(NULL))) {
   fail <- function(...) stop(..., call. = FALSE)
   if (!is.list(data) || !identical(data$kind, "credgate-policy-tests")) {
     fail("not a policy tests file: `kind` must be `credgate-policy-tests`.")
@@ -68,7 +69,6 @@ validate_policy_tests <- function(data) {
   if (!identical(as.numeric(data$version), 1)) fail("`version` must be 1.")
   tests <- data$tests
   if (!is.list(tests) || length(tests) == 0) fail("`tests` must be a non-empty list.")
-  types <- cg_detectors()$id
   seen <- character()
   for (t in tests) {
     id <- t$id
@@ -161,9 +161,9 @@ run_one_policy_test <- function(t, policy) {
 
 # Writes a tests file (from the policy editor). Logicals as true/false, which
 # Python and other YAML 1.2 readers read the same way.
-write_policy_tests <- function(tests, file) {
+write_policy_tests <- function(tests, file, types = names(get_detectors(NULL))) {
   data <- list(kind = "credgate-policy-tests", version = 1L, tests = tests)
-  validate_policy_tests(data)
+  validate_policy_tests(data, types)
   text <- yaml::as.yaml(data, indent.mapping.sequence = TRUE, handlers = list(
     logical = function(x) structure(ifelse(x, "true", "false"), class = "verbatim")
   ))

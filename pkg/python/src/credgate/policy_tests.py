@@ -15,7 +15,6 @@ from typing import Any
 
 import yaml
 
-from .detectors import detectors as _detectors
 from .policy import ACTIONS, Policy
 from .tokenise import Vault
 
@@ -67,7 +66,7 @@ def run_policy_tests(
         with Path(tests).open(encoding="utf-8") as f:
             data = yaml.safe_load(f)
     try:
-        cases = _validate(data)
+        cases = _validate(data, set(policy.detector_ids))
     except ValueError as e:
         raise ValueError(f"{name}: {e}") from None
     return [_run(policy, case) for case in cases]
@@ -80,7 +79,7 @@ def tests_path(policy_file: str | os.PathLike[str]) -> Path:
     return p.with_name(f"{stem}.tests.yaml")
 
 
-def _validate(data: Any) -> list[Mapping[str, Any]]:
+def _validate(data: Any, types: set[str]) -> list[Mapping[str, Any]]:
     if not isinstance(data, Mapping) or data.get("kind") != KIND:
         raise ValueError(f"not a policy tests file: `kind` must be `{KIND}`.")
     unknown = set(data) - {"kind", "version", "tests"}
@@ -91,7 +90,6 @@ def _validate(data: Any) -> list[Mapping[str, Any]]:
     tests = data.get("tests")
     if not isinstance(tests, list) or not tests:
         raise ValueError("`tests` must be a non-empty list.")
-    types = {d["id"] for d in _detectors()}
     seen: set[str] = set()
     for t in tests:
         if not isinstance(t, Mapping):

@@ -125,6 +125,13 @@ class ProxyConfig:
         drain_seconds: On SIGTERM, how long to keep serving while reporting
             "draining" on ``/healthz``, so a load balancer stops routing here;
             then requests in progress are finished and the proxy exits.
+        watch: Check the policy, its custom detector files and the keys file
+            every this many seconds, and reload them when they change (see
+            :func:`reload`). ``None``: reload only on SIGHUP.
+        require_tests: Refuse a policy without a tests file beside it
+            (``<policy>.tests.yaml``), at start and on reload. A tests file
+            that exists is always run, and a failing test always refuses the
+            policy.
     """
 
     policy: Policy | str | os.PathLike[str]
@@ -144,10 +151,15 @@ class ProxyConfig:
     default_endpoint: str | None = None
     server: str = "standard"
     concurrency: int = 256
+    watch: float | None = None
+    require_tests: bool = False
     _users: dict[str, str] = field(default_factory=dict, init=False, repr=False)
+    _policy_path: str | None = field(default=None, init=False, repr=False)
+    _keys_digest: str = field(default="", init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.policy, Policy):
+            self._policy_path = str(self.policy)
             self.policy = Policy.load(self.policy)
         if not _is_loopback(self.host) and self.keys is None:
             raise ValueError(
@@ -157,6 +169,7 @@ class ProxyConfig:
             )
         if self.keys is not None:
             self._users = _read_keys(self.keys)
+            self._keys_digest = _digest(self.keys)
             if not self._users:
                 raise ValueError(
                     f"No users in {self.keys}; add one with `credgate proxy add-user`."
@@ -185,16 +198,15 @@ class ProxyConfig:
         if self.token_key is None:
             self.token_key = os.environ.get("CREDGATE_TOKEN_KEY") or secrets.token_bytes(32)
         Vault(self.token_key)  # validates the key now, not on the first request
-        if self.default_endpoint and self.default_endpoint not in self.policy.destinations:
-            raise ValueError(f"Default endpoint {self.default_endpoint!r} is not in the policy.")
-        for name, dest in self.policy.destinations.items():
-            if dest.url and urllib.parse.urlsplit(dest.url).scheme not in ("http", "https"):
-                raise ValueError(f"Endpoint {name!r}: the URL must be http:// or https://.")
+        if self.watch is not None and not 1 <= self.watch <= 3600:
+            raise ValueError("`watch` must be between 1 and 3600 seconds.")
+        _check_policy(self, self.policy)  # type: ignore[arg-type]
 
 
 def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
     """Run the proxy until interrupted."""
     server = make_server(config, log=log)
+    _STATUS["loaded_at"] = _now()
     scheme = "https" if config.certfile else "http"
     mode = "shared" if config.keys else "localhost"
     host, port = server.server_address[:2]
@@ -214,6 +226,7 @@ def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
             if not uvicorn:  # uvicorn handles its signals (and the drain) itself
                 signal.signal(signal.SIGINT, signal.SIG_IGN)
                 signal.signal(signal.SIGTERM, lambda *_: _drain(server, config.drain_seconds))
+            _on_reload_signal(config, log or _stderr, [])
             threading.Thread(target=_exit_with_parent, args=(parent,), daemon=True).start()
             try:
                 server.serve_forever()
@@ -225,6 +238,14 @@ def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
 
     if config.audit_rotate and config.audit_retention_years:
         threading.Thread(target=_retention, args=(config, log or _stderr), daemon=True).start()
+
+    # Reload: SIGHUP reaches the main process, which passes it on; each
+    # process reloads on its own (each has its own copy of the policy).
+    _on_reload_signal(config, log or _stderr, children)
+    if config.watch:
+        threading.Thread(
+            target=_watch, args=(config, log or _stderr, children), daemon=True
+        ).start()
 
     if uvicorn:
         # Signals reach the main process; each worker drains on its own.
@@ -255,6 +276,174 @@ def serve(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> None:
             with contextlib.suppress(OSError):
                 os.waitpid(pid, 0)
         server.server_close()
+
+
+# --- reload -------------------------------------------------------------------
+#
+# A policy is rolled out by saving a new revision; the proxy reloads it on
+# SIGHUP (`systemctl reload`) or, with `watch`, when its files change. The
+# new revision is checked completely first - the policy and its detector
+# files (with their examples), the endpoints, and its tests - and only then
+# replaces the running one; if anything fails, the running revision stays and
+# the reason is logged and shown on /healthz. Every request is decided by one
+# revision from start to end, and the audit log records which. Each process
+# reloads on its own, so with several workers or instances the switch takes a
+# moment; /healthz shows each one's revision.
+
+_RELOAD_LOCK = threading.Lock()
+_STATUS: dict[str, Any] = {"loaded_at": None, "last_reload": None}
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _digest(path: str | os.PathLike[str]) -> str:
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _check_policy(config: ProxyConfig, policy: Policy) -> None:
+    """What the proxy needs of a policy, at start and on reload; raises
+    ValueError."""
+    if config.default_endpoint and config.default_endpoint not in policy.destinations:
+        raise ValueError(f"Default endpoint {config.default_endpoint!r} is not in the policy.")
+    for name, dest in policy.destinations.items():
+        if dest.url and urllib.parse.urlsplit(dest.url).scheme not in ("http", "https"):
+            raise ValueError(f"Endpoint {name!r}: the URL must be http:// or https://.")
+    if config._policy_path is None:
+        return
+    from .policy_tests import run_policy_tests, tests_path
+
+    tests = tests_path(config._policy_path)
+    if not tests.exists():
+        if config.require_tests:
+            raise ValueError(f"No policy tests ({tests.name}); they are required.")
+        return
+    failed = [r for r in run_policy_tests(policy, tests) if not r.passed]
+    if failed:
+        raise ValueError(
+            f"{len(failed)} policy test(s) fail: "
+            + "; ".join(f"{r.id}: {', '.join(r.problems)}" for r in failed)
+        )
+
+
+def reload(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> bool:
+    """Reload the policy and the keys file of a proxy if they changed.
+
+    The policy is replaced only by a new revision that loads, suits the
+    proxy (endpoints) and passes its tests; a change to the policy or its
+    custom detector files without a new revision is refused, so what runs is
+    always a recorded revision. An older revision (a rollback) is accepted
+    and logged. The keys file is replaced if it reads and has users. On any
+    refusal the running policy and keys stay.
+
+    Returns:
+        Whether anything was replaced.
+    """
+    log = log or _stderr
+    with _RELOAD_LOCK:
+        changed = False
+        if config.keys is not None and _digest(config.keys) != config._keys_digest:
+            try:
+                users = _read_keys(config.keys)
+                if not users:
+                    raise ValueError("no users")
+                config._users = users
+                config._keys_digest = _digest(config.keys)
+                log(f"credgate proxy: keys reloaded ({len(users)} users)")
+                changed = True
+            except Exception as e:
+                log(f"credgate proxy: keys not reloaded, the current ones stay: {e}")
+        if config._policy_path is None:
+            return changed
+        running: Policy = config.policy  # type: ignore[assignment]
+        try:
+            new = Policy.load(config._policy_path)
+        except Exception as e:  # any file that does not load: keep the running policy
+            return _refused(config, log, "invalid", f"the policy does not load: {e}") or changed
+        if new.sources == running.sources:
+            return changed
+        if new.revision == running.revision:
+            return (
+                _refused(
+                    config,
+                    log,
+                    "same_revision",
+                    f"the policy or its detectors changed, but the revision is still "
+                    f"{new.revision}; save a new revision",
+                )
+                or changed
+            )
+        try:
+            _check_policy(config, new)
+        except Exception as e:
+            kind = "tests_failed" if "test" in str(e) else "invalid"
+            return _refused(config, log, kind, f"revision {new.revision}: {e}") or changed
+        config.policy = new
+        _STATUS["loaded_at"] = _now()
+        _STATUS["last_reload"] = {"at": _now(), "ok": True, "revision": new.revision}
+        older = " (older: a rollback)" if new.revision < running.revision else ""
+        log(
+            f"credgate proxy: policy {new.id} revision {new.revision} loaded{older}, "
+            f"replacing revision {running.revision} (process {os.getpid()})"
+        )
+        return True
+
+
+def _refused(config: ProxyConfig, log: Callable[[str], Any], kind: str, why: str) -> bool:
+    running: Policy = config.policy  # type: ignore[assignment]
+    _STATUS["last_reload"] = {"at": _now(), "ok": False, "reason": kind}
+    log(
+        f"credgate proxy: reload refused, revision {running.revision} stays "
+        f"(process {os.getpid()}): {why}"
+    )
+    return False
+
+
+def _on_reload_signal(config: ProxyConfig, log: Callable[[str], Any], children: list[int]) -> None:
+    if not hasattr(signal, "SIGHUP"):
+        return
+
+    def handler(signum: int, frame: Any) -> None:
+        for pid in children:
+            _signal(pid, signal.SIGHUP)
+        # Not in the signal handler itself: loading takes a moment.
+        threading.Thread(target=reload, args=(config, log), daemon=True).start()
+
+    signal.signal(signal.SIGHUP, handler)
+
+
+def _watch(config: ProxyConfig, log: Callable[[str], Any], children: list[int]) -> None:
+    """In the main process: every `watch` seconds, if a file changed, reload
+    here and tell the workers to."""
+
+    def stamp() -> list[tuple[str, float, int]]:
+        running: Policy = config.policy  # type: ignore[assignment]
+        paths = [p for p, _ in running.sources] + ([str(config.keys)] if config.keys else [])
+        out = []
+        for p in paths:
+            try:
+                st = os.stat(p)
+                out.append((p, st.st_mtime, st.st_size))
+            except OSError:
+                out.append((p, 0.0, -1))
+        return out
+
+    seen = stamp()
+    while True:
+        time.sleep(config.watch or 5)
+        try:
+            now = stamp()
+            if now != seen:
+                for pid in children:
+                    _signal(pid, signal.SIGHUP)
+                reload(config, log)
+                seen = stamp()
+        except Exception as e:  # never stop watching; say so
+            log(f"credgate proxy: reload check failed: {e}")
 
 
 # Load balancers: on SIGTERM the proxy reports "draining" on /healthz (so the
@@ -421,6 +610,10 @@ class _Exchange:
         read_body: Callable[[], bytes],
     ) -> None:
         self.config = config
+        # One policy and one set of users for the whole request, whatever a
+        # reload does meanwhile.
+        self.policy: Policy = config.policy  # type: ignore[assignment]
+        self.users = config._users
         self.command = method
         self.path = path
         self.headers = headers
@@ -479,11 +672,13 @@ class _Exchange:
 
     def _health(self) -> tuple[int, Any, str]:
         """For load balancers: no key needed, nothing sensitive."""
-        policy: Policy = self.config.policy  # type: ignore[assignment]
+        policy = self.policy
         draining = _DRAINING.is_set()
         payload = {
             "status": "draining" if draining else "ok",
             "policy": {"id": policy.id, "revision": policy.revision},
+            "loaded_at": _STATUS["loaded_at"],
+            "last_reload": _STATUS["last_reload"],
         }
         return 503 if draining else 200, payload, ""
 
@@ -515,7 +710,7 @@ class _Exchange:
             )
 
     def _authenticate(self) -> str:
-        users = self.config._users
+        users = self.users
         if not users:
             return _os_user()
         # Bearer (OpenAI, Ollama clients) or x-api-key (Anthropic clients).
@@ -529,7 +724,7 @@ class _Exchange:
         raise _ProxyError(401, "unauthorized", "A valid credgate proxy key is required.")
 
     def _models(self, user: str) -> tuple[int, Any, str]:
-        policy: Policy = self.config.policy  # type: ignore[assignment]
+        policy = self.policy
         data = []
         for name, dest in policy.destinations.items():
             if dest.blocked or not dest.url:
@@ -558,7 +753,7 @@ class _Exchange:
         destination, _, upstream_model = model.partition("/")
         if not destination or not upstream_model:
             raise _ProxyError(400, "invalid_model", 'Ask for a model as "<endpoint>/<model>".')
-        policy: Policy = self.config.policy  # type: ignore[assignment]
+        policy = self.policy
         dest = policy.destinations.get(destination)
         if dest is None:
             raise _ProxyError(
@@ -575,13 +770,13 @@ class _Exchange:
         client's own key goes on: it is the user's (e.g. Claude Code signed in
         to their account). Never in shared mode, where the client's key is
         its credgate key."""
-        if self.config._users or os.environ.get(_key_env(destination)):
+        if self.users or os.environ.get(_key_env(destination)):
             return {}
         return {h: self.headers[h] for h in ("Authorization", "x-api-key") if self.headers.get(h)}
 
     def _govern(self, user: str, slots: list[Any], destination: str) -> Vault:
         """Apply the policy to every slot, in place; raises if blocked."""
-        policy: Policy = self.config.policy  # type: ignore[assignment]
+        policy = self.policy
         vault = Vault(self.config.token_key)
         audit = AuditLog(
             self.config.audit,
@@ -719,7 +914,7 @@ class _Exchange:
         return 200, answer, ""
 
     def _ollama_tags(self, user: str) -> tuple[int, Any, str]:
-        policy: Policy = self.config.policy  # type: ignore[assignment]
+        policy = self.policy
         models = []
         for name, dest in policy.destinations.items():
             if dest.blocked or not dest.url:
@@ -740,7 +935,7 @@ class _Exchange:
         return 200, {"models": models}, ""
 
     def _ollama_version(self, user: str) -> tuple[int, Any, str]:
-        policy: Policy = self.config.policy  # type: ignore[assignment]
+        policy = self.policy
         for name, dest in policy.destinations.items():
             if dest.blocked or not dest.url:
                 continue

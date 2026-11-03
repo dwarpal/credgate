@@ -388,7 +388,10 @@ def test_health_needs_no_key_and_reveals_nothing(proxy, tmp_path):
     for path in ("/healthz", "/healthz/"):
         status, _, body = _call(base.removesuffix("/v1"), path=path)
         assert status == 200
-        assert json.loads(body) == {"status": "ok", "policy": {"id": "test", "revision": 3}}
+        health = json.loads(body)
+        assert health["status"] == "ok"
+        assert health["policy"] == {"id": "test", "revision": 3}
+        assert set(health) == {"status", "policy", "loaded_at", "last_reload"}
     assert _call(base, path="/models")[0] == 401  # everything else still needs a key
 
 

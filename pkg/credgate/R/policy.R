@@ -61,26 +61,39 @@ cg_policy <- function(x, dir = NULL) {
   structure(parse_policy(x, dir %||% getwd()), source = x)
 }
 
-# Custom detector files named by a policy, loaded before its rules are
-# checked, so rules can name their types.
+# Custom detector files named by a policy, compiled for the policy alone (not
+# registered), so rules can name their types and a policy loaded later never
+# changes what this one detects. A named list of detectors.
 load_policy_detectors <- function(files, dir) {
   if (is.null(files)) {
-    return(invisible())
+    return(list())
   }
   files <- unlist(files)
   if (!is.character(files) || any(!nzchar(files)) || is.list(files)) {
     policy_fail("`detectors` must be a list of custom detector files.")
   }
+  out <- list()
   for (f in files) {
     path <- if (grepl("^(/|~|[A-Za-z]:)", f)) f else file.path(dir, f)
     if (!file.exists(path)) {
       policy_fail("Custom detectors ", f, ": file not found (", path, ").")
     }
-    tryCatch(load_detectors(path), error = function(e) {
-      policy_fail("Custom detectors ", f, ": ", conditionMessage(e))
-    })
+    compiled <- tryCatch(
+      compile_detector_file(yaml::yaml.load(paste(read_utf8_lines(path), collapse = "\n"))),
+      error = function(e) policy_fail("Custom detectors ", f, ": ", conditionMessage(e))
+    )
+    for (c in compiled) {
+      id <- c$detector$id
+      if (id %in% the$builtin_ids) {
+        policy_fail("Custom detectors ", f, ": `", id, "` is the id of a built-in detector.")
+      }
+      if (id %in% names(out)) {
+        policy_fail("Custom detectors ", f, ": `", id, "` is also in another file.")
+      }
+      out[[id]] <- c$detector
+    }
   }
-  invisible()
+  out
 }
 
 read_utf8_lines <- function(path) {
@@ -111,7 +124,10 @@ parse_policy <- function(x, dir = getwd()) {
   if (!identical(as.numeric(x$version), 1)) {
     policy_fail("Unsupported policy format version ", format(x$version), ".")
   }
-  load_policy_detectors(x$detectors, dir)
+  # The detectors this policy decides with: those registered now, and its own.
+  detectors <- the$detectors
+  own <- load_policy_detectors(x$detectors, dir)
+  detectors[names(own)] <- own
   if (!rlang::is_string(x$id) || !nzchar(x$id)) {
     policy_fail("The policy needs an `id`.")
   }
@@ -160,8 +176,8 @@ parse_policy <- function(x, dir = getwd()) {
   names(destinations) <- names(dests)
   tiers <- vapply(destinations, `[[`, character(1), "tier")
 
-  known_types <- cg_detectors()$id
-  known_classes <- union(policy_classes, cg_detectors()$class)
+  known_types <- names(detectors)
+  known_classes <- union(policy_classes, vapply(detectors, `[[`, "", "class"))
   raw_rules <- x$rules
   if (!is.list(raw_rules)) {
     policy_fail("`rules` must be a list (it may be empty).")
@@ -225,7 +241,7 @@ parse_policy <- function(x, dir = getwd()) {
     list(
       id = x$id, revision = as.integer(rev), description = x$description,
       destinations = destinations, min_confidence = as.numeric(min_conf),
-      rules = rules, default_action = default
+      rules = rules, default_action = default, detectors = detectors
     ),
     class = "cg_policy"
   )
@@ -258,7 +274,7 @@ policy_decide <- function(policy, text, destination) {
   tier <- dest$tier
   text <- from_arrow(text)$text
   docs <- ifelse(is.na(text), "", text)
-  spans <- detect_pii(docs, min_confidence = policy$min_confidence)
+  spans <- detect_with(policy$detectors %||% get_detectors(NULL), docs, min_confidence = policy$min_confidence)
   found <- unique(spans$type)
   action <- rep(NA_character_, nrow(spans))
   rule <- rep(NA_character_, nrow(spans))

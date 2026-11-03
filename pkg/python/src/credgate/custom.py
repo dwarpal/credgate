@@ -65,21 +65,9 @@ def load_detectors(
             registered.
     """
     name = str(source) if not isinstance(source, Mapping) else "custom detectors"
-    if isinstance(source, Mapping):
-        data: Any = source
-    else:
-        with Path(source).open(encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-    try:
-        compiled = _compile_file(data)
-    except ValueError as e:
-        raise ValueError(f"{name}: {e}") from None
-
-    builtin = {d["id"] for d in detector_spec()["detectors"]}
+    compiled = _compile_source(source)
     registry = _reg._detectors()
     for det, digest in compiled:
-        if det.id in builtin:  # also registered under that id by code
-            raise ValueError(f"{name}: `{det.id}` is the id of a built-in detector.")
         if det.id in registry and _reg._custom.get(det.id) != digest and not replace:
             raise ValueError(
                 f"{name}: a different detector `{det.id}` is already registered; "
@@ -92,6 +80,28 @@ def load_detectors(
             _reg._custom[det.id] = digest
         _reg._registry = merged
     return [det.id for det, _ in compiled]
+
+
+def _compile_source(
+    source: str | os.PathLike[str] | Mapping[str, Any],
+) -> list[tuple[_reg.Detector, str]]:
+    """A custom detectors file compiled and checked (examples included),
+    without registering anything: (detector, digest of its definition)."""
+    name = str(source) if not isinstance(source, Mapping) else "custom detectors"
+    if isinstance(source, Mapping):
+        data: Any = source
+    else:
+        with Path(source).open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    try:
+        compiled = _compile_file(data)
+    except ValueError as e:
+        raise ValueError(f"{name}: {e}") from None
+    builtin = {d["id"] for d in detector_spec()["detectors"]}
+    for det, _ in compiled:
+        if det.id in builtin:  # also registered under that id by code
+            raise ValueError(f"{name}: `{det.id}` is the id of a built-in detector.")
+    return compiled
 
 
 def _compile_file(data: Any) -> list[tuple[_reg.Detector, str]]:
