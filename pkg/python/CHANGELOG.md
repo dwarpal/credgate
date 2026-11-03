@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Policy editor** (R): Try it shows each match's confidence and reasons,
+  and what looked like an identifier but was not reported, and why; a
+  Detectors tab is a workbench for custom detector files with live matches
+  and example checks. The files it writes are the same ones Python reads.
+
 - **Policy tests**: sample requests and what a policy must do with them
   (allowed or blocked, the blocking rules, the action for each type, types
   that must not be found, the exact text sent), in a `<policy>.tests.yaml`
