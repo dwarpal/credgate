@@ -23,6 +23,10 @@ credgate::policy_editor("bank-default.yaml", user = "infosec-1")
 | ![Rules](images/policy-editor/rules.png) | ![Try it, redacted](images/policy-editor/try-redacted.png) |
 | **Try it, blocked** (dark theme) | **Changes and the change log** |
 | ![Try it, blocked](images/policy-editor/try-blocked.png) | ![Changes](images/policy-editor/changes.png) |
+| **Try it: why, and what was not reported** | **Tests: a draft change breaks one** |
+| ![Try it with confidence, reasons and what was not reported](images/policy-editor/try-why.png) | ![Tests tab with a failing test and its reasons](images/policy-editor/tests.png) |
+
+![Detectors: a detector written with the form, tried on a sample, its examples checked](images/policy-editor/detectors.png)
 
 - **Endpoints**: add, change, block or remove the model endpoints that
   requests may go to. An endpoint that a rule still names cannot be removed.

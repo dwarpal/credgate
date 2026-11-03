@@ -187,6 +187,8 @@ confidence and reasons, and what was dropped and why - and see every
 and adds a new file to the policy's `detectors` list. See the [policy
 editor guide](policy-editor.md).
 
+![The Detectors tab: a staff-code detector written with the form, matching a sample, with both examples holding](images/policy-editor/detectors.png)
+
 ## On the command line
 
 ```sh
