@@ -143,6 +143,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     pa.add_argument("name", help="user name, recorded in the audit log")
     pa.add_argument("--keys", required=True, help="keys file (created if missing)")
 
+    pol = sub.add_parser("policy", help="work with policies")
+    pol_sub = pol.add_subparsers(dest="policy_command", required=True)
+    pt = pol_sub.add_parser(
+        "test", help="run a policy's tests (exit status 1 if any fails, 2 if invalid)"
+    )
+    pt.add_argument("--policy", required=True, help="policy file (YAML)")
+    pt.add_argument("--tests", help="tests file (default: beside the policy, <name>.tests.yaml)")
+    _add_detectors_option(pt)
+
     dl = sub.add_parser(
         "detectors", help="list the registered detectors (and check custom detector files)"
     )
@@ -169,9 +178,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _scan(args)
     if args.command == "proxy":
         return _proxy(args)
+    if args.command == "policy":
+        return _policy_test(args)
     if args.command in ("redact", "preview"):
         return _redact(args)
     return _detect(args)
+
+
+def _policy_test(args: argparse.Namespace) -> int:
+    from .policy import PolicyError
+    from .policy_tests import run_policy_tests
+
+    try:
+        results = run_policy_tests(args.policy, args.tests)
+    except (OSError, ValueError, PolicyError) as e:
+        print(f"credgate: {e}", file=sys.stderr)
+        return 2
+    for r in results:
+        print(f"{'PASS' if r.passed else 'FAIL'}  {r.id}")
+        for p in r.problems:
+            print(f"      {p}")
+    failed = sum(not r.passed for r in results)
+    print(f"{len(results) - failed} passed, {failed} failed")
+    return 1 if failed else 0
 
 
 def _proxy(args: argparse.Namespace) -> int:

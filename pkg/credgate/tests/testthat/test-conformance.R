@@ -424,3 +424,30 @@ for (case in custom_spec$invalid) {
     expect_identical(cg_detectors()$id, before) # nothing registered
   })
 }
+
+policy_tests_spec <- conformance("policy_tests.yaml")
+
+test_that("policy tests conformance", {
+  pol <- cg_policy(policy_tests_spec$policy)
+  res <- run_policy_tests(pol, policy_tests_spec$tests)
+  for (want in policy_tests_spec$results) {
+    i <- match(want$id, res$id)
+    expect_identical(res$passed[i], want$passed, info = want$id)
+    probs <- res$problems[[i]]
+    expect_length(probs, length(want$problems))
+    for (p in unlist(want$problems)) {
+      expect_true(any(grepl(p, probs, fixed = TRUE)), info = paste(want$id, p))
+    }
+  }
+})
+
+for (case in policy_tests_spec$invalid) {
+  test_that(paste("invalid policy tests:", case$id), {
+    pol <- cg_policy(policy_tests_spec$policy)
+    msg <- tryCatch({
+      run_policy_tests(pol, case$tests)
+      ""
+    }, error = conditionMessage)
+    expect_true(grepl(tolower(case$error), tolower(msg), fixed = TRUE), info = msg)
+  })
+}

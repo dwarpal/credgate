@@ -28,6 +28,7 @@ from .evaluate import EvaluationReport, TypeScore, evaluate, load_corpus
 from .inventory import Inventory, InventoryRow, pii_inventory, read_inventory
 from .normalise import Normalised, normalise
 from .policy import Decision, Destination, Policy, PolicyError, PolicyMatch
+from .policy_tests import PolicyTestResult, run_policy_tests
 from .redact import Preview, preview, redact
 from .scan import ColumnFinding, ScanReport, scan_pii
 from .synth import synth_indian_pii
@@ -56,6 +57,7 @@ __all__ = [
     "Policy",
     "PolicyError",
     "PolicyMatch",
+    "PolicyTestResult",
     "Preview",
     "ScanReport",
     "Span",
@@ -88,6 +90,7 @@ __all__ = [
     "register_detector",
     "reset_detectors",
     "restore",
+    "run_policy_tests",
     "scan_pii",
     "set_mask",
     "spec_path",

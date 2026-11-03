@@ -643,6 +643,57 @@ A blocked request has no output texts.
 
 Conformance cases are in `conformance/policy.yaml`.
 
+### Policy tests (`credgate-policy-tests`)
+
+Test cases written by the people who own a policy: sample requests and what
+the policy must do with them. They are kept beside the policy
+(`bank-default.tests.yaml` for `bank-default.yaml`), run whenever the policy
+changes - in the policy editor before saving, and with `credgate policy
+test` in CI - so a change that breaks an agreed behaviour is caught before
+it is used.
+
+```yaml
+kind: credgate-policy-tests
+version: 1
+tests:
+  - id: card-with-cvv-blocked-for-claude
+    description: PCI DSS - never to an external model   # optional
+    endpoint: claude
+    text: 'Card 4111 1111 1111 1111, CVV 123, expiry 08/29'
+    expect:
+      allowed: false
+      blocked_by: [card-with-cvv-and-expiry]
+  - id: pan-tokenised-for-claude
+    endpoint: claude
+    texts: ['Customer PAN ABCPE1234F', 'mobile 9876543210']
+    expect:
+      allowed: true
+      actions: {pan: tokenise, mobile_in: redact}
+      absent: [card]
+      output: ['Customer PAN [PAN_1]', 'mobile [MOBILE_IN]']
+```
+
+- Top-level fields are exactly `kind`, `version` (1) and `tests`, a
+  non-empty list. Each test has a unique `id`, an `endpoint`, exactly one of
+  `text` (one text) or `texts` (a list), an `expect`, and optionally a
+  `description`. Unknown fields are an error.
+- `expect.allowed` (required): whether the request may be sent.
+- `expect.blocked_by` (optional): the rules that block it, in any order.
+- `expect.actions` (optional): for each type listed, at least one match of
+  that type is found, and every match of it gets that action.
+- `expect.absent` (optional): types that must not be found.
+- `expect.output` (optional, allowed requests only): the exact texts sent,
+  a string for `text` or a list for `texts`. Tokens are numbered from 1 in
+  each test, as with a new vault.
+- Types and actions named in `expect` must be known; an endpoint the policy
+  does not have makes that test fail, not the file.
+
+A test runs the policy on its texts for its endpoint, with a new vault, and
+**passes** when every expectation holds; otherwise it **fails**, with one
+problem per expectation that does not hold (for example
+`allowed: expected false, got true`, or `pan: expected tokenise, got
+redact`). An invalid file is an error, and runs no test.
+
 ## Audit log (`audit`)
 
 Evidence of what was decided, for regulators, internal audit and DPDP

@@ -96,6 +96,7 @@ policy_editor_ui <- function(path) {
       section("Save"),
       shiny::textInput("user", tip("Your name", "Recorded in the change log with every save. On Shiny Server it is filled in from the signed-in user.")),
       shiny::textInput("note", tip("Why this change", "A few words for the change log, such as a ticket number or an approval. Reviewers and auditors read it."), placeholder = "e.g. new GPU endpoint approved"),
+      shiny::uiOutput("save_anyway_ui"),
       bslib::tooltip(shiny::actionButton("save", "Save new revision", class = "btn-primary"), "Writes the policy with its revision raised by one and adds an entry to the change log. Only possible when the draft is valid and has changes."),
       bslib::tooltip(shiny::actionButton("reload", "Discard changes", class = "btn-link btn-sm"), "Throws away the draft and reloads the saved file.")
     ),
@@ -175,7 +176,15 @@ policy_editor_ui <- function(path) {
                 "Card 4111 1111 1111 1111, CVV 123, expiry 08/29."
               )
             ),
-            shiny::selectInput("try_endpoint", tip("Sent to", "The endpoint the request would go to. Its tier and name decide which rules apply."), NULL, width = "100%")
+            shiny::selectInput("try_endpoint", tip("Sent to", "The endpoint the request would go to. Its tier and name decide which rules apply."), NULL, width = "100%"),
+            shiny::div(
+              class = "cg-actions cg-field-row",
+              shiny::textInput("test_id", tip("Test id", "A short name for the test, such as card-blocked-for-claude."), placeholder = "e.g. card-blocked-for-claude"),
+              bslib::tooltip(
+                shiny::actionButton("test_add", "Save as a test", class = "btn-outline-primary btn-sm"),
+                "Check the decision is right first. Adds this text, endpoint and decision to the tests file beside the policy, so every later change must keep it."
+              )
+            )
           ),
           shiny::div(
             shiny::uiOutput("try_result"),
@@ -184,6 +193,21 @@ policy_editor_ui <- function(path) {
           col_widths = c(5, 7)
         ),
         shiny::uiOutput("try_matches")
+      ),
+      bslib::nav_panel(
+        "Tests",
+        shiny::p(class = "cg-lede", shiny::HTML(paste0(
+          "Requests and what the policy must do with them, from <code>",
+          htmltools::htmlEscape(basename(policy_tests_path(path))),
+          "</code> beside the policy. They run against the draft on every change; ",
+          "<code>credgate policy test</code> runs them in CI."
+        ))),
+        shiny::uiOutput("tests_table"),
+        shiny::div(
+          class = "cg-actions cg-field-row",
+          shiny::selectInput("test_pick", "Test", NULL),
+          bslib::tooltip(shiny::actionButton("test_delete", "Remove test", class = "btn-outline-danger btn-sm"), "Removes the test from the tests file at once.")
+        )
       ),
       bslib::nav_panel(
         "Changes",
@@ -263,6 +287,10 @@ policy_editor_server <- function(path, user = NULL) {
       shiny::tagList(
         cg_badge(policy()$id %||% "(no id)", "neutral"),
         cg_badge(sprintf("revision %s", saved()$revision), "neutral"),
+        if (is.data.frame(test_results())) {
+          r <- test_results()
+          cg_badge(sprintf("tests %d/%d", sum(r$passed), nrow(r)), if (all(r$passed)) "allow" else "block")
+        },
         if (!is.null(problem())) cg_badge("not valid", "block")
         else if (length(changes())) cg_badge("unsaved changes", "redact")
         else cg_badge("saved", "allow")
@@ -554,6 +582,114 @@ policy_editor_server <- function(path, user = NULL) {
       ))
     })
 
+    # --- tests ---------------------------------------------------------------------
+    tests_file <- policy_tests_path(path)
+    read_tests <- function() {
+      if (!file.exists(tests_file)) {
+        return(list())
+      }
+      yaml::yaml.load(paste(read_utf8_lines(tests_file), collapse = "\n"))$tests %||% list()
+    }
+    tests <- shiny::reactiveVal(tryCatch(read_tests(), error = function(e) list()))
+    # A data frame from run_policy_tests(), or the reason the tests cannot run.
+    test_results <- shiny::reactive({
+      if (length(tests()) == 0) {
+        return(NULL)
+      }
+      if (!is.null(problem())) {
+        return("The draft is not valid, so the tests cannot run.")
+      }
+      tryCatch(
+        run_policy_tests(cg_policy(policy(), dirname(path)), list(kind = "credgate-policy-tests", version = 1, tests = tests())),
+        error = function(e) conditionMessage(e)
+      )
+    })
+    failing <- shiny::reactive({
+      r <- test_results()
+      if (is.data.frame(r)) r$id[!r$passed] else character()
+    })
+    output$tests_table <- shiny::renderUI({
+      r <- test_results()
+      if (is.null(r)) {
+        return(shiny::div(class = "cg-empty", "No tests yet. In Try it, check a decision is right, then save it as a test."))
+      }
+      if (is.character(r)) {
+        return(shiny::div(class = "cg-alert", r))
+      }
+      shiny::div(class = "cg-scroll", shiny::tags$table(
+        class = "cg-table",
+        shiny::tags$thead(shiny::tags$tr(lapply(c("Test", "Endpoint", "Result"), shiny::tags$th))),
+        shiny::tags$tbody(lapply(seq_len(nrow(r)), function(i) {
+          t <- tests()[[i]]
+          shiny::tags$tr(
+            `data-pick` = r$id[i], `data-target` = "test_pick",
+            class = if (identical(r$id[i], input$test_pick)) "selected",
+            shiny::tags$td(shiny::strong(r$id[i]), if (!is.na(r$description[i])) shiny::div(class = "desc", r$description[i])),
+            shiny::tags$td(t$endpoint),
+            shiny::tags$td(
+              if (r$passed[i]) cg_badge("pass", "allow") else cg_badge("fail", "block"),
+              lapply(r$problems[[i]], function(p) shiny::div(class = "desc", p))
+            )
+          )
+        }))
+      ))
+    })
+    shiny::observe({
+      ids <- vapply(tests(), function(t) t$id, "")
+      keep <- shiny::isolate(input$test_pick)
+      shiny::updateSelectInput(session, "test_pick", choices = ids,
+                               selected = if (!is.null(keep) && keep %in% ids) keep else ids[1])
+    })
+    save_tests <- function(x) {
+      ok <- tryCatch({
+        if (length(x)) write_policy_tests(x, tests_file) else unlink(tests_file)
+        TRUE
+      }, error = function(e) {
+        shiny::showNotification(paste("Tests not saved:", conditionMessage(e)), type = "error")
+        FALSE
+      })
+      if (ok) tests(x)
+      ok
+    }
+    shiny::observeEvent(input$test_add, {
+      id <- trimws(input$test_id %||% "")
+      if (!nzchar(id)) {
+        shiny::showNotification("Give the test an id.", type = "error")
+        return()
+      }
+      if (id %in% vapply(tests(), function(t) t$id, "")) {
+        shiny::showNotification(sprintf("There is already a test %s.", id), type = "error")
+        return()
+      }
+      d <- tryCatch(decision(), error = function(e) NULL)
+      if (is.null(d)) {
+        shiny::showNotification("Nothing to save: fix the policy and enter a request first.", type = "error")
+        return()
+      }
+      t <- policy_test_from_decision(id, input$try_text, input$try_endpoint, d)
+      if (save_tests(c(tests(), list(t)))) {
+        shiny::updateTextInput(session, "test_id", value = "")
+        shiny::showNotification(sprintf("Test %s saved to %s.", id, basename(tests_file)), type = "message")
+      }
+    })
+    shiny::observeEvent(input$test_delete, {
+      keep <- Filter(function(t) !identical(t$id, input$test_pick), tests())
+      if (length(keep) < length(tests())) save_tests(keep)
+    })
+    output$save_anyway_ui <- shiny::renderUI({
+      f <- failing()
+      if (length(f) == 0) {
+        return(NULL)
+      }
+      shiny::div(
+        class = "cg-alert",
+        sprintf("%d test%s fail%s: %s.", length(f), if (length(f) == 1) "" else "s",
+                if (length(f) == 1) "s" else "", paste(f, collapse = ", ")),
+        shiny::checkboxInput("save_anyway", "Save anyway (the change log records the failing tests; give the reason above)",
+                             value = shiny::isolate(isTRUE(input$save_anyway)))
+      )
+    })
+
     # --- changes and saving --------------------------------------------------------
     output$pending <- shiny::renderUI({
       ch <- changes()
@@ -584,22 +720,33 @@ policy_editor_server <- function(path, user = NULL) {
         shiny::tags$ul(lapply(h$changes[[i]], shiny::tags$li))
       ))))
     })
+    can_save <- shiny::reactive({
+      is.null(problem()) && length(changes()) > 0 &&
+        (length(failing()) == 0 || isTRUE(input$save_anyway))
+    })
     shiny::observe({
-      ok <- is.null(problem()) && length(changes()) > 0
-      shiny::updateActionButton(session, "save", disabled = !ok)
+      shiny::updateActionButton(session, "save", disabled = !can_save())
     })
     shiny::observeEvent(input$save, {
-      if (!is.null(problem()) || length(changes()) == 0) {
+      if (!can_save()) {
         return()
       }
       if (!nzchar(trimws(input$user))) {
         shiny::showNotification("Enter your name for the change log.", type = "error")
         return()
       }
+      note <- trimws(input$note)
+      if (length(failing())) {
+        if (!nzchar(note)) {
+          shiny::showNotification("Tests fail: say why you are saving anyway under \"Why this change\".", type = "error")
+          return()
+        }
+        note <- sprintf("%s [saved with failing tests: %s]", note, paste(failing(), collapse = ", "))
+      }
       x <- policy()
       x$revision <- saved()$revision
       written <- tryCatch(
-        policy_write(x, path, user = trimws(input$user), note = trimws(input$note)),
+        policy_write(x, path, user = trimws(input$user), note = note),
         error = function(e) {
           shiny::showNotification(paste("Not saved:", conditionMessage(e)), type = "error")
           NULL
@@ -610,6 +757,7 @@ policy_editor_server <- function(path, user = NULL) {
         policy(written)
         saved_at(saved_at() + 1)
         shiny::updateTextInput(session, "note", value = "")
+        shiny::updateCheckboxInput(session, "save_anyway", value = FALSE)
         shiny::showNotification(sprintf("Saved revision %d.", written$revision), type = "message")
       }
     })

@@ -33,11 +33,15 @@ credgate::policy_editor("bank-default.yaml", user = "infosec-1")
 - **Try it**: paste a sample text (use synthetic data), pick an endpoint and
   see what the unsaved policy would decide, and which rule decided it.
   Detected values are shown masked.
+- **Tests**: sample requests and what the policy must do with them (see
+  [Policy tests](#policy-tests) below), run against the unsaved policy on
+  every change. The header shows the score, such as "tests 3/3".
 - **Changes**: what is different from the saved file, and the history of
   saves. The history is hash-chained like the audit log, so an entry that was
   edited or removed afterwards shows as broken.
 
-**Save** stays disabled until the policy is valid and has changes. The
+**Save** stays disabled until the policy is valid and has changes, and
+while a test fails. The
 policy is checked exactly as the proxy loads it, so the editor can never save
 a policy that the proxy would refuse. Each save raises the policy's
 `revision` by one. The proxy and the audit log record that revision with
@@ -49,6 +53,7 @@ every decision.
 |---|---|
 | `bank-default.yaml` | The policy, written in a fixed layout |
 | `bank-default.changes.jsonl` | One line per save: time, user, note, revisions, changes |
+| `bank-default.tests.yaml` | The policy's tests (optional) |
 
 Comments in a policy file are **not kept** when the editor saves it. Put
 explanations in the `description` fields of the policy, its endpoints and
@@ -63,6 +68,66 @@ policy_diff(yaml::read_yaml("bank-default.yaml"), policy)
 policy_write(policy, "bank-default.yaml", user = "infosec-1", note = "Copilot approved")
 policy_changes("bank-default.yaml")
 ```
+
+## Policy tests
+
+A rule that looks harmless can change what happens to a request it was not
+meant for: rules are checked in order, and the first match decides. Policy
+tests pin down the behaviour that was agreed - "full card details never
+reach Claude", "PAN is redacted for frontier models" - so a later change
+that breaks it is caught before it is saved, not after a request leaks.
+
+They live beside the policy, in `bank-default.tests.yaml`:
+
+```yaml
+kind: credgate-policy-tests
+version: 1
+tests:
+  - id: card-blocked-for-claude
+    description: Full card details never reach a frontier model
+    endpoint: claude
+    text: Card 4111 1111 1111 1111, CVV 123, expiry 08/29
+    expect:
+      allowed: false
+      blocked_by: [card-with-cvv-and-expiry]
+  - id: pan-redacted-for-claude
+    endpoint: claude
+    text: Customer PAN ABCPE1234F
+    expect:
+      allowed: true
+      actions: {pan: redact}     # every PAN found gets this action
+      absent: [aadhaar]          # these types must not be found
+      # output: "Customer PAN [PAN]"   # the exact text sent, if you want it
+```
+
+Only `allowed` is required. The full format is in the
+[specification](spec.md#policy-tests-credgate-policy-tests).
+
+**In the editor**, the Tests tab runs them against the draft on every change
+and shows each failure with its reason ("allowed: expected false, got
+true"). In **Try it**, once the decision for a sample is right, give it an
+id and press **Save as a test**: the text, endpoint, decision and the action
+for each type found are added to the tests file. While a test fails, Save is
+disabled. If the change is intended - the agreed behaviour itself changed -
+tick **Save anyway** and say why under "Why this change"; the change log
+records the reason and which tests were failing. Then update or remove the
+test.
+
+**In CI**, run them whenever the policy or its tests change:
+
+```sh
+credgate policy test --policy bank-default.yaml
+# PASS  card-blocked-for-claude
+# FAIL  pan-redacted-for-claude
+#       pan: expected redact, got tokenise
+# 1 passed, 1 failed
+```
+
+It exits with 1 if a test fails and 2 if the tests file is not valid.
+`--tests` names another file, and `--detectors` loads custom detectors. From
+code: `run_policy_tests("bank-default.yaml")` in R and
+`credgate.run_policy_tests("bank-default.yaml")` in Python, which read the
+same files and give the same results.
 
 ## Running it for a team
 

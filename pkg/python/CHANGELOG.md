@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Policy tests**: sample requests and what a policy must do with them
+  (allowed or blocked, the blocking rules, the action for each type, types
+  that must not be found, the exact text sent), in a `<policy>.tests.yaml`
+  file beside the policy. `credgate policy test --policy FILE` runs them for
+  CI (exit 1 on a failure, 2 for an invalid file);
+  `credgate.run_policy_tests()` from code. R reads the same files, with
+  shared conformance cases, and the policy editor runs them before every
+  save.
+
 - **Columns named for names and addresses**: every value of a column named
   `customer_name`, `first_name`, `nominee`, `borrower`, `नाम` (and similar)
   that is only a name is reported as `person_name`, in any letter case or

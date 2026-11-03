@@ -402,3 +402,26 @@ def test_invalid_custom_detectors(case):
     with pytest.raises(ValueError, match=r"(?i)" + __import__("re").escape(case["error"])):
         credgate.load_detectors(case["file"])
     assert {d["id"] for d in credgate.detectors()} == before  # nothing registered
+
+
+POLICY_TESTS_SPEC = conformance("policy_tests.yaml")
+
+
+def test_policy_tests_conformance():
+    pol = credgate.Policy.from_dict(POLICY_TESTS_SPEC["policy"])
+    results = {r.id: r for r in credgate.run_policy_tests(pol, POLICY_TESTS_SPEC["tests"])}
+    for want in POLICY_TESTS_SPEC["results"]:
+        r = results[want["id"]]
+        assert r.passed == want["passed"], (want["id"], r.problems)
+        for p in want.get("problems", []):
+            assert any(p in got for got in r.problems), (want["id"], p, r.problems)
+        assert len(r.problems) == len(want.get("problems", [])), (want["id"], r.problems)
+
+
+@pytest.mark.parametrize(
+    "case", POLICY_TESTS_SPEC["invalid"], ids=[c["id"] for c in POLICY_TESTS_SPEC["invalid"]]
+)
+def test_invalid_policy_tests(case):
+    pol = credgate.Policy.from_dict(POLICY_TESTS_SPEC["policy"])
+    with pytest.raises(ValueError, match=r"(?i)" + __import__("re").escape(case["error"])):
+        credgate.run_policy_tests(pol, case["tests"])
