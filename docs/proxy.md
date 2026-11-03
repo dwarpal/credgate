@@ -106,6 +106,10 @@ BSD-3 or MIT licensed. For a proxy reachable from outside a trusted network,
 put a reverse proxy such as nginx (BSD-2), Envoy or Caddy (Apache-2.0) in
 front for TLS and slow-client protection, as is usual for any Python server.
 
+Custom detectors - your own account numbers or customer ids - are loaded
+with `--detectors file.yaml`, or from the policy's `detectors` list; see
+[custom detectors](custom-detectors.md).
+
 ## Point tools at it
 
 Clients ask for a model as `<endpoint>/<model>`:

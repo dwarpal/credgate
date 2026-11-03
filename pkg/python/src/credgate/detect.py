@@ -87,13 +87,23 @@ def detect_pii(
         contexts = ["" if c is None else c for c in context]
         if len(contexts) != len(docs):
             raise ValueError("`context` must be one string or one per document.")
+    return _detect_with(get_detectors(detectors), docs, contexts, min_confidence, window)
+
+
+def _detect_with(
+    dets: Sequence[Detector],
+    docs: Sequence[str],
+    contexts: Sequence[str],
+    min_confidence: float = 0.0,
+    window: int | None = None,
+) -> list[Span]:
+    """Detection with the given detectors (registered or not)."""
     if window is None:
         window = engine()["scoring"]["context_window"]
-
     norms = [normalise(t) for t in docs]
     joined = _join(norms)
     spans: list[Span] = []
-    for det in get_detectors(detectors):
+    for det in dets:
         spans.extend(_run_detector(det, docs, norms, contexts, window, joined))
     spans = _resolve_overlaps(spans)
     spans = [s for s in spans if s.confidence >= min_confidence]

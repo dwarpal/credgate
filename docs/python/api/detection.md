@@ -3,6 +3,7 @@
 ::: credgate.detect_pii
 ::: credgate.preview
 ::: credgate.Span
+::: credgate.load_detectors
 ::: credgate.scan_pii
 ::: credgate.ScanReport
 ::: credgate.ColumnFinding

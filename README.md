@@ -109,6 +109,10 @@ passed, nearby keyword such as "Aadhaar" or "आधार", negative context suc
 "order no"). Detection also works through Indic digits (`५४२२ २९३७ ११८२`),
 fullwidth characters and zero-width characters hidden inside identifiers.
 
+Add your own formats - account numbers, customer ids, or names found from
+the words around them - in a YAML file that R, Python, the command line,
+policies and the proxy all load: see [custom detectors](docs/custom-detectors.md).
+
 ## Quick start
 
 **R**

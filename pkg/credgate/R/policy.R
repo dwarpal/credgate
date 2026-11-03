@@ -27,7 +27,13 @@ policy_classes <- c(
 #' date). Any `block` blocks the whole request. A destination that is not
 #' listed receives nothing: requests to it are refused.
 #'
+#' A policy can name custom detector files in a `detectors` list (see
+#' [load_detectors()]), relative to the policy file; they are loaded first,
+#' so its rules can name their types.
+#'
 #' @param x Path to a policy file (YAML), or the policy as a list.
+#' @param dir When `x` is a list: the folder its custom detector files are
+#'   relative to (default: the working directory).
 #' @return An object of class `cg_policy`.
 #' @seealso [policy_decide()], [policy_apply()]; the format is described in
 #'   the spec (`cg_spec_path()`, README, "Policies").
@@ -47,11 +53,34 @@ policy_classes <- c(
 #' ))
 #' policy_apply(policy, "Card 4111 1111 1111 1111, CVV 123", "claude")
 #' policy_apply(policy, "PAN ABCPE1234F", "claude")
-cg_policy <- function(x) {
+cg_policy <- function(x, dir = NULL) {
   if (rlang::is_string(x)) {
+    dir <- dirname(x)
     x <- yaml::yaml.load(paste(read_utf8_lines(x), collapse = "\n"))
   }
-  structure(parse_policy(x), source = x)
+  structure(parse_policy(x, dir %||% getwd()), source = x)
+}
+
+# Custom detector files named by a policy, loaded before its rules are
+# checked, so rules can name their types.
+load_policy_detectors <- function(files, dir) {
+  if (is.null(files)) {
+    return(invisible())
+  }
+  files <- unlist(files)
+  if (!is.character(files) || any(!nzchar(files)) || is.list(files)) {
+    policy_fail("`detectors` must be a list of custom detector files.")
+  }
+  for (f in files) {
+    path <- if (grepl("^(/|~|[A-Za-z]:)", f)) f else file.path(dir, f)
+    if (!file.exists(path)) {
+      policy_fail("Custom detectors ", f, ": file not found (", path, ").")
+    }
+    tryCatch(load_detectors(path), error = function(e) {
+      policy_fail("Custom detectors ", f, ": ", conditionMessage(e))
+    })
+  }
+  invisible()
 }
 
 read_utf8_lines <- function(path) {
@@ -71,17 +100,18 @@ check_policy_fields <- function(x, allowed, where) {
   }
 }
 
-parse_policy <- function(x) {
+parse_policy <- function(x, dir = getwd()) {
   if (!is.list(x) || !identical(x$policy, "credgate-policy")) {
     policy_fail("Not a credgate policy: it must start with `policy: credgate-policy`.")
   }
   check_policy_fields(x, c(
-    "policy", "version", "id", "revision", "description", "destinations",
+    "policy", "version", "id", "revision", "description", "detectors", "destinations",
     "min_confidence", "rules", "default_action"
   ), "policy")
   if (!identical(as.numeric(x$version), 1)) {
     policy_fail("Unsupported policy format version ", format(x$version), ".")
   }
+  load_policy_detectors(x$detectors, dir)
   if (!rlang::is_string(x$id) || !nzchar(x$id)) {
     policy_fail("The policy needs an `id`.")
   }

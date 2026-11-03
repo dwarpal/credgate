@@ -58,6 +58,8 @@ load_spec <- function(dir = cg_spec_path()) {
   the$lists <- lapply(detectors$lists, as.character)
   the$tables <- lapply(detectors$tables, unlist)
   the$fragments <- detectors$fragments
+  the$builtin_ids <- vapply(detectors$detectors, `[[`, character(1), "id")
+  the$custom <- list() # id -> definition (JSON) of detectors loaded from custom files
   the$detectors <- list()
   for (def in detectors$detectors) {
     register_detector(compile_detector(def))

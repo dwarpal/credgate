@@ -1,5 +1,13 @@
 # credgate (development version)
 
+* Custom detectors from a YAML file: `load_detectors()` reads an
+  organisation's own formats in the same fields as the built-in detectors,
+  with `examples` that must and must not match, checked whenever the file is
+  loaded; a file is refused, and nothing registered, if anything is wrong.
+  A policy's `detectors` list loads files relative to the policy, and
+  `cg_policy()` takes `dir` for a policy given as a list. The policy editor
+  keeps the list when saving. Python reads the same files.
+
 * `audit_record()` (and `policy_apply(..., audit = )`) creates the audit
   log's folder if it does not exist yet, as the Python package does; it
   failed with "cannot open the connection" before.

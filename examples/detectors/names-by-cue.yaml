@@ -1,0 +1,88 @@
+# Names found from the words around them, with no list of names.
+#
+# credgate's built-in `person_name` needs a cue right before a name - a
+# title ("Smt."), a relation ("S/o") or a label ("Name:"). Call-centre notes
+# and chats often have none: "Lakshmi Verma called about her loan". This
+# file adds the cues such notes do have - who did something ("X called"),
+# who someone spoke to ("spoke with X"), greetings and sign-offs - and
+# reads a column named for names as names.
+#
+# Load it with `credgate.load_detectors()` / `load_detectors()`, with
+# `--detectors` on the command line and the proxy, or from a policy's
+# `detectors` list. See docs/custom-detectors.md.
+#
+# All examples are synthetic.
+
+kind: credgate-detectors
+version: 1
+
+fragments:
+  # Words before a name.
+  name_cue_before: '(?:(?i:\bspoke (?:to|with)|\btalked to|\bmet|\bcustomer|\bclient|\bborrower|\bco-?applicant|\bapplicant|\bguarantor|\bpayee|\bbeneficiary|\btransfer(?:red)? to|\bpaid to|\breceived from|\bon behalf of|\bregards,?|\bthanks,?|\bthank you,?|\bdear|\bhi|\bhello|\bnamaste)[ ]{1,3})'
+  # Words after a name: the person did something.
+  name_cue_after: '(?=[ ]{1,3}(?i:called|calls|visited|requested|complained|said|says|wants|wanted|asked|mentioned|informed|enquired|confirmed|agreed|applied|walked in|came in|has called|is not reachable)(?![\p{L}]))'
+  # A capitalised word that is not part of a person's name (see the list).
+  name_not_person: '(?!(?i:{{not_person_words}})(?![\p{L}]))'
+  # One word of a name.
+  # (Not a possessive: "Imran Khan's account" gives "Imran Khan".)
+  name_word: '{{name_not_person}}{{name_stop_latin}}{{latin_cap_word}}(?<![''’][sS])(?![\p{L}])'
+  # Not followed by a word that shows it is a team or a role
+  # ("Credit Operations", "Rahul Desk").
+  name_end: '(?![ ]{1,3}(?i:{{not_person_words}})(?![\p{L}]))'
+
+lists:
+  # Capitalised words that are roles, teams, pronouns or times, not people.
+  not_person_words: [customer, service, services, support, team, care, bank, branch,
+    manager, desk, centre, center, office, department, helpline, operations, credit,
+    collections, recovery, caller, agent, executive, officer, someone, somebody,
+    nobody, everyone, he, she, they, we, you, it, this, that, our, your, their,
+    monday, tuesday, wednesday, thursday, friday, saturday, sunday, january,
+    february, march, april, june, july, august, september, october, november,
+    december, morning, evening, afternoon, today, yesterday, tomorrow,
+    # Common words after a greeting or sign-off.
+    again, all, world, there, folks, guys, sir, madam, maam, regards,
+    # Companies, products and finance words: names of organisations follow
+    # the same cues ("received from ICICI Lombard"). Add your own.
+    pay, payments, gateway, wallet, upi, finance, financial, insurance,
+    capital, securities, limited, ltd, pvt, private, technologies, solutions,
+    systems, india, google, amazon, paytm, phonepe, icici, hdfc, sbi, axis,
+    kotak, lombard, life, general]
+
+detectors:
+  - id: name_by_cue
+    class: personal
+    label: Person name (from the words around it)
+    patterns:
+      # "spoke with Rahul Nair", "Regards, Sunita Devi", "Hi Anil"
+      - '{{name_cue_before}}(?<value>{{name_word}}(?:[ ]{{name_word}}){0,3}){{name_end}}'
+      # "Lakshmi Verma called": two or more words, so "Rahul called" alone
+      # (or a capitalised first word of a sentence) is not enough.
+      - '(?<![\p{L}])(?<value>{{name_word}}(?:[ ]{{name_word}}){1,3}){{name_cue_after}}'
+    capture: value
+    base: 0.7
+    canonical: collapse_upper
+    # A column named for names: every value is a name, in any letter case
+    # or script.
+    column_label:
+      label: '(?:^|[^\p{L}])(?:customer|cust|client|borrower|applicant|nominee|holder|payee|beneficiary|guarantor|full|first|last|father|mother|spouse)?[ _]?name(?:$|[^\p{L}])|\bnaam\b|नाम'
+      patterns: ['^[\p{L}\p{M}]+(?:[ .]{1,2}[\p{L}\p{M}]+){0,3}\.?$']
+    examples:
+      match:
+        - 'Lakshmi Verma called regarding a failed transfer'
+        - 'Spoke with Rahul Nair about the EMI date'
+        - 'Regards, Sunita Devi'
+        - 'Hi Anil, your loan is approved'
+        - 'Customer R. K. Sharma wants a statement'
+      no_match:
+        - 'Customer Service called back'
+        - 'Hi Team, please check the file'
+        - 'The Branch Manager called'
+        - 'Someone called about a loan'
+        - 'Rahul called'
+        - 'Spoke with the customer about the EMI'
+        - 'Regards, Credit Operations'
+        - 'Monday Morning called'
+        - 'Spoke to Rahul Desk'
+        - 'Payment Gateway called back'
+        - 'Received from ICICI Lombard'
+        - 'Thanks Again for the update'

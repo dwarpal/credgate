@@ -47,10 +47,10 @@ policy_read_file <- function(path) {
 }
 
 # Validation: the same strict parse the proxy relies on; NULL when valid.
-policy_problem <- function(x) {
+policy_problem <- function(x, dir = getwd()) {
   tryCatch(
     {
-      parse_policy(x)
+      parse_policy(x, dir)
       NULL
     },
     error = function(e) conditionMessage(e)
@@ -240,7 +240,7 @@ policy_editor_server <- function(path, user = NULL) {
       x
     }), ignoreInit = TRUE)
 
-    problem <- shiny::reactive(policy_problem(policy()))
+    problem <- shiny::reactive(policy_problem(policy(), dirname(path)))
     changes <- shiny::reactive({
       x <- policy()
       x$revision <- saved()$revision
@@ -501,7 +501,7 @@ policy_editor_server <- function(path, user = NULL) {
     # --- try it ------------------------------------------------------------------
     decision <- shiny::reactive({
       shiny::req(is.null(problem()), input$try_endpoint, nzchar(input$try_text))
-      policy_decide(cg_policy(policy()), input$try_text, input$try_endpoint)
+      policy_decide(cg_policy(policy(), dirname(path)), input$try_text, input$try_endpoint)
     })
     output$try_result <- shiny::renderUI({
       if (!is.null(problem())) {
@@ -529,7 +529,7 @@ policy_editor_server <- function(path, user = NULL) {
       d <- decision()
       shiny::req(isTRUE(d$allowed))
       text <- tryCatch(
-        policy_apply(cg_policy(policy()), input$try_text, input$try_endpoint)$text,
+        policy_apply(cg_policy(policy(), dirname(path)), input$try_text, input$try_endpoint)$text,
         error = function(e) NULL
       )
       shiny::tagList(

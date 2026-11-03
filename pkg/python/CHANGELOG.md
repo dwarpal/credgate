@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Custom detectors from a YAML file** (`credgate.load_detectors()`): an
+  organisation's own formats in the same fields as the built-in detectors,
+  with its own fragments and lists, and `examples` that must and must not
+  match, checked every time the file loads. A file is refused, and nothing
+  registered, if anything is wrong: an unknown field, a built-in id, a
+  class policies do not know, a failing example. `--detectors FILE` on every
+  command, including `proxy serve`; a policy's `detectors` list loads files
+  relative to the policy. R reads the same files (`load_detectors()`), with
+  shared conformance cases. Guide, with a name detector that finds names from
+  the words around them: docs/custom-detectors.md.
+
 ## 0.8.2 (2026-11-03)
 
 A proxy fix, and credgate is now marked alpha.

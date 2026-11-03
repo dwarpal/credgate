@@ -392,3 +392,35 @@ for (case in rotated$tamper) {
     expect_false(audit_verify(path)$ok)
   })
 }
+
+custom_spec <- conformance("custom_detectors.yaml")
+
+for (case in custom_spec$cases) {
+  test_that(paste("custom detectors:", case$id), {
+    credgate:::register_builtin_detectors()
+    withr::defer(credgate:::register_builtin_detectors())
+    load_detectors(custom_spec$files[[case$file]])
+    got <- detect_pii(case$text, detectors = unlist(case$types), context = case$context)
+    expect_identical(got$type, vapply(case$expect, `[[`, "", "type"))
+    expect_identical(got$value, vapply(case$expect, function(e) as.character(e$value), ""))
+    for (i in seq_along(case$expect)) {
+      if (!is.null(case$expect[[i]]$confidence)) {
+        expect_equal(got$confidence[i], case$expect[[i]]$confidence, tolerance = 1e-9)
+      }
+    }
+  })
+}
+
+for (case in custom_spec$invalid) {
+  test_that(paste("invalid custom detectors:", case$id), {
+    credgate:::register_builtin_detectors()
+    withr::defer(credgate:::register_builtin_detectors())
+    before <- cg_detectors()$id
+    msg <- tryCatch({
+      load_detectors(case$file)
+      ""
+    }, error = conditionMessage)
+    expect_true(grepl(tolower(case$error), tolower(msg), fixed = TRUE), info = msg)
+    expect_identical(cg_detectors()$id, before) # nothing registered
+  })
+}

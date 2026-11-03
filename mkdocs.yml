@@ -41,6 +41,7 @@ nav:
   - Guides:
       - Proxy: proxy.md
       - Policy editor: policy-editor.md
+      - Custom detectors: custom-detectors.md
       - Large data: large-data.md
       - Threat model: threat-model.md
   - Specification: spec.md
@@ -91,6 +92,7 @@ markdown_extensions:
   - toc: {permalink: true}
   - pymdownx.highlight
   - pymdownx.superfences
+  - pymdownx.tabbed: {alternate_style: true}
 
 validation:
   # Guides link to files elsewhere in the repository (benchmark/, examples/).

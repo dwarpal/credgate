@@ -21,6 +21,7 @@ from .checksums import (
     verhoeff_check_digit,
     verhoeff_valid,
 )
+from .custom import load_detectors
 from .detect import Span, detect_pii, mask_value, set_mask
 from .detectors import Detector, bounded, detectors, register_detector, reset_detectors
 from .evaluate import EvaluationReport, TypeScore, evaluate, load_corpus
@@ -74,6 +75,7 @@ __all__ = [
     "gstin_valid",
     "key_fingerprint",
     "load_corpus",
+    "load_detectors",
     "luhn_check_digit",
     "luhn_valid",
     "mask_value",
