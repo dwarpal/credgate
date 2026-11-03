@@ -74,6 +74,9 @@ body, .bslib-page-sidebar, .bslib-sidebar-layout > .main { background: var(--cg-
 .cg-form { background: var(--cg-soft); border: 1px solid var(--cg-line); border-radius: 10px; padding: .9rem 1rem .4rem; margin-top: 1rem; }
 .cg-form h6 { font-weight: 700; margin-bottom: .6rem; }
 .cg-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .6rem; }
+.cg-actions.cg-field-row { align-items: flex-end; gap: .6rem; }
+.cg-actions.cg-field-row .form-group { margin-bottom: 0; }
+.cg-actions.cg-field-row .btn { margin-bottom: .1rem; }
 .cg-hint { font-size: .78rem; color: var(--cg-muted); }
 .form-label, .control-label { font-size: .8rem; font-weight: 600; color: var(--cg-ink); }
 

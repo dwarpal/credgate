@@ -1,5 +1,14 @@
 # credgate (development version)
 
+* Policy tests: `run_policy_tests()` runs sample requests kept beside a
+  policy (`bank-default.tests.yaml`) and checks what the policy does with
+  them - allowed or blocked, the blocking rules, the action for each type,
+  types that must not be found, the exact text sent. The policy editor has a
+  Tests tab that runs them against the draft on every change, a "Save as a
+  test" button in Try it, and refuses to save while a test fails unless
+  "Save anyway" is ticked with a reason, which the change log records.
+  Python reads the same files (`credgate policy test` for CI).
+
 * Columns named for names (`customer_name`, `nominee`, `नाम`, ...) and for
   addresses (`permanent_address`, `addr_line1`, `पता`, ...) - or values given
   `context = "customer name"` - are read as names and addresses, in any

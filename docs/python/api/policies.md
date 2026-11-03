@@ -6,6 +6,11 @@
 ::: credgate.Destination
 ::: credgate.PolicyError
 
+## Policy tests
+
+::: credgate.run_policy_tests
+::: credgate.PolicyTestResult
+
 ## Audit log
 
 ::: credgate.AuditLog

@@ -200,7 +200,9 @@ InfoSec can change a policy in a browser instead of editing YAML:
 `credgate::policy_editor("bank-default.yaml")` (R, needs `shiny` and
 `bslib`). It edits endpoints and rules, tries sample text against the unsaved
 policy, shows what changed, and saves only a valid policy, recording who
-saved it, why and what changed in a hash-chained change log. See
+saved it, why and what changed in a hash-chained change log. Policy tests
+kept beside the policy - sample requests and what must happen to them - run
+in the editor before every save and with `credgate policy test` in CI. See
 [docs/policy-editor.md](docs/policy-editor.md).
 
 <p align="center">

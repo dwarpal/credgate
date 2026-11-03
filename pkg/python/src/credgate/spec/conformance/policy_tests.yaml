@@ -1,0 +1,130 @@
+# Policy test conformance cases (see README.md, "Policy tests"). The tests in
+# `tests` are run against `policy`; each must pass or fail as in `results`,
+# failures with problems mentioning each listed substring. Files under
+# `invalid` must be refused, with an error mentioning `error`.
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+policy:
+  policy: credgate-policy
+  version: 1
+  id: tests-example
+  revision: 1
+  destinations:
+    claude: {tier: frontier}
+    vllm-gpu: {tier: internal}
+  min_confidence: 0.5
+  rules:
+    - id: card-with-cvv-and-expiry
+      when: {tiers: [frontier], all_of: [card, card_cvv, card_expiry]}
+      action: block
+    - id: ids-tokenised
+      when: {tiers: [frontier], classes: [identity_strong]}
+      action: tokenise
+    - id: contact-redacted
+      when: {tiers: [frontier], classes: [contact, financial, sensitive_auth]}
+      action: redact
+    - id: in-house
+      when: {tiers: [internal]}
+      action: allow
+  default_action: redact
+
+tests:
+  kind: credgate-policy-tests
+  version: 1
+  tests:
+    - id: card-blocked
+      endpoint: claude
+      text: 'Card 4111 1111 1111 1111, CVV 123, expiry 08/29'
+      expect: {allowed: false, blocked_by: [card-with-cvv-and-expiry]}
+    - id: pan-tokenised-mobile-redacted
+      endpoint: claude
+      texts: ['Customer PAN ABCPE1234F', 'mobile 9876543210']
+      expect:
+        allowed: true
+        actions: {pan: tokenise, mobile_in: redact}
+        absent: [card]
+        output: ['Customer PAN [PAN_1]', 'mobile [MOBILE_IN]']
+    - id: in-house-sees-everything
+      endpoint: vllm-gpu
+      text: 'PAN ABCPE1234F'
+      expect: {allowed: true, actions: {pan: allow}, output: 'PAN ABCPE1234F'}
+    # These fail on purpose.
+    - id: wrong-allowed
+      endpoint: claude
+      text: 'Card 4111 1111 1111 1111, CVV 123, expiry 08/29'
+      expect: {allowed: true}
+    - id: wrong-action-and-missing-type
+      endpoint: claude
+      text: 'Customer PAN ABCPE1234F'
+      expect: {allowed: true, actions: {pan: redact, aadhaar: tokenise}}
+    - id: present-but-should-be-absent
+      endpoint: claude
+      text: 'mobile 9876543210'
+      expect: {allowed: true, absent: [mobile_in]}
+    - id: wrong-output
+      endpoint: claude
+      text: 'mobile 9876543210'
+      expect: {allowed: true, output: 'mobile 9876543210'}
+    - id: unknown-endpoint
+      endpoint: gemini
+      text: 'hello'
+      expect: {allowed: true}
+
+results:
+  - {id: card-blocked, passed: true}
+  - {id: pan-tokenised-mobile-redacted, passed: true}
+  - {id: in-house-sees-everything, passed: true}
+  - {id: wrong-allowed, passed: false, problems: ['allowed: expected true, got false']}
+  - {id: wrong-action-and-missing-type, passed: false, problems: ['pan: expected redact, got tokenise', 'aadhaar: expected tokenise, not found']}
+  - {id: present-but-should-be-absent, passed: false, problems: ['mobile_in: expected absent, found']}
+  - {id: wrong-output, passed: false, problems: ['output']}
+  - {id: unknown-endpoint, passed: false, problems: ['unknown endpoint']}
+
+invalid:
+  - id: wrong-kind
+    tests: {kind: credgate-policy, version: 1, tests: []}
+    error: credgate-policy-tests
+  - id: empty
+    tests: {kind: credgate-policy-tests, version: 1, tests: []}
+    error: tests
+  - id: duplicate-id
+    tests:
+      kind: credgate-policy-tests
+      version: 1
+      tests:
+        - {id: a, endpoint: claude, text: x, expect: {allowed: true}}
+        - {id: a, endpoint: claude, text: y, expect: {allowed: true}}
+    error: twice
+  - id: text-and-texts
+    tests:
+      kind: credgate-policy-tests
+      version: 1
+      tests: [{id: a, endpoint: claude, text: x, texts: [y], expect: {allowed: true}}]
+    error: text
+  - id: no-allowed
+    tests:
+      kind: credgate-policy-tests
+      version: 1
+      tests: [{id: a, endpoint: claude, text: x, expect: {actions: {pan: redact}}}]
+    error: allowed
+  - id: unknown-type
+    tests:
+      kind: credgate-policy-tests
+      version: 1
+      tests: [{id: a, endpoint: claude, text: x, expect: {allowed: true, absent: [pan_number]}}]
+    error: pan_number
+  - id: unknown-action
+    tests:
+      kind: credgate-policy-tests
+      version: 1
+      tests: [{id: a, endpoint: claude, text: x, expect: {allowed: true, actions: {pan: hide}}}]
+    error: hide
+  - id: unknown-field
+    tests:
+      kind: credgate-policy-tests
+      version: 1
+      tests: [{id: a, endpoint: claude, text: x, expect: {allowed: true}, expected: 1}]
+    error: expected

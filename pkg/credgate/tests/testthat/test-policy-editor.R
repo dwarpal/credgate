@@ -114,6 +114,50 @@ test_that("the editor edits, checks, tries and saves", {
   })
 })
 
+test_that("the editor runs the policy's tests and refuses a save that breaks one", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  tests_file <- credgate:::policy_tests_path(path)
+  shiny::testServer(credgate:::policy_editor_server(path, user = "infosec-1"), {
+    expect_null(test_results())
+
+    # save what the policy does now as a test
+    session$setInputs(try_endpoint = "claude",
+                      try_text = "Card 4111 1111 1111 1111, CVV 123, expiry 08/29")
+    session$setInputs(test_id = "card-blocked-for-claude", test_add = 1)
+    expect_true(file.exists(tests_file))
+    session$setInputs(try_endpoint = "claude", try_text = "Customer PAN ABCPE1234F")
+    session$setInputs(test_id = "pan-to-claude", test_add = 2)
+    expect_identical(test_results()$passed, c(TRUE, TRUE))
+    expect_true(all(run_policy_tests(path)$passed)) # the file is what CI runs
+
+    # a change that breaks a test: the save is refused ...
+    session$setInputs(default_action = "allow")
+    x <- policy()
+    x$rules <- Filter(function(r) r$id != "card-with-cvv-and-expiry", x$rules)
+    policy(x)
+    expect_identical(failing(), "card-blocked-for-claude")
+    expect_false(can_save())
+    session$setInputs(user = "infosec-1", note = "", save = 1)
+    expect_identical(yaml::read_yaml(path)$revision, 1L)
+
+    # ... unless "save anyway" is ticked with a reason, which the log records
+    session$setInputs(save_anyway = TRUE)
+    expect_true(can_save())
+    session$setInputs(save = 2)
+    expect_identical(yaml::read_yaml(path)$revision, 1L) # no reason given
+    session$setInputs(note = "Cards handled by the gateway now", save = 3)
+    expect_identical(yaml::read_yaml(path)$revision, 2L)
+    expect_match(policy_changes(path)$note, "saved with failing tests: card-blocked-for-claude", fixed = TRUE)
+
+    # removing a test rewrites the file
+    session$setInputs(test_pick = "card-blocked-for-claude", test_delete = 1)
+    expect_identical(run_policy_tests(path)$id, "pan-to-claude")
+  })
+})
+
 test_that("the editor page loads again when its scripts came from a read-only library", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
