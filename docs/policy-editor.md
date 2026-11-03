@@ -42,6 +42,18 @@ credgate::policy_editor("bank-default.yaml", user = "infosec-1")
 - **Tests**: sample requests and what the policy must do with them (see
   [Policy tests](#policy-tests) below), run against the unsaved policy on
   every change. The header shows the score, such as "tests 3/3".
+- **Detectors**: a workbench for the policy's [custom
+  detectors](custom-detectors.md). Edit a detectors file named in the
+  policy, or start a new one beside it, and see, as you type, what it finds
+  in a sample text (highlighted, with confidence and reasons, and what was
+  dropped and why) and whether each of its `examples` holds - a `match`
+  example that is missed or a `no_match` example that is matched shows as
+  failing. **Add a detector from a form** writes the YAML for you from an
+  id, class, pattern, keywords and examples; edit it further by hand if you
+  need fragments or lists. Saving checks the file exactly as credgate loads it, writes it,
+  loads it into the editor and, for a new file, adds it to the policy's
+  `detectors` list. Save a new policy revision afterwards, so the audit log
+  shows that the detectors changed.
 - **Changes**: what is different from the saved file, and the history of
   saves. The history is hash-chained like the audit log, so an entry that was
   edited or removed afterwards shows as broken.

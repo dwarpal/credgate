@@ -177,6 +177,16 @@ log records changes to it. Tokenising names (rather than redacting them)
 lets the model refer to "[NAME_BY_CUE_1]" and you read the real name in the
 answer.
 
+## In the policy editor
+
+The policy editor's **Detectors** tab is a workbench for these files: write a
+detector with a form (id, class, pattern, keywords, examples) or edit the
+YAML, try it on sample text as you type - matches highlighted with their
+confidence and reasons, and what was dropped and why - and see every
+`examples` entry pass or fail. It saves only a file credgate would load,
+and adds a new file to the policy's `detectors` list. See the [policy
+editor guide](policy-editor.md).
+
 ## On the command line
 
 ```sh

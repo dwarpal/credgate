@@ -167,6 +167,45 @@ test_that("the editor runs the policy's tests and refuses a save that breaks one
   })
 })
 
+test_that("the detector workbench checks, tries and saves a custom detectors file", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  withr::defer(credgate:::register_builtin_detectors())
+  shiny::testServer(credgate:::policy_editor_server(path, user = "infosec-1"), {
+    session$setInputs(det_file = "", det_yaml = det_template,
+                      det_sample = "Loan a/c LN0012345678 overdue\nRef LN00123")
+    session$elapse(500)
+    x <- det_check()
+    expect_null(x$error)
+    expect_true(all(x$examples$ok))
+
+    # a wrong example is shown, not saved
+    bad <- sub("no_match: ['LN00123']", "no_match: ['LN0099999999']", det_template, fixed = TRUE)
+    session$setInputs(det_yaml = bad)
+    session$elapse(500)
+    expect_identical(det_check()$examples$ok, c(TRUE, FALSE))
+    session$setInputs(det_name = "bank-detectors.yaml", det_save = 1)
+    expect_false(file.exists(file.path(dirname(path), "bank-detectors.yaml")))
+
+    # a built-in id is refused
+    session$setInputs(det_yaml = sub("id: loan_account", "id: pan", det_template, fixed = TRUE))
+    session$elapse(500)
+    expect_match(det_check()$error, "built-in")
+
+    # saved: written beside the policy, loaded, and added to the draft policy
+    session$setInputs(det_yaml = det_template, det_save = 2)
+    expect_true(file.exists(file.path(dirname(path), "bank-detectors.yaml")))
+    expect_true("loan_account" %in% cg_detectors()$id)
+    expect_identical(unlist(policy()$detectors), "bank-detectors.yaml")
+    expect_null(problem())
+    # a file name with folders is refused
+    session$setInputs(det_file = "", det_name = "../x.yaml", det_save = 3)
+    expect_false(file.exists(file.path(dirname(dirname(path)), "x.yaml")))
+  })
+})
+
 test_that("the editor page loads again when its scripts came from a read-only library", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
@@ -185,4 +224,28 @@ test_that("the editor page loads again when its scripts came from a read-only li
   expect_match(html, "credgate")
   expect_match(html, "try_endpoint")
   credgate:::writable_temp_assets() # so R can remove its temporary directory
+})
+
+test_that("the workbench form writes a detector that loads", {
+  det <- credgate:::detector_from_form(
+    id = "staff_code", class = "personal", label = "", pattern = "EMP-[0-9]{5}",
+    keywords = "staff, a/c no.", required = TRUE,
+    match = "staff EMP-12345", no_match = "EMP-12345\nstaff EMP-1234"
+  )
+  expect_identical(det$context, "staff|a/c no\\.")
+  expect_true(det$context_required)
+  data <- list(kind = "credgate-detectors", version = 1L, detectors = list(det))
+  compiled <- credgate:::compile_detector_file(yaml::yaml.load(credgate:::detectors_yaml(data)))
+  expect_identical(compiled[[1]]$detector$id, "staff_code")
+
+  expect_match(credgate:::detector_from_form("Staff", "personal", "", "x", "", FALSE, "", ""), "lower-case")
+  expect_match(credgate:::detector_from_form("s", "personal", "", "(", "", FALSE, "", ""), "not a valid")
+  expect_match(credgate:::detector_from_form("s", "personal", "", "x", "", TRUE, "", ""), "keyword")
+})
+
+test_that("the workbench keeps one-item lists as lists", {
+  data <- yaml::yaml.load("kind: credgate-detectors\nversion: 1\ndetectors:\n  - id: a\n    class: financial\n    label: A\n    patterns: ['X[0-9]{3}']\n    examples: {match: ['X123']}\n")
+  out <- credgate:::detectors_yaml(data)
+  expect_match(out, "patterns:\n      - X[0-9]{3}", fixed = TRUE)
+  expect_match(out, "match:\n        - X123", fixed = TRUE)
 })

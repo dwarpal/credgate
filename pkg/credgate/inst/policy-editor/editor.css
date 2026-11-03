@@ -171,3 +171,9 @@ body, .bslib-page-sidebar, .bslib-sidebar-layout > .main { background: var(--cg-
 .cg-conf .bar { width: 48px; height: 6px; border-radius: 3px; background: var(--cg-soft); border: 1px solid var(--cg-line); overflow: hidden; }
 .cg-conf .bar span { display: block; height: 100%; background: var(--cg-brand, #0e5a6b); }
 .cg-hint { color: var(--cg-muted); font-size: .8rem; margin: .5rem 0 0; }
+
+/* Detector workbench */
+#det_yaml { white-space: pre; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem; line-height: 1.45; }
+.cg-sample { border: 1px solid var(--cg-line); border-radius: 8px; padding: .5rem .7rem; margin-bottom: .6rem; font-size: .88rem; background: var(--cg-surface); }
+.cg-sample .line { padding: .15rem 0; }
+.cg-sample mark { background: var(--cg-brand-soft); color: inherit; border-bottom: 2px solid var(--cg-brand); padding: 0 .1rem; border-radius: 2px; }

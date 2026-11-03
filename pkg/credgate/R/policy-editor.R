@@ -216,6 +216,49 @@ policy_editor_ui <- function(path) {
         )
       ),
       bslib::nav_panel(
+        "Detectors",
+        shiny::p(class = "cg-lede", "Your own detectors (loan account numbers, customer ids, staff codes) in a custom detectors file named in the policy. ",
+                 "Edit the file, try it on a sample, and save: the examples are checked first, as on every load. Use synthetic data only."),
+        bslib::layout_columns(
+          shiny::div(
+            shiny::selectInput("det_file", tip("File", "The custom detectors files the policy names, or a new one beside the policy (added to the policy's detectors list)."), NULL, width = "100%"),
+            shiny::uiOutput("det_new_name"),
+            bslib::accordion(
+              open = FALSE,
+              bslib::accordion_panel(
+                "Add a detector from a form",
+                shiny::textInput("gen_id", tip("Id", "Lower-case letters, digits and _, e.g. loan_account. Reported as the type, and used in rules."), placeholder = "loan_account"),
+                shiny::selectInput("gen_class", tip("Class", "The group that policy rules can name, e.g. financial. One of the seven classes credgate knows."), custom_classes, selected = "financial"),
+                shiny::textInput("gen_label", "Label", placeholder = "Loan account number"),
+                shiny::textInput("gen_pattern", tip("Pattern (regex)", "What the value looks like, e.g. LN[0-9]{10} for LN and ten digits. It is not matched inside a longer word or number."), placeholder = "LN[0-9]{10}"),
+                shiny::textInput("gen_keywords", tip("Keywords nearby (comma-separated)", "Words that, near a value, make it more certain, e.g. loan, a/c. Taken literally."), placeholder = "loan, a/c"),
+                shiny::checkboxInput("gen_required", "Report only with a keyword nearby", FALSE),
+                shiny::textAreaInput("gen_match", tip("Should match (one per line)", "Examples that must be found. They are checked every time the file loads."), rows = 2, placeholder = "Loan a/c LN0012345678"),
+                shiny::textAreaInput("gen_no_match", tip("Should not match (one per line)", "Examples that must not be found, such as a near-miss you want ignored."), rows = 2, placeholder = "LN00123"),
+                bslib::tooltip(
+                  shiny::actionButton("gen_add", "Add to the file", class = "btn-outline-primary btn-sm"),
+                  "Adds the detector to the YAML below (not saved yet). The file is rewritten in a standard layout, so comments in it are not kept."
+                )
+              )
+            ),
+            shiny::textAreaInput("det_yaml", "Detectors (YAML)", rows = 18, width = "100%", resize = "vertical"),
+            shiny::div(
+              class = "cg-actions",
+              bslib::tooltip(shiny::actionButton("det_save", "Save detectors file", class = "btn-primary btn-sm"), "Checks the file as credgate loads it - every example must hold - then writes it and loads it here. Save a new policy revision afterwards so the audit log shows the change."),
+              bslib::tooltip(shiny::actionButton("det_revert", "Discard edits", class = "btn-link btn-sm"), "Reloads the file as saved.")
+            )
+          ),
+          shiny::div(
+            shiny::uiOutput("det_status"),
+            shiny::textAreaInput("det_sample", tip("Sample text", "Text to try the detectors on, one request per line."), rows = 5, width = "100%",
+                                 value = "Loan a/c LN0012345678 overdue\nRef LN00123 is not an account"),
+            shiny::uiOutput("det_matches"),
+            shiny::uiOutput("det_examples")
+          ),
+          col_widths = bslib::breakpoints(sm = 12, xl = c(5, 7))
+        )
+      ),
+      bslib::nav_panel(
         "Changes",
         shiny::h6(class = "cg-section", "Since the last save"),
         shiny::uiOutput("pending"),
@@ -281,7 +324,11 @@ policy_editor_server <- function(path, user = NULL) {
       x
     }), ignoreInit = TRUE)
 
-    problem <- shiny::reactive(policy_problem(policy(), dirname(path)))
+    det_saved_at <- shiny::reactiveVal(0)
+    problem <- shiny::reactive({
+      det_saved_at() # a saved detectors file can make the policy valid
+      policy_problem(policy(), dirname(path))
+    })
     changes <- shiny::reactive({
       x <- policy()
       x$revision <- saved()$revision
@@ -735,6 +782,223 @@ policy_editor_server <- function(path, user = NULL) {
       )
     })
 
+    # --- detector workbench --------------------------------------------------------
+    det_template <- paste(
+      "kind: credgate-detectors",
+      "version: 1",
+      "detectors:",
+      "  - id: loan_account",
+      "    class: financial",
+      "    label: Loan account number",
+      "    patterns: ['LN[0-9]{10}']",
+      "    bounded: true",
+      "    context: 'loan|\\ba/c\\b'",
+      "    base: 0.6",
+      "    base_without_context: 0.4",
+      "    examples:",
+      "      match: ['Loan a/c LN0012345678']",
+      "      no_match: ['LN00123']",
+      "", sep = "\n"
+    )
+    det_files <- shiny::reactive(as.character(unlist(policy()$detectors)))
+    det_path <- function(f) if (grepl("^(/|~|[A-Za-z]:)", f)) f else file.path(dirname(path), f)
+    shiny::observe({
+      files <- det_files()
+      keep <- shiny::isolate(input$det_file)
+      shiny::updateSelectInput(session, "det_file", choices = c(files, "(new file)" = ""),
+                               selected = if (!is.null(keep) && keep %in% files) keep else if (length(files)) files[1] else "")
+    })
+    output$det_new_name <- shiny::renderUI({
+      if (nzchar(input$det_file %||% "")) {
+        return(NULL)
+      }
+      shiny::textInput("det_name", tip("New file name", "Saved beside the policy, e.g. bank-detectors.yaml."), placeholder = "bank-detectors.yaml", width = "100%")
+    })
+    det_load <- function() {
+      f <- input$det_file %||% ""
+      text <- if (nzchar(f) && file.exists(det_path(f))) paste(read_utf8_lines(det_path(f)), collapse = "\n") else det_template
+      shiny::updateTextAreaInput(session, "det_yaml", value = text)
+    }
+    shiny::observeEvent(input$det_file, det_load(), ignoreNULL = FALSE)
+    shiny::observeEvent(input$det_revert, det_load())
+
+    det_text <- shiny::debounce(shiny::reactive(input$det_yaml %||% ""), 400)
+    # The file as edited: its detectors (examples set aside), each example's
+    # result, or the reason it cannot be read.
+    det_check <- shiny::reactive({
+      text <- det_text()
+      shiny::req(nzchar(text))
+      data <- tryCatch(yaml::yaml.load(text), error = function(e) e)
+      if (inherits(data, "error")) {
+        return(list(error = paste("Not valid YAML:", conditionMessage(data))))
+      }
+      examples <- if (is.list(data) && is.list(data$detectors)) lapply(data$detectors, function(d) d$examples)
+      bare <- data
+      if (is.list(bare$detectors)) bare$detectors <- lapply(bare$detectors, function(d) d[setdiff(names(d), "examples")])
+      compiled <- tryCatch(compile_detector_file(bare), error = function(e) e)
+      if (inherits(compiled, "error")) {
+        return(list(error = conditionMessage(compiled)))
+      }
+      dets <- lapply(compiled, `[[`, "detector")
+      builtin <- intersect(vapply(dets, `[[`, "", "id"), the$builtin_ids)
+      if (length(builtin)) {
+        return(list(error = sprintf("`%s` is the id of a built-in detector; choose another.", builtin[1])))
+      }
+      results <- do.call(rbind, c(list(data.frame(id = character(), want = character(), text = character(), ok = logical())),
+        Map(function(det, ex) {
+          rows <- lapply(c("match", "no_match"), function(want) {
+            texts <- as.character(unlist(ex[[want]]))
+            if (length(texts) == 0) return(NULL)
+            hit <- seq_along(texts) %in% detect_with(list(det), texts)$doc
+            data.frame(id = det$id, want = want, text = texts, ok = if (want == "match") hit else !hit)
+          })
+          do.call(rbind, rows)
+        }, dets, examples)))
+      list(dets = dets, examples = results)
+    })
+    output$det_status <- shiny::renderUI({
+      x <- det_check()
+      if (!is.null(x$error)) {
+        return(shiny::div(class = "cg-status bad", shiny::strong("Cannot be saved. "), x$error))
+      }
+      bad <- sum(!x$examples$ok)
+      ids <- paste(vapply(x$dets, `[[`, "", "id"), collapse = ", ")
+      if (bad) {
+        shiny::div(class = "cg-status bad", shiny::strong(sprintf("%d example%s fail%s. ", bad, if (bad == 1) "" else "s", if (bad == 1) "s" else "")),
+                   "Fix the pattern or the example before saving.")
+      } else {
+        shiny::div(class = "cg-status ok", shiny::strong("Valid. "), sprintf("%s; %d example%s hold.", ids, nrow(x$examples), if (nrow(x$examples) == 1) "" else "s"))
+      }
+    })
+    output$det_matches <- shiny::renderUI({
+      x <- det_check()
+      shiny::req(is.null(x$error))
+      lines <- strsplit(input$det_sample %||% "", "\n", fixed = TRUE)[[1]]
+      lines <- lines[nzchar(trimws(lines))]
+      if (length(lines) == 0) {
+        return(NULL)
+      }
+      misses <- new.env()
+      found <- tryCatch(detect_with(x$dets, lines, misses = misses), error = function(e) NULL)
+      shiny::req(!is.null(found))
+      m <- misses$spans
+      shiny::tagList(
+        shiny::h6(class = "cg-section", "On the sample"),
+        shiny::div(class = "cg-sample", lapply(seq_along(lines), function(i) {
+          f <- found[found$doc == i, , drop = FALSE]
+          shiny::div(class = "line", highlight_spans(lines[i], f))
+        })),
+        if (nrow(found)) shiny::div(class = "cg-scroll", shiny::tags$table(
+          class = "cg-table",
+          shiny::tags$thead(shiny::tags$tr(lapply(c("Detector", "Found", "Confidence", "Why"), shiny::tags$th))),
+          shiny::tags$tbody(lapply(seq_len(nrow(found)), function(i) shiny::tags$tr(
+            shiny::tags$td(shiny::strong(found$type[i])),
+            shiny::tags$td(class = "mono", found$value[i]),
+            shiny::tags$td(confidence_bar(found$confidence[i])),
+            shiny::tags$td(class = "desc", why_list(found$reasons[i]))
+          )))
+        )) else shiny::div(class = "cg-empty", "No matches on the sample."),
+        if (!is.null(m) && nrow(m)) shiny::div(class = "cg-hint", lapply(seq_len(nrow(m)), function(i) {
+          shiny::div(sprintf("Not reported: %s '%s' - %s", m$type[i], m$value[i], m$why[i]))
+        }))
+      )
+    })
+    output$det_examples <- shiny::renderUI({
+      x <- det_check()
+      shiny::req(is.null(x$error), nrow(x$examples) > 0)
+      e <- x$examples
+      shiny::tagList(
+        shiny::h6(class = "cg-section", "Examples"),
+        shiny::div(class = "cg-scroll", shiny::tags$table(
+          class = "cg-table",
+          shiny::tags$thead(shiny::tags$tr(lapply(c("Example", "Should", "Result"), shiny::tags$th))),
+          shiny::tags$tbody(lapply(seq_len(nrow(e)), function(i) shiny::tags$tr(
+            shiny::tags$td(class = "mono", e$text[i], if (length(unique(e$id)) > 1) shiny::div(class = "desc", e$id[i])),
+            shiny::tags$td(if (e$want[i] == "match") "match" else "not match"),
+            shiny::tags$td(if (e$ok[i]) cg_badge("holds", "allow") else cg_badge(if (e$want[i] == "match") "missed" else "wrong match", "block"))
+          )))
+        ))
+      )
+    })
+    shiny::observeEvent(input$gen_add, {
+      det <- detector_from_form(
+        id = input$gen_id, class = input$gen_class, label = input$gen_label,
+        pattern = input$gen_pattern, keywords = input$gen_keywords,
+        required = isTRUE(input$gen_required),
+        match = input$gen_match, no_match = input$gen_no_match
+      )
+      if (is.character(det)) {
+        shiny::showNotification(det, type = "error")
+        return()
+      }
+      text <- input$det_yaml %||% ""
+      data <- if (nzchar(trimws(text))) tryCatch(yaml::yaml.load(text), error = function(e) NULL) else list()
+      if (!is.list(data)) {
+        shiny::showNotification("The YAML below cannot be read; fix it before adding a detector.", type = "error")
+        return()
+      }
+      if (det$id %in% vapply(data$detectors %||% list(), function(d) d$id %||% "", "")) {
+        shiny::showNotification(sprintf("The file already has a detector %s.", det$id), type = "error")
+        return()
+      }
+      data$kind <- "credgate-detectors"
+      data$version <- 1L
+      data$detectors <- c(data$detectors, list(det))
+      data <- data[c("kind", "version", setdiff(names(data), c("kind", "version")))]
+      shiny::updateTextAreaInput(session, "det_yaml", value = detectors_yaml(data))
+      for (f in c("gen_id", "gen_label", "gen_pattern", "gen_keywords")) shiny::updateTextInput(session, f, value = "")
+      for (f in c("gen_match", "gen_no_match")) shiny::updateTextAreaInput(session, f, value = "")
+    })
+    shiny::observeEvent(input$det_save, {
+      f <- input$det_file %||% ""
+      new <- !nzchar(f)
+      if (new) {
+        f <- trimws(input$det_name %||% "")
+        if (!grepl("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$", f)) {
+          shiny::showNotification("Give the new file a name ending in .yaml, without folders, e.g. bank-detectors.yaml.", type = "error")
+          return()
+        }
+        if (file.exists(det_path(f))) {
+          shiny::showNotification(sprintf("%s already exists; add it to the policy's detectors list to edit it.", f), type = "error")
+          return()
+        }
+      }
+      text <- input$det_yaml %||% ""
+      data <- tryCatch(yaml::yaml.load(text), error = function(e) e)
+      ok <- !inherits(data, "error") && tryCatch({
+        ids <- vapply(compile_detector_file(data), function(c) c$detector$id, "")
+        builtin <- intersect(ids, the$builtin_ids)
+        if (length(builtin)) stop(sprintf("`%s` is the id of a built-in detector.", builtin[1]), call. = FALSE)
+        TRUE
+      }, error = function(e) {
+        shiny::showNotification(paste("Not saved:", conditionMessage(e)), type = "error")
+        FALSE
+      })
+      if (!ok) {
+        if (inherits(data, "error")) shiny::showNotification("Not saved: not valid YAML.", type = "error")
+        return()
+      }
+      target <- det_path(f)
+      tmp <- paste0(target, ".tmp")
+      writeLines(enc2utf8(sub("\n*$", "\n", text)), tmp, useBytes = TRUE, sep = "")
+      file.rename(tmp, target)
+      loaded <- tryCatch(load_detectors(target, replace = TRUE), error = function(e) {
+        shiny::showNotification(paste("Saved, but not loaded:", conditionMessage(e)), type = "error")
+        NULL
+      })
+      if (new) {
+        edit(function(x) {
+          x$detectors <- c(x$detectors, list(f))
+          x
+        })
+        shiny::updateSelectInput(session, "det_file", selected = f)
+      }
+      det_saved_at(det_saved_at() + 1)
+      shiny::showNotification(sprintf(
+        "Saved %s. Save a new policy revision too, so the audit log shows the change.", basename(target)
+      ), type = "message", duration = 8)
+    })
+
     # --- changes and saving --------------------------------------------------------
     output$pending <- shiny::renderUI({
       ch <- changes()
@@ -832,6 +1096,80 @@ writable_temp_assets <- function() {
 confidence_bar <- function(x) {
   shiny::span(class = "cg-conf", shiny::span(class = "bar", shiny::span(style = sprintf("width:%d%%", round(100 * x)))),
               sprintf("%.2f", x))
+}
+
+# A custom detector definition from the workbench form, or a message saying
+# what is missing.
+detector_from_form <- function(id, class, label, pattern, keywords, required, match, no_match) {
+  id <- trimws(id %||% "")
+  pattern <- trimws(pattern %||% "")
+  if (!grepl("^[a-z][a-z0-9_]*$", id)) {
+    return("Give an id in lower-case letters, digits and _, starting with a letter, e.g. loan_account.")
+  }
+  if (!nzchar(pattern)) {
+    return("Give a pattern, e.g. LN[0-9]{10}.")
+  }
+  if (inherits(tryCatch(stringi::stri_detect_regex("", pattern), error = function(e) e), "error")) {
+    return("The pattern is not a valid regular expression.")
+  }
+  words <- trimws(strsplit(keywords %||% "", ",", fixed = TRUE)[[1]])
+  words <- words[nzchar(words)]
+  if (required && length(words) == 0) {
+    return("Give at least one keyword, or untick \"only with a keyword nearby\".")
+  }
+  lines <- function(x) {
+    x <- trimws(strsplit(x %||% "", "\n", fixed = TRUE)[[1]])
+    as.list(x[nzchar(x)])
+  }
+  det <- list(id = id, class = class, label = if (nzchar(trimws(label %||% ""))) trimws(label) else id,
+              patterns = list(pattern), bounded = TRUE)
+  if (length(words)) {
+    det$context <- paste(stringi::stri_replace_all_regex(words, "([\\\\^$.|?*+()\\[\\]{}])", "\\\\$1"), collapse = "|")
+    if (required) {
+      det$context_required <- TRUE
+      det$base <- 0.5
+    } else {
+      det$base <- 0.6
+      det$base_without_context <- 0.4
+    }
+  } else {
+    det$base <- 0.6
+  }
+  examples <- list(match = lines(match), no_match = lines(no_match))
+  examples <- examples[lengths(examples) > 0]
+  if (length(examples)) det$examples <- examples
+  det
+}
+
+# A custom detectors file as YAML; logicals as true/false.
+detectors_yaml <- function(data) {
+  # yaml.load() reads a one-item list as a single value; write it as a list.
+  seq <- function(x) if (is.null(x)) NULL else as.list(unlist(x))
+  data$lists <- if (!is.null(data$lists)) lapply(data$lists, seq)
+  data$detectors <- lapply(data$detectors, function(d) {
+    d$patterns <- seq(d$patterns)
+    if (!is.null(d$column_label)) d$column_label$patterns <- seq(d$column_label$patterns)
+    for (k in c("match", "no_match")) if (!is.null(d$examples[[k]])) d$examples[[k]] <- seq(d$examples[[k]])
+    d
+  })
+  yaml::as.yaml(data, indent.mapping.sequence = TRUE, handlers = list(
+    logical = function(x) structure(ifelse(x, "true", "false"), class = "verbatim")
+  ))
+}
+
+# A line of text with the given spans (from detection) highlighted.
+highlight_spans <- function(line, spans) {
+  spans <- spans[order(spans$start), , drop = FALSE]
+  out <- list()
+  at <- 1L
+  for (i in seq_len(nrow(spans))) {
+    if (spans$start[i] < at) next
+    if (spans$start[i] > at) out[[length(out) + 1]] <- stringi::stri_sub(line, at, spans$start[i] - 1L)
+    out[[length(out) + 1]] <- shiny::tags$mark(title = spans$type[i], stringi::stri_sub(line, spans$start[i], spans$end[i]))
+    at <- spans$end[i] + 1L
+  }
+  if (at <= nchar(line)) out[[length(out) + 1]] <- stringi::stri_sub(line, at)
+  out
 }
 
 # A detection's reasons ("matched PAN pattern; context 'PAN'") as lines.

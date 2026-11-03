@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* The policy editor has a Detectors tab, a workbench for custom detector
+  files: write a detector with a form or edit a file the policy names (or
+  a new one beside it), see live
+  what it finds in sample text and whether each example holds, and save -
+  only a file that loads, which is then loaded and, if new, added to the
+  policy's `detectors` list.
+
 * The policy editor's Try it explains its result: the confidence of each
   match and why it was found, and the text that looked like an identifier
   but was not reported, with the reason (a failed checksum, a missing
