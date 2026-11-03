@@ -12,3 +12,7 @@ research/
 
 # Outputs of examples/bigquery/sandbox_check.* (run from the repository root)
 credgate_check_*.csv
+
+# Python bytecode
+__pycache__/
+*.pyc
