@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* The policy editor's Try it explains its result: the confidence of each
+  match and why it was found, and the text that looked like an identifier
+  but was not reported, with the reason (a failed checksum, a missing
+  keyword the type needs, a confidence below the minimum, a more confident
+  overlapping match). A slider changes the policy's minimum confidence from
+  there.
+
 * Policy tests: `run_policy_tests()` runs sample requests kept beside a
   policy (`bank-default.tests.yaml`) and checks what the policy does with
   them - allowed or blocked, the blocking rules, the action for each type,

@@ -166,3 +166,24 @@ test_that("synth_indian_pii is reproducible and restores the RNG", {
   expect_equal(before, after)
   expect_equal(a, synth_indian_pii(5, seed = 99))
 })
+
+test_that("explain_pii reports the candidates that were dropped, and why", {
+  x <- credgate:::explain_pii(
+    "Card 4111 1111 1111 1112, a/c number missing 123456789012, PAN ABCPE1234F, call 9876543210",
+    min_confidence = 0.7
+  )
+  # the same matches as detect_pii
+  expect_identical(x$matches$type, detect_pii(
+    "Card 4111 1111 1111 1112, a/c number missing 123456789012, PAN ABCPE1234F, call 9876543210",
+    min_confidence = 0.7
+  )$type)
+  why <- stats::setNames(x$misses$why, x$misses$type)
+  expect_match(why[["card"]], "fails the check: Luhn")
+  expect_match(why[["mobile_in"]], "below the minimum 0.7")
+  # a candidate inside a reported match is not a miss
+  expect_false(any(x$misses$value == "ABCPE1234F"))
+
+  # a type that needs a keyword says so
+  x <- credgate:::explain_pii("ref 123456789012")
+  expect_match(x$misses$why[x$misses$type == "bank_account"], "needs a keyword")
+})

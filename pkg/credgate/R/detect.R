@@ -34,25 +34,38 @@ detect_pii <- function(text, detectors = NULL, context = NULL,
   detect_with(get_detectors(detectors), text, context, min_confidence, window)
 }
 
-# Detection with the given detectors (registered or not).
-detect_with <- function(dets, text, context = NULL, min_confidence = 0, window = NULL) {
+# Detection with the given detectors (registered or not). With `misses` (an
+# environment), candidates that were dropped are kept in `misses$spans` with
+# the reason (`why`), for explaining a result (see explain_pii()).
+detect_with <- function(dets, text, context = NULL, min_confidence = 0, window = NULL,
+                        misses = NULL) {
   window <- window %||% the$engine$scoring$context_window
   norm <- cg_normalise(text)
   ntext <- vapply(norm, `[[`, character(1), "text")
 
   found <- lapply(dets, run_detector,
     text = text, norm = norm, ntext = ntext, context = context,
-    window = window
+    window = window, misses = misses
   )
   spans <- do.call(rbind, c(list(empty_spans()), found))
+  candidates <- spans
   spans <- resolve_overlaps(spans)
-  spans <- spans[spans$confidence >= min_confidence, , drop = FALSE]
+  low <- spans$confidence < min_confidence
+  if (!is.null(misses)) {
+    lost <- candidates[!paste(candidates$doc, candidates$start, candidates$type) %in%
+      paste(spans$doc, spans$start, spans$type), , drop = FALSE]
+    add_misses(misses, lost, "a more confident match overlaps it")
+    add_misses(misses, spans[low, , drop = FALSE], sprintf(
+      "confidence %s is below the minimum %s", format(spans$confidence[low]), format(min_confidence)
+    ))
+  }
+  spans <- spans[!low, , drop = FALSE]
   spans <- spans[order(spans$doc, spans$start), , drop = FALSE]
   rownames(spans) <- NULL
   structure(spans, class = c("cg_spans", "data.frame"))
 }
 
-run_detector <- function(det, text, norm, ntext, context, window) {
+run_detector <- function(det, text, norm, ntext, context, window, misses = NULL) {
   locate <- function(pattern, capture = NULL) {
     loc <- stringi::stri_locate_all_regex(
       ntext, pattern,
@@ -100,6 +113,10 @@ run_detector <- function(det, text, norm, ntext, context, window) {
   matched <- stringi::stri_sub(ntext[doc], s, e)
 
   ok <- det$validate(matched)
+  if (!is.null(misses) && !all(ok)) {
+    check <- if (is.null(det$checks)) "validation" else sub(" valid$", "", det$checks)
+    add_misses(misses, miss_spans(det, text, norm, doc[!ok], s[!ok], e[!ok]), paste("fails the check:", check))
+  }
   doc <- doc[ok]
   s <- s[ok]
   e <- e[ok]
@@ -127,6 +144,11 @@ run_detector <- function(det, text, norm, ntext, context, window) {
 
   if (det$context_required) {
     keep <- !is.na(ctx$hit)
+    if (!is.null(misses) && !all(keep)) {
+      add_misses(misses, miss_spans(det, text, norm, doc[!keep], s[!keep], e[!keep]), sprintf(
+        "needs a keyword such as '%s' within %d characters", example_keyword(det$context), window
+      ))
+    }
     doc <- doc[keep]
     s <- s[keep]
     e <- e[keep]
@@ -183,6 +205,60 @@ run_detector <- function(det, text, norm, ntext, context, window) {
     confidence = round(score, scoring$digits),
     reasons = reasons
   )
+}
+
+# Dropped candidates, as spans without a score.
+miss_spans <- function(det, text, norm, doc, s, e) {
+  orig <- map_spans(norm, doc, s, e)
+  data.frame(
+    doc = doc, start = orig$start, end = orig$end, type = det$id, class = det$class,
+    value = stringi::stri_sub(text[doc], orig$start, orig$end), canonical = NA_character_,
+    confidence = NA_real_, reasons = NA_character_
+  )
+}
+
+add_misses <- function(misses, spans, why) {
+  if (nrow(spans) == 0) {
+    return(invisible())
+  }
+  spans$why <- rep_len(why, nrow(spans))
+  misses$spans <- rbind(misses$spans, spans)
+  invisible()
+}
+
+# A readable keyword from a context pattern, for messages: its first
+# alternative, without regex syntax.
+example_keyword <- function(pattern) {
+  first <- strsplit(pattern %||% "", "|", fixed = TRUE)[[1]][1]
+  first <- gsub("\\\\b|\\(\\?[:!=<]*|[()?^$\\\\]", "", first %||% "")
+  gsub("\\[[^]]*\\][*+?]?", "", first)
+}
+
+#' Explain a detection result
+#'
+#' The matches of [detect_pii()] with their reasons, and the near-misses:
+#' candidates that looked like an identifier but were dropped - a failed
+#' checksum, a missing keyword that the type needs, a confidence below the
+#' minimum, or a more confident overlapping match. Used by the policy
+#' editor's Try it.
+#' @noRd
+explain_pii <- function(text, min_confidence = 0) {
+  misses <- new.env()
+  misses$spans <- NULL
+  matches <- detect_with(get_detectors(NULL), text, min_confidence = min_confidence, misses = misses)
+  m <- misses$spans
+  if (is.null(m)) {
+    m <- cbind(empty_spans(), why = character())
+  }
+  # A candidate inside a reported match is explained by that match.
+  inside <- vapply(seq_len(nrow(m)), function(i) any(
+    matches$doc == m$doc[i] & matches$start <= m$end[i] & matches$end >= m$start[i]
+  ), logical(1))
+  m <- m[!inside, , drop = FALSE]
+  m <- m[!duplicated(paste(m$doc, m$start, m$end, m$type)), , drop = FALSE]
+  m <- m[order(m$doc, m$start), , drop = FALSE]
+  rownames(m) <- NULL
+  list(matches = matches, misses = m)
 }
 
 # The strongest keyword for each match, with its side and distance: side 0
