@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 (2026-11-03)
+
+Build, test and roll out policies from the policy editor: custom detectors,
+policy tests, explanations, and a proxy that reloads a new revision only
+when it passes.
 
 - **The proxy reloads a new policy revision without a restart**, on SIGHUP
   or with `--watch SECONDS` (also the keys file, so a user added or removed
