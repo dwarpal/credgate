@@ -102,7 +102,7 @@ walks through the workflow and why it matters even when the model is local
 | Financial | GSTIN (mod-36 check character), payment cards (Luhn + network prefix), card expiry dates, card verification codes (CVV/CVC; always masked in full), UPI IDs, IFSC, bank account numbers |
 | Contact | +91 mobile numbers, email addresses, PIN codes |
 | Health | ABHA number, ABHA address |
-| Personal | Names and postal addresses in Latin and Indic scripts (rule-based, see limits below) |
+| Personal | Names and postal addresses in Latin and Indic scripts (rule-based, see limits below); every value of a column named for names or addresses (`customer_name`, `nominee`, `नाम`, `permanent_address`, `पता`) |
 
 Every match comes with a confidence score and the reasons for it (checksum
 passed, nearby keyword such as "Aadhaar" or "आधार", negative context such as
@@ -511,11 +511,15 @@ in [SECURITY.md](SECURITY.md), rather than in a public issue.
 
 ## Known limits
 
-- Names and addresses are found only next to a cue: an honorific (Shri, Smt,
-  श्रीमती, or "ji" after the name), a relation (S/o, D/o), a field label
-  (`Name:`, `पता:`) or a house/village keyword followed by a PIN code. Names
-  in running text without such a cue are not detected yet, and a deity
-  addressed with "ji" ("Ram ji") is taken as a name.
+- In running text, names and addresses are found only next to a cue: an
+  honorific (Shri, Smt, श्रीमती, or "ji" after the name), a relation (S/o,
+  D/o), a field label (`Name:`, `पता:`) or a house/village keyword followed
+  by a PIN code. A deity addressed with "ji" ("Ram ji") is taken as a name.
+  Where you know a column or value holds names or addresses, say so - a
+  column named for them, or `context = "customer name"` - and every value is
+  read as one. For names in notes with other cues ("Lakshmi Verma called"),
+  load the example custom detector `examples/detectors/names-by-cue.yaml`
+  ([custom detectors](docs/custom-detectors.md)).
 - CKYC numbers are found only next to a cue ("CKYC", "KIN"), since any
   14-digit number could be one. Ration card numbers have no national format
   and NREGA job card numbers vary by state: those detectors follow the

@@ -89,6 +89,17 @@ fragments:
   relation_latin: '(?i:\b(?:[sdwch]/o|son of|daughter of|wife of|husband of|care of|father''?s? name|mother''?s? name|spouse''?s? name|guardian)\b)\.?\s{0,2}[:-]?\s{0,2}'
   label_latin: '(?i:\b(?:name|naam|customer name|applicant name|full name|nominee|borrower|co-borrower|insured|policy ?holder|patient(?: name)?|account holder|beneficiary))\s{0,2}[:-]\s{0,3}'
   label_indic: '(?:नाम|पिता का नाम|पति का नाम|माता का नाम)\s{0,2}[:-]\s{0,3}'
+  # Column names (or a caller's context, such as "customer name") that say
+  # a value is a person's name. The whole label must match: "customer_name"
+  # and "nominee" do, "product_name", "branch_name" and "user_name" do not.
+  # A language suffix is allowed: "name_hi", "customer_name_en".
+  name_column_label: '^\s*(?:(?:customer|cust|client|borrower|co[ _-]?borrower|applicant|co[ _-]?applicant|nominee|account[ _-]?holder|holder|payee|beneficiary|guarantor|insured|patient|employee|emp|person|contact|father|mother|spouse|husband|wife|guardian)(?:''s)?[ _-]?)?(?:(?:full|first|middle|last|given|family|sur)[ _-]?)?(?:name|naam)(?:[ _-]?(?:hi|en|hindi|english|local|regional|vernacular))?\s*$|^\s*(?:nominee|borrower|applicant|guarantor|beneficiary|payee|account[ _-]?holder)\s*$|^\s*(?:नाम|ग्राहक का नाम|पिता का नाम|माता का नाम|पति का नाम)\s*$'
+  # A value that is only a name: letters (any script), with initials,
+  # apostrophes and hyphens; up to five words.
+  name_column_value: '^[\p{L}\p{M}]+(?:[''’-][\p{L}\p{M}]+)*\.?(?:[ .]{1,2}[\p{L}\p{M}]+(?:[''’-][\p{L}\p{M}]+)*\.?){0,4}$'
+  # Column names that say a value is a postal address. Not "email_address"
+  # or "ip_address": the whole label must match.
+  address_column_label: '^\s*(?:(?:residential|permanent|correspondence|current|present|home|office|postal|mailing|billing|shipping|communication|customer|cust)[ _-]?)?addr(?:ess)?(?:[ _-]?line)?(?:[ _-]?[0-9])?\s*$|^\s*(?:पता|निवासी|स्थायी पता)\s*$'
 
   # Labels right before a value; each fragment is one group, so it can be
   # spliced into a pattern.
@@ -403,6 +414,11 @@ detectors:
     capture: value
     base: 0.8
     canonical: collapse_upper
+    # A column (or caller's context) named for names: every value that is
+    # only a name is one, in any letter case or script.
+    column_label:
+      label: '{{name_column_label}}'
+      patterns: ['{{name_column_value}}']
 
   - id: address
     class: personal
@@ -420,3 +436,8 @@ detectors:
       rules:
         - {match: '\b[1-9][0-9]{2}\s?[0-9]{3}$', value: 0.97}
     canonical: collapse_upper
+    # A column named for addresses: a value with letters in it is one (not
+    # an e-mail address or a web link).
+    column_label:
+      label: '{{address_column_label}}'
+      patterns: ['^(?=[^\n]*\p{L})(?![^\n]*@)(?!\s*(?:https?://|www\.))[^\n]{6,300}$']
