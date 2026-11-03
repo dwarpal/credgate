@@ -98,6 +98,15 @@ test_that("the editor edits, checks, tries and saves", {
     expect_identical(utils::tail(rule_ids(), 1), "in-house-models")
     expect_true("no-cards-to-vllm-new" %in% decision()$blocked_by)
 
+    # the minimum confidence in Try it is the policy's
+    session$setInputs(try_min_confidence = 0.7)
+    session$setInputs(min_confidence = 0.7)
+    expect_identical(policy()$min_confidence, 0.7)
+    session$setInputs(try_text = "call 9876543210")
+    expect_equal(nrow(decision()$matches), 0)
+    session$setInputs(try_min_confidence = 0.5, min_confidence = 0.5)
+    expect_identical(decision()$matches$type, "mobile_in")
+
     # an invalid policy cannot be saved
     session$setInputs(policy_id = "")
     expect_false(is.null(problem()))

@@ -165,3 +165,9 @@ body, .bslib-page-sidebar, .bslib-sidebar-layout > .main { background: var(--cg-
 .cg-tip { display: inline-grid; place-items: center; width: 1rem; height: 1rem; margin-left: .3rem; border-radius: 50%; border: 1px solid var(--cg-hover); color: var(--cg-muted); font: italic 700 .62rem/1 Georgia, serif; cursor: help; vertical-align: .05rem; }
 .cg-tip:hover, .cg-tip:focus { color: var(--cg-brand); border-color: var(--cg-brand); outline: none; }
 .tooltip-inner { max-width: 280px; text-align: left; font-size: .78rem; }
+
+/* Try it: confidence and near-misses */
+.cg-conf { display: inline-flex; align-items: center; gap: .4rem; font-variant-numeric: tabular-nums; font-size: .8rem; }
+.cg-conf .bar { width: 48px; height: 6px; border-radius: 3px; background: var(--cg-soft); border: 1px solid var(--cg-line); overflow: hidden; }
+.cg-conf .bar span { display: block; height: 100%; background: var(--cg-brand, #0e5a6b); }
+.cg-hint { color: var(--cg-muted); font-size: .8rem; margin: .5rem 0 0; }

@@ -192,7 +192,13 @@ policy_editor_ui <- function(path) {
           ),
           col_widths = c(5, 7)
         ),
-        shiny::uiOutput("try_matches")
+        shiny::sliderInput(
+          "try_min_confidence",
+          tip("Minimum confidence", "The same setting as in the sidebar: matches scored below it are ignored. Drag it to see what would be caught or let through; it changes the draft."),
+          min = 0, max = 1, value = 0.5, step = 0.05, width = "100%"
+        ),
+        shiny::uiOutput("try_matches"),
+        shiny::uiOutput("try_misses")
       ),
       bslib::nav_panel(
         "Tests",
@@ -257,6 +263,17 @@ policy_editor_server <- function(path, user = NULL) {
       x$default_action <- input$default_action
       x
     }), ignoreInit = TRUE)
+    shiny::observeEvent(policy()$min_confidence %||% 0, {
+      v <- policy()$min_confidence %||% 0
+      if (!identical(as.numeric(input$try_min_confidence), as.numeric(v))) {
+        shiny::updateSliderInput(session, "try_min_confidence", value = v)
+      }
+    })
+    shiny::observeEvent(input$try_min_confidence, {
+      if (!identical(as.numeric(input$try_min_confidence), as.numeric(policy()$min_confidence %||% 0))) {
+        shiny::updateNumericInput(session, "min_confidence", value = input$try_min_confidence)
+      }
+    }, ignoreInit = TRUE)
     shiny::observeEvent(input$min_confidence, edit(function(x) {
       if (!(is.null(x$min_confidence) && identical(as.numeric(input$min_confidence), 0))) {
         x$min_confidence <- input$min_confidence
@@ -572,14 +589,42 @@ policy_editor_server <- function(path, user = NULL) {
       }
       shiny::div(class = "cg-scroll", shiny::tags$table(
         class = "cg-table",
-        shiny::tags$thead(shiny::tags$tr(lapply(c("Identifier", "Found (masked)", "Action", "Decided by"), shiny::tags$th))),
+        shiny::tags$thead(shiny::tags$tr(lapply(c("Identifier", "Found (masked)", "Confidence", "Why", "Action", "Decided by"), shiny::tags$th))),
         shiny::tags$tbody(lapply(seq_len(nrow(m)), function(i) shiny::tags$tr(
           shiny::tags$td(shiny::strong(m$type[i]), shiny::div(class = "desc", m$class[i])),
           shiny::tags$td(class = "mono", mask_value(m$value[i], m$class[i])),
+          shiny::tags$td(confidence_bar(m$confidence[i])),
+          shiny::tags$td(class = "desc", why_list(m$reasons[i])),
           shiny::tags$td(cg_badge(m$action[i], m$action[i])),
-          shiny::tags$td(if (is.na(m$rule[i]) || !nzchar(m$rule[i])) "default action" else m$rule[i])
+          shiny::tags$td(if (is.na(m$rule[i]) || !nzchar(m$rule[i]) || m$rule[i] == "default") "default action" else m$rule[i])
         )))
       ))
+    })
+    # Candidates that were dropped, so a missed identifier can be explained.
+    output$try_misses <- shiny::renderUI({
+      shiny::req(is.null(problem()), nzchar(input$try_text))
+      x <- tryCatch(
+        explain_pii(input$try_text, min_confidence = policy()$min_confidence %||% 0)$misses,
+        error = function(e) NULL
+      )
+      shiny::tagList(
+        shiny::h6(class = "cg-section", tip("Not reported", "Text that looked like an identifier but was dropped, and why. A miss here may be right (an order number that fails the Aadhaar checksum) or a sign that the text needs a keyword or the minimum confidence is too high.")),
+        if (is.null(x) || nrow(x) == 0) {
+          shiny::div(class = "cg-empty", "Nothing that looked like an identifier was dropped.")
+        } else {
+          shiny::div(class = "cg-scroll", shiny::tags$table(
+            class = "cg-table",
+            shiny::tags$thead(shiny::tags$tr(lapply(c("Looked like", "Text (masked)", "Why it was not reported"), shiny::tags$th))),
+            shiny::tags$tbody(lapply(seq_len(nrow(x)), function(i) shiny::tags$tr(
+              shiny::tags$td(shiny::strong(x$type[i])),
+              shiny::tags$td(class = "mono", mask_value(x$value[i], x$class[i])),
+              shiny::tags$td(x$why[i])
+            )))
+          ))
+        },
+        shiny::div(class = "cg-hint", "Names are found after a cue (Mr., S/o, Name:) or in a column named for names; a name on its own is not. ",
+                   "A custom detector can add cues: see the custom detectors guide.")
+      )
     })
 
     # --- tests ---------------------------------------------------------------------
@@ -781,6 +826,17 @@ writable_temp_assets <- function() {
     return(invisible())
   }
   Sys.chmod(locked, ifelse(dir.exists(locked), "0755", "0644"), use_umask = FALSE)
+}
+
+# A confidence score as a small bar with its value.
+confidence_bar <- function(x) {
+  shiny::span(class = "cg-conf", shiny::span(class = "bar", shiny::span(style = sprintf("width:%d%%", round(100 * x)))),
+              sprintf("%.2f", x))
+}
+
+# A detection's reasons ("matched PAN pattern; context 'PAN'") as lines.
+why_list <- function(reasons) {
+  lapply(strsplit(reasons, "; ", fixed = TRUE)[[1]], shiny::div)
 }
 
 # A label with an info icon that explains it on hover or focus.

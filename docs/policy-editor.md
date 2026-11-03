@@ -32,7 +32,13 @@ credgate::policy_editor("bank-default.yaml", user = "infosec-1")
   change it.
 - **Try it**: paste a sample text (use synthetic data), pick an endpoint and
   see what the unsaved policy would decide, and which rule decided it.
-  Detected values are shown masked.
+  Detected values are shown masked. Each match shows its confidence and
+  why it was found (the pattern, the checksum, the keyword nearby). **Not
+  reported** lists what looked like an identifier but was dropped, and why:
+  a failed checksum (a mistyped card number), a keyword the type needs ("a/c"
+  for an account number), a confidence below the minimum, or a more
+  confident overlapping match. The minimum-confidence slider is the policy's
+  own setting: drag it to see what would be caught or let through.
 - **Tests**: sample requests and what the policy must do with them (see
   [Policy tests](#policy-tests) below), run against the unsaved policy on
   every change. The header shows the score, such as "tests 3/3".
