@@ -33,7 +33,7 @@
       credgatePy = python3Packages:
         python3Packages.buildPythonPackage {
           pname = "credgate";
-          version = "0.8.2";
+          version = "0.9.0";
           pyproject = true;
           src = ./pkg/python;
           build-system = [ python3Packages.hatchling ];
