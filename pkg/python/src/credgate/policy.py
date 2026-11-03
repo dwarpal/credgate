@@ -34,6 +34,7 @@ _TOP_FIELDS = {
     "id",
     "revision",
     "description",
+    "detectors",
     "destinations",
     "min_confidence",
     "rules",
@@ -158,12 +159,13 @@ class Policy:
         """Load and validate a policy file (YAML)."""
         with Path(path).open(encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        return cls.from_dict(data)
+        return _parse(data, Path(path).parent)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Policy:
-        """Validate a policy given as a mapping (as read from YAML)."""
-        return _parse(data)
+        """Validate a policy given as a mapping (as read from YAML). Custom
+        detector files it names are found relative to the working directory."""
+        return _parse(data, Path.cwd())
 
     def decide(self, text: str | Sequence[str], destination: str) -> Decision:
         """Decide what happens to each identifier in a request to ``destination``,
@@ -234,12 +236,30 @@ class Policy:
         return found
 
 
-def _parse(data: Any) -> Policy:
+def _load_custom_detectors(files: Any, base: Path) -> None:
+    """Custom detector files named by the policy, before its rules are
+    checked, so rules can name their types."""
+    if files is None:
+        return
+    if not isinstance(files, list) or not all(isinstance(f, str) and f for f in files):
+        raise PolicyError("`detectors` must be a list of custom detector files.")
+    from .custom import load_detectors
+
+    for f in files:
+        path = Path(f) if Path(f).is_absolute() else base / f
+        try:
+            load_detectors(path)
+        except (OSError, ValueError) as e:
+            raise PolicyError(f"Custom detectors {f}: {e}") from None
+
+
+def _parse(data: Any, base: Path) -> Policy:
     if not isinstance(data, Mapping) or data.get("policy") != "credgate-policy":
         raise PolicyError("Not a credgate policy: it must start with `policy: credgate-policy`.")
     _check_fields(data, _TOP_FIELDS, "policy")
     if data.get("version") != 1:
         raise PolicyError(f"Unsupported policy format version {data.get('version')!r}.")
+    _load_custom_detectors(data.get("detectors"), base)
     pid = data.get("id")
     if not isinstance(pid, str) or not pid:
         raise PolicyError("The policy needs an `id`.")

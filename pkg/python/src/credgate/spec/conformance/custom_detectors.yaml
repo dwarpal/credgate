@@ -1,0 +1,168 @@
+# Custom detector conformance cases (see README.md, "Custom detectors").
+# Each case loads `file` (from `files`), then detects in `text`; the result
+# must be exactly `expect` (type, value, and confidence when given) for the
+# detector ids listed in `types`. Cases under `invalid` must fail to load,
+# with an error mentioning `error`, and register nothing.
+#
+# All identifiers are synthetic.
+
+spec_version: 1
+
+files:
+
+  bank:
+    kind: credgate-detectors
+    version: 1
+    fragments:
+      loan_context: 'loan|\ba/c\b|account'
+      cid_label: '\bcust(?:omer)?\s?(?:id|ref)\b\s{0,2}[:#-]?\s{0,3}'
+    lists:
+      loan_branches: ['MUM', 'PUN', 'DEL']
+    detectors:
+      - id: loan_account
+        class: financial
+        label: Loan account number
+        patterns: ['LN(?:{{loan_branches}})[0-9]{7}']
+        bounded: true
+        context: '{{loan_context}}'
+        negative: '{{id_negative_context}}'
+        base: 0.6
+        base_without_context: 0.4
+        examples:
+          match: ['Loan a/c LNMUM0012345 is overdue']
+          no_match: ['Order LNXYZ0012345', 'LNMUM00123']
+      - id: customer_ref
+        class: quasi
+        label: Customer reference
+        patterns: ['{{cid_label}}(?<value>C[0-9]{8})']
+        capture: value
+        base: 0.9
+        ignore_case: true
+        column_label:
+          label: '\bcust(?:omer)?[ _]?(?:id|ref)\b'
+          patterns: ['^C[0-9]{8}$']
+        examples:
+          match: ['Customer ID: C00042137']
+          no_match: ['C00042137']
+      - id: staff_card
+        class: identity_strong
+        label: Staff card number
+        # The checksum runs on the reported value: the digits after `ST`.
+        patterns: ['\bST(?<value>[0-9]{16})\b']
+        capture: value
+        validate: [luhn]
+        checks: Luhn checksum valid
+        base: 0.9
+        examples:
+          match: ['Staff card ST4111111111111111']
+          no_match: ['Staff card ST4111111111111112']
+
+cases:
+  - id: with-context
+    file: bank
+    text: 'Loan a/c LNMUM0012345 is overdue'
+    types: [loan_account]
+    expect: [{type: loan_account, value: LNMUM0012345, confidence: 0.92}]
+  - id: without-context
+    file: bank
+    text: 'Noted LNPUN0098765 today'
+    types: [loan_account]
+    expect: [{type: loan_account, value: LNPUN0098765, confidence: 0.4}]
+  - id: unknown-branch-not-matched
+    file: bank
+    text: 'Loan a/c LNXYZ0012345'
+    types: [loan_account]
+    expect: []
+  - id: capture-after-label
+    file: bank
+    text: 'Customer ID: C00042137, PAN ABCPE1234F'
+    types: [customer_ref, pan]
+    expect:
+      - {type: customer_ref, value: C00042137}
+      - {type: pan, value: ABCPE1234F}
+  - id: column-label
+    file: bank
+    text: 'C00042137'
+    context: cust_id
+    types: [customer_ref]
+    expect: [{type: customer_ref, value: C00042137}]
+  - id: validator
+    file: bank
+    text: 'Cards ST4111111111111111 and ST4111111111111112'
+    types: [staff_card]
+    expect: [{type: staff_card, value: '4111111111111111'}]
+
+invalid:
+  - id: wrong-kind
+    file: {kind: credgate-policy, version: 1, detectors: []}
+    error: credgate-detectors
+  - id: unknown-top-field
+    file: {kind: credgate-detectors, version: 1, detectors: [], extra: 1}
+    error: extra
+  - id: no-detectors
+    file: {kind: credgate-detectors, version: 1, detectors: []}
+    error: detectors
+  - id: builtin-id
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors: [{id: pan, class: identity_strong, label: My PAN, patterns: ['X'], base: 0.5}]
+    error: built-in
+  - id: duplicate-id
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors:
+        - {id: emp_id, class: quasi, label: A, patterns: ['E[0-9]{5}'], base: 0.5}
+        - {id: emp_id, class: quasi, label: B, patterns: ['F[0-9]{5}'], base: 0.5}
+    error: emp_id
+  - id: bad-id
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors: [{id: Emp-ID, class: quasi, label: A, patterns: ['E[0-9]{5}'], base: 0.5}]
+    error: Emp-ID
+  - id: unknown-class
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors: [{id: emp_id, class: internal, label: A, patterns: ['E[0-9]{5}'], base: 0.5}]
+    error: internal
+  - id: unknown-field
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors: [{id: emp_id, class: quasi, label: A, patterns: ['E[0-9]{5}'], base: 0.5, contxt: emp}]
+    error: contxt
+  - id: builtin-fragment-name
+    file:
+      kind: credgate-detectors
+      version: 1
+      fragments: {aadhaar_context: 'x'}
+      detectors: [{id: emp_id, class: quasi, label: A, patterns: ['E[0-9]{5}'], base: 0.5}]
+    error: aadhaar_context
+  - id: failing-match-example
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors:
+        - id: emp_id
+          class: quasi
+          label: Employee ID
+          patterns: ['EMP[0-9]{6}']
+          bounded: true
+          base: 0.8
+          examples: {match: ['Raised by EMP12345']}
+    error: EMP12345
+  - id: failing-no-match-example
+    file:
+      kind: credgate-detectors
+      version: 1
+      detectors:
+        - id: emp_id
+          class: quasi
+          label: Employee ID
+          patterns: ['EMP[0-9]{6}']
+          base: 0.8
+          examples: {no_match: ['XEMP1234567']}
+    error: XEMP1234567

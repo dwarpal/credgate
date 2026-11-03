@@ -128,6 +128,61 @@ Conformance compares `type`, `value`, and when given `confidence`,
 
 Unknown fields are an error, so a typo cannot silently disable a rule.
 
+## Custom detectors (`credgate-detectors`)
+
+Organisations add detectors for their own formats - loan account numbers,
+customer ids, employee codes - in a YAML file that every implementation
+loads the same way, so R, Python, the command line and the proxy detect
+the same things:
+
+```yaml
+kind: credgate-detectors
+version: 1
+fragments:                     # optional, as in detectors.yaml
+  loan_context: 'loan|\ba/c\b|account'
+lists:                         # optional, as in detectors.yaml
+  loan_branches: ['MUM', 'PUN', 'DEL']
+detectors:
+  - id: loan_account
+    class: financial
+    label: Loan account number
+    patterns: ['LN(?:{{loan_branches}})[0-9]{7}']
+    bounded: true
+    context: '{{loan_context}}'
+    base: 0.6
+    base_without_context: 0.4
+    examples:
+      match: ['Loan a/c LNMUM0012345 is overdue']
+      no_match: ['Order LNXYZ0012345', 'LNMUM00123']
+```
+
+- Top-level fields are exactly `kind` (`credgate-detectors`), `version`
+  (1), `fragments`, `lists` and `detectors`; anything else is an error.
+- `detectors` is a non-empty list. Each entry has the fields of a built-in
+  detector (see "Detector fields") and may add `examples`.
+- `id` matches `^[a-z][a-z0-9_]*$`, is unique in the file and is not the id
+  of a built-in detector: a custom file cannot change or weaken a built-in
+  one.
+- `class` is one of the seven data classes, so policies can act on it.
+- `{{name}}` refers to the file's own fragments and lists first, then the
+  built-in ones; a file may not define a fragment or list with a built-in
+  name. Validators, canonical forms and `describe` work as for built-in
+  detectors (`describe.table` names a built-in table).
+- `examples.match`: each text must give at least one span of this detector,
+  run on its own with no extra context and no minimum confidence.
+  `examples.no_match`: none. If any example fails, the file is refused.
+- Loading registers every detector of the file or none. Loading a file
+  again with the same definitions changes nothing; a different definition
+  under an id a custom file already registered is an error unless the
+  caller asks to replace it.
+
+A policy may name custom detector files in a top-level `detectors` list of
+paths, relative to the policy file; they are loaded before the policy's
+rules are checked, so rules can name their types.
+
+Custom patterns run on every text, like the built-in ones: avoid nested
+quantifiers such as `(a+)+`, which can be slow on long inputs.
+
 ## Masking
 
 Wherever an implementation shows a detected value (printed spans, previews,
@@ -516,6 +571,7 @@ version: 1                     # format version
 id: bank-default               # name of this policy
 revision: 3                    # whole number, raised on every change
 description: free text         # optional
+detectors: [bank-detectors.yaml]  # optional: custom detector files, relative to this file
 destinations:                  # the endpoints InfoSec has set up
   ollama-local: {tier: local, provider: ollama, url: 'http://localhost:11434/v1'}
   vllm-gpu: {tier: internal, provider: vllm, url: 'https://llm.bank.internal/v1'}
@@ -533,6 +589,9 @@ rules:
 default_action: redact
 ```
 
+- **Custom detectors** (`detectors`, optional): files in the format of
+  "Custom detectors", loaded before the rules are checked, so rules can
+  name their types and classes.
 - **Destinations** are the endpoints requests may go to. Each has a `tier`;
   optionally `provider` and `url` (recorded with decisions; the proxy routes
   by `url`), a `description`, and `blocked: true` to refuse every request to

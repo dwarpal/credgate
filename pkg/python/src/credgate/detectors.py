@@ -130,6 +130,9 @@ def bounded(core: str) -> str:
 
 _registry: dict[str, Detector] | None = None
 _registry_lock = threading.Lock()
+# Detectors loaded from custom files (see custom.py): id -> digest of the
+# definition, so loading the same file again changes nothing.
+_custom: dict[str, str] = {}
 
 
 def _detectors() -> dict[str, Detector]:
@@ -164,6 +167,7 @@ def reset_detectors() -> None:
     global _registry
     with _registry_lock:
         _registry = None
+        _custom.clear()
 
 
 def detectors() -> list[dict[str, Any]]:
@@ -195,16 +199,26 @@ def get_detectors(ids: Sequence[str] | None = None) -> list[Detector]:
 _FRAGMENT_REF = regex.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
 
 
-def expand_fragments(x: str | None, depth: int = 0) -> str | None:
+# Fragments and lists of a custom detectors file, looked up before the
+# built-in ones: {"fragments": {...}, "lists": {...}}.
+_Scope = dict[str, dict[str, Any]] | None
+
+
+def expand_fragments(x: str | None, depth: int = 0, scope: _Scope = None) -> str | None:
     """Replace ``{{name}}`` with the fragment, or the list joined by ``|``."""
     if x is None:
         return None
     if depth > 10:
         raise ValueError("Fragments nested more than 10 deep (circular reference?).")
     spec = detector_spec()
+    own = scope or {}
     for ref in dict.fromkeys(_FRAGMENT_REF.findall(x)):
-        if ref in spec.get("fragments", {}):
-            value = expand_fragments(spec["fragments"][ref], depth + 1)
+        if ref in own.get("fragments", {}):
+            value = expand_fragments(own["fragments"][ref], depth + 1, scope)
+        elif ref in own.get("lists", {}):
+            value = "|".join(own["lists"][ref])
+        elif ref in spec.get("fragments", {}):
+            value = expand_fragments(spec["fragments"][ref], depth + 1, scope)
         elif ref in spec["lists"]:
             value = "|".join(spec["lists"][ref])
         else:
@@ -213,8 +227,10 @@ def expand_fragments(x: str | None, depth: int = 0) -> str | None:
     return x
 
 
-def _rule_lookup(default: Any, rules: list[dict[str, Any]], key: str) -> Callable[[str], Any]:
-    compiled = [(regex.compile(expand_fragments(r["match"])), r[key]) for r in rules]
+def _rule_lookup(
+    default: Any, rules: list[dict[str, Any]], key: str, scope: _Scope = None
+) -> Callable[[str], Any]:
+    compiled = [(regex.compile(expand_fragments(r["match"], scope=scope)), r[key]) for r in rules]
 
     def lookup(x: str) -> Any:
         for pattern, value in compiled:
@@ -225,7 +241,9 @@ def _rule_lookup(default: Any, rules: list[dict[str, Any]], key: str) -> Callabl
     return lookup
 
 
-def _compile_validators(defs: list[Any] | None) -> Callable[[str], bool] | None:
+def _compile_validators(
+    defs: list[Any] | None, scope: _Scope = None
+) -> Callable[[str], bool] | None:
     if not defs:
         return None
     checks: list[Callable[[str], bool]] = []
@@ -238,20 +256,22 @@ def _compile_validators(defs: list[Any] | None) -> Callable[[str], bool] | None:
             except KeyError:
                 raise ValueError(f"Unknown validator `{v}`.") from None
         elif "match_stripped" in v:
-            pattern = regex.compile(expand_fragments(v["match_stripped"]))
+            pattern = regex.compile(expand_fragments(v["match_stripped"], scope=scope))
             checks.append(lambda x, p=pattern: p.search(strip_separators(x)) is not None)
         else:
             raise ValueError(f"Unknown validator: {', '.join(v)}")
     return lambda x: all(check(x) for check in checks)
 
 
-def _compile_base(spec: Any) -> float | Callable[[str], float]:
+def _compile_base(spec: Any, scope: _Scope = None) -> float | Callable[[str], float]:
     if isinstance(spec, (int, float)):
         return float(spec)
-    return _rule_lookup(float(spec["default"]), spec["rules"], "value")
+    return _rule_lookup(float(spec["default"]), spec["rules"], "value", scope)
 
 
-def _compile_describe(spec: dict[str, Any] | None) -> Callable[[str], str] | None:
+def _compile_describe(
+    spec: dict[str, Any] | None, scope: _Scope = None
+) -> Callable[[str], str] | None:
     if spec is None:
         return None
     if "position" in spec:
@@ -259,7 +279,7 @@ def _compile_describe(spec: dict[str, Any] | None) -> Callable[[str], str] | Non
         pos = spec["position"] - 1
         template = spec["template"]
         return lambda x: template.replace("{}", table.get(x[pos].upper(), "NA"), 1)
-    return _rule_lookup(spec["default"], spec["rules"], "text")
+    return _rule_lookup(spec["default"], spec["rules"], "text", scope)
 
 
 _WHITESPACE = regex.compile(r"\s+")
@@ -273,14 +293,15 @@ _CANONICAL: dict[str, Callable[[str], str]] = {
 }
 
 
-def compile_detector(spec: dict[str, Any]) -> Detector:
-    """Build a :class:`Detector` from one entry of detectors.yaml."""
+def compile_detector(spec: dict[str, Any], scope: _Scope = None) -> Detector:
+    """Build a :class:`Detector` from one entry of detectors.yaml (or of a
+    custom detectors file, whose fragments and lists are ``scope``)."""
     unknown = set(spec) - _DETECTOR_FIELDS
     if unknown:
         raise ValueError(
             f"Detector `{spec.get('id')}` has unknown field(s): {', '.join(sorted(unknown))}"
         )
-    patterns = [expand_fragments(p) for p in spec["patterns"]]
+    patterns = [expand_fragments(p, scope=scope) for p in spec["patterns"]]
     if spec.get("bounded"):
         patterns = [bounded(p) for p in patterns]
     canonical = spec.get("canonical", "strip_upper")
@@ -295,18 +316,18 @@ def compile_detector(spec: dict[str, Any]) -> Detector:
         label=spec["label"],
         patterns=tuple(patterns),
         capture=spec.get("capture"),
-        validate=_compile_validators(spec.get("validate")),
+        validate=_compile_validators(spec.get("validate"), scope),
         checks=spec.get("checks"),
-        base=_compile_base(spec["base"]),
+        base=_compile_base(spec["base"], scope),
         base_without_context=spec.get("base_without_context"),
-        context=expand_fragments(spec.get("context")),
-        negative=expand_fragments(spec.get("negative")),
+        context=expand_fragments(spec.get("context"), scope=scope),
+        negative=expand_fragments(spec.get("negative"), scope=scope),
         context_required=bool(spec.get("context_required", False)),
         canonical=_CANONICAL[canonical],
-        describe=_compile_describe(spec.get("describe")),
+        describe=_compile_describe(spec.get("describe"), scope),
         ignore_case=bool(spec.get("ignore_case", False)),
-        column_label=expand_fragments(column.get("label")),
-        column_patterns=tuple(expand_fragments(p) for p in column.get("patterns", ())),
+        column_label=expand_fragments(column.get("label"), scope=scope),
+        column_patterns=tuple(expand_fragments(p, scope=scope) for p in column.get("patterns", ())),
     )
 
 

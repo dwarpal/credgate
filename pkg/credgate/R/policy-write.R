@@ -37,7 +37,7 @@ policy_write <- function(policy, path, user, note = "") {
   old <- if (file.exists(path)) yaml::yaml.load(paste(read_utf8_lines(path), collapse = "\n")) else NULL
   base <- if (is.null(old)) as.integer(x$revision %||% 0L) else as.integer(old$revision)
   x$revision <- base + 1L
-  parse_policy(x) # strict: never write a policy the proxy would refuse
+  parse_policy(x, dirname(path)) # strict: never write a policy the proxy would refuse
   changes <- if (is.null(old)) "new policy" else policy_diff(old, x)
   tmp <- paste0(path, ".tmp")
   writeLines(enc2utf8(policy_yaml(x)), tmp, useBytes = TRUE)
@@ -60,6 +60,14 @@ policy_diff <- function(old, new) {
     if (!identical(policy_value(old[[field]]), policy_value(new[[field]]))) {
       out <- c(out, sprintf("%s: %s -> %s", field, policy_value(old[[field]]), policy_value(new[[field]])))
     }
+  }
+  od_files <- paste(unlist(old$detectors), collapse = ", ")
+  nd_files <- paste(unlist(new$detectors), collapse = ", ")
+  if (!identical(od_files, nd_files)) {
+    out <- c(out, sprintf(
+      "detectors: %s -> %s",
+      if (nzchar(od_files)) od_files else "none", if (nzchar(nd_files)) nd_files else "none"
+    ))
   }
   od <- old$destinations %||% list()
   nd <- new$destinations %||% list()
@@ -201,6 +209,7 @@ policy_yaml <- function(x) {
     paste0("id: ", q(x$id)), paste0("revision: ", as.integer(x$revision))
   )
   if (!is.null(x$description) && nzchar(x$description)) out <- c(out, paste0("description: ", q(x$description)))
+  if (length(x$detectors)) out <- c(out, paste0("detectors: ", qs(x$detectors)))
   out <- c(out, "", "destinations:")
   for (name in names(x$destinations)) {
     d <- x$destinations[[name]]

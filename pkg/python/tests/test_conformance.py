@@ -372,3 +372,33 @@ def test_rotated_log_tampering_is_detected(case, tmp_path):
         assert old in text
         (folder / name).write_text(text.replace(old, new, 1), encoding="utf-8")
     assert not credgate.audit_verify(path).ok
+
+
+CUSTOM_SPEC = conformance("custom_detectors.yaml")
+
+
+@pytest.mark.parametrize("case", CUSTOM_SPEC["cases"], ids=[c["id"] for c in CUSTOM_SPEC["cases"]])
+def test_custom_detectors(case):
+    credgate.reset_detectors()
+    try:
+        credgate.load_detectors(CUSTOM_SPEC["files"][case["file"]])
+        spans = credgate.detect_pii(case["text"], case["types"], context=case.get("context"))
+        assert [(s.type, s.value) for s in spans] == [
+            (e["type"], e["value"]) for e in case["expect"]
+        ]
+        for s, e in zip(spans, case["expect"], strict=True):
+            if "confidence" in e:
+                assert s.confidence == pytest.approx(e["confidence"])
+    finally:
+        credgate.reset_detectors()
+
+
+@pytest.mark.parametrize(
+    "case", CUSTOM_SPEC["invalid"], ids=[c["id"] for c in CUSTOM_SPEC["invalid"]]
+)
+def test_invalid_custom_detectors(case):
+    credgate.reset_detectors()
+    before = {d["id"] for d in credgate.detectors()}
+    with pytest.raises(ValueError, match=r"(?i)" + __import__("re").escape(case["error"])):
+        credgate.load_detectors(case["file"])
+    assert {d["id"] for d in credgate.detectors()} == before  # nothing registered

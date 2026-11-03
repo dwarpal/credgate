@@ -17,6 +17,17 @@ from .redact import preview, redact
 from .scan import ScanReport, scan_pii
 
 
+def _add_detectors_option(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--detectors",
+        action="append",
+        default=[],
+        metavar="FILE",
+        dest="detector_files",
+        help="custom detectors file (YAML; repeatable)",
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="credgate",
@@ -26,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("detect", help="detect PII in files or standard input")
+    _add_detectors_option(p)
     p.add_argument("files", nargs="*", help="files to scan (default: standard input)")
     p.add_argument("--lines", action="store_true", help="treat each line as a separate document")
     p.add_argument("--json", action="store_true", help="write one JSON object per match")
@@ -47,6 +59,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("preview", "show what would be redacted and why (values masked)"),
     ):
         r = sub.add_parser(name, help=text)
+        _add_detectors_option(r)
         r.add_argument("files", nargs="*", help="files to read (default: standard input)")
         r.add_argument("--min-confidence", type=float, default=0.0, metavar="X")
         r.add_argument("--context", default=None, help="extra context applied to every match")
@@ -66,6 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             r.add_argument("--batch-size", type=int, default=10_000, metavar="ROWS")
 
     s = sub.add_parser("scan", help="report which columns of a CSV or Parquet file contain PII")
+    _add_detectors_option(s)
     s.add_argument("file", help="CSV file with a header row, or a Parquet file (.parquet)")
     s.add_argument("--sample", type=int, default=10000, help="values checked per column")
     s.add_argument("--min-rate", type=float, default=0.0, metavar="X")
@@ -80,6 +94,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     px = sub.add_parser("proxy", help="run the policy-enforcing proxy for model endpoints")
     px_sub = px.add_subparsers(dest="proxy_command", required=True)
     ps = px_sub.add_parser("serve", help="run the proxy (OpenAI, Anthropic and Ollama APIs)")
+    _add_detectors_option(ps)
     ps.add_argument("--policy", required=True, help="policy file (YAML)")
     ps.add_argument("--audit", required=True, help="audit log file (JSON Lines)")
     ps.add_argument("--host", default="127.0.0.1", help="address to listen on (default: localhost)")
@@ -128,10 +143,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     pa.add_argument("name", help="user name, recorded in the audit log")
     pa.add_argument("--keys", required=True, help="keys file (created if missing)")
 
-    sub.add_parser("detectors", help="list the registered detectors")
+    dl = sub.add_parser(
+        "detectors", help="list the registered detectors (and check custom detector files)"
+    )
+    _add_detectors_option(dl)
     sub.add_parser("spec-path", help="print the path of the shipped detection spec")
 
     args = parser.parse_args(argv)
+    for f in getattr(args, "detector_files", None) or []:
+        from .custom import load_detectors
+
+        try:
+            load_detectors(f)
+        except (OSError, ValueError) as e:
+            print(f"credgate: {e}", file=sys.stderr)
+            return 2
     if args.command == "detectors":
         for d in detectors():
             print(f"{d['id']:<16} {d['class']:<16} {d['label']}")

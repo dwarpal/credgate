@@ -31,11 +31,16 @@ detect_pii <- function(text, detectors = NULL, context = NULL,
     context <- rep_len(as.character(context), length(text))
     context[is.na(context)] <- ""
   }
+  detect_with(get_detectors(detectors), text, context, min_confidence, window)
+}
+
+# Detection with the given detectors (registered or not).
+detect_with <- function(dets, text, context = NULL, min_confidence = 0, window = NULL) {
   window <- window %||% the$engine$scoring$context_window
   norm <- cg_normalise(text)
   ntext <- vapply(norm, `[[`, character(1), "text")
 
-  found <- lapply(get_detectors(detectors), run_detector,
+  found <- lapply(dets, run_detector,
     text = text, norm = norm, ntext = ntext, context = context,
     window = window
   )

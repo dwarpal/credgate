@@ -248,6 +248,19 @@
 
           # Lint and formatting of the Python package, examples and benchmark
           # scripts (config in pkg/python/pyproject.toml).
+          # The example custom detectors load in both languages, and every
+          # example in them (texts that must and must not match) passes.
+          example-detectors = pkgs.runCommand "credgate-example-detectors" {
+            nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ (credgatePy ps) ])) rTest ];
+            LC_ALL = "C.UTF-8";
+          } ''
+            for f in ${./examples/detectors}/*.yaml; do
+              credgate detectors --detectors "$f" > /dev/null
+              Rscript -e "credgate::load_detectors('$f')"
+            done
+            touch $out
+          '';
+
           ruff = pkgs.runCommand "credgate-ruff" { nativeBuildInputs = [ pkgs.ruff ]; } ''
             cp -r ${./pkg/python} python
             cp -r ${./examples} examples

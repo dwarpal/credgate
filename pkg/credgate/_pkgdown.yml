@@ -42,6 +42,7 @@ reference:
       - cg_detectors
       - new_detector
       - register_detector
+      - load_detectors
       - bounded
       - cg_normalise
   - title: Redact and tokenise

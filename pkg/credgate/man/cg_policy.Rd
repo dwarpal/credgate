@@ -4,10 +4,13 @@
 \alias{cg_policy}
 \title{Load a policy}
 \usage{
-cg_policy(x)
+cg_policy(x, dir = NULL)
 }
 \arguments{
 \item{x}{Path to a policy file (YAML), or the policy as a list.}
+
+\item{dir}{When \code{x} is a list: the folder its custom detector files are
+relative to (default: the working directory).}
 }
 \value{
 An object of class \code{cg_policy}.
@@ -30,6 +33,10 @@ identifier decides its action; a rule's \code{when} can name particular
 all occur in the request (for example a card number with its CVV and expiry
 date). Any \code{block} blocks the whole request. A destination that is not
 listed receives nothing: requests to it are refused.
+
+A policy can name custom detector files in a \code{detectors} list (see
+\code{\link[=load_detectors]{load_detectors()}}), relative to the policy file; they are loaded first,
+so its rules can name their types.
 }
 \examples{
 policy <- cg_policy(list(
