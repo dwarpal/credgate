@@ -157,6 +157,29 @@ To evaluate on your own labelled data, use the same JSON Lines format
 | negative | 102 | - | - | - |
 | record | 85 | 1.000 | 0.846 | 0.917 |
 
+### Names with the example custom detector
+
+The tables above use only the built-in detectors. Most `person_name` misses
+are names with no cue before them ("Lakshmi Verma called regarding a failed
+transfer..."). The example custom detector
+[`names-by-cue.yaml`](../examples/detectors/names-by-cue.yaml) finds names
+from the words around them; loaded together with the built-in detectors
+(min_confidence = 0.5, exact matching), on the **test** split:
+
+| Names (`person_name` + `name_by_cue`) | TP | FP | FN | Precision | Recall | F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| Built-in only | 224 | 0 | 17 | 1.000 | 0.929 | 0.963 |
+| With `names-by-cue.yaml` | 241 | 0 | 0 | 1.000 | 1.000 | 1.000 |
+
+It was written using the dev split only. Read this with care: the corpus
+generator has a single kind of sentence where a name has no cue, in both
+splits, so this shows the detector catches that kind without false matches -
+not that it finds every name in real notes. Its examples and the probes in
+[the guide](../docs/custom-detectors.md) show what it is designed to catch
+and to avoid. Columns named for names (`customer_name`, `नाम`) are read as
+names by the built-in detector itself; the corpus has no columns, so that
+does not show here.
+
 ## Throughput
 
 How fast credgate processes text on **one CPU core** of a 2019 laptop (Intel

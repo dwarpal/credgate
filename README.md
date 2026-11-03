@@ -424,7 +424,11 @@ Presidio is broader and more mature:
   and MAC addresses, URLs, crypto wallets, dates, nationality and religion -
   credgate detects none of these.
 - **Names in running text**: Presidio's NER finds names without an honorific,
-  field label or "ji"; credgate does not yet.
+  field label or "ji"; credgate's built-in detector does not, though columns
+  named for names are read as names, and the example custom detector
+  `names-by-cue.yaml` finds names from cues such as "X called" or "spoke with
+  X" (all 241 test-split names, with no false matches; see
+  [the benchmark](benchmark/README.md#names-with-the-example-custom-detector)).
 - **Anonymisation**: Presidio can mask, hash or encrypt with a key, and
   add custom operators; credgate redacts, or tokenises with an in-memory
   vault that can be saved encrypted (no hashing or encryption operators).
