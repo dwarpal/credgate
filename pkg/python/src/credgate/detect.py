@@ -348,9 +348,10 @@ def _current_mask() -> str:
 def mask_value(x: str, data_class: str | None = None, mode: str | None = None) -> str:
     """Replace letters and digits with ``X``, keeping the last 4 characters
     (2 for values shorter than 8) - the same convention as UIDAI's masked
-    Aadhaar. Values of the ``personal`` class (names, addresses) keep
-    nothing, and neither does any value when the mask mode is ``"full"``
-    (see :func:`set_mask`)."""
+    Aadhaar. Values of the ``personal`` class (names, addresses) and the
+    ``sensitive_auth`` class (card verification codes) keep nothing, and
+    neither does any value when the mask mode is ``"full"`` (see
+    :func:`set_mask`)."""
     if mode is not None and mode not in MASK_MODES:
         raise ValueError(f"`mode` must be one of {', '.join(MASK_MODES)}, or None.")
     if (mode or _current_mask()) == "full" or data_class in FULL_MASK_CLASSES:
