@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Columns named for names and addresses**: every value of a column named
+  `customer_name`, `first_name`, `nominee`, `borrower`, `नाम` (and similar)
+  that is only a name is reported as `person_name`, in any letter case or
+  script; every value of a column named `address`, `permanent_address`,
+  `addr_line1`, `पता` (and similar) that has letters is an `address` (not
+  e-mail addresses or links). The same works for values given
+  `context="customer name"`. Only whole labels count: `product_name`,
+  `user_name` and `email_address` do not.
+
 - **Custom detectors from a YAML file** (`credgate.load_detectors()`): an
   organisation's own formats in the same fields as the built-in detectors,
   with its own fragments and lists, and `examples` that must and must not

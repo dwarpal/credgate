@@ -484,3 +484,63 @@ cases:
     context: ration card
     expect:
       - {type: ration_card, value: '542229371182', confidence: 0.98}
+
+  # --- Column labels for names and addresses --------------------------------
+  # A column (or caller's context) named for names or addresses: the whole
+  # label must match, so "product_name" and "email_address" do not count.
+  - id: name-column-lower-case
+    text: 'priya nair'
+    context: customer_name
+    expect:
+      - {type: person_name, value: 'priya nair', confidence: 0.96}
+  - id: name-column-label-with-spaces
+    text: 'R. K. Sharma'
+    context: Customer Name
+    expect:
+      - {type: person_name, value: 'R. K. Sharma', confidence: 0.96}
+  - id: name-column-devanagari
+    text: 'सुनीता देवी'
+    context: 'नाम'
+    expect:
+      - {type: person_name, value: 'सुनीता देवी', confidence: 0.96}
+  - id: name-column-language-suffix
+    text: 'प्रिया नायर'
+    context: name_hi
+    expect:
+      - {type: person_name, value: 'प्रिया नायर', confidence: 0.96}
+  - id: name-column-apostrophe
+    text: "Mary D'Souza"
+    context: nominee
+    expect:
+      - {type: person_name, value: "Mary D'Souza", confidence: 0.96}
+  - id: name-column-not-a-name
+    text: 'CUST-00412'
+    context: customer_name
+    expect: []
+  - id: not-a-person-name-column
+    text: 'Gold Loan Scheme'
+    context: product_name
+    expect: []
+  - id: user-name-column-is-not-a-person
+    text: 'priya.nair'
+    context: user_name
+    expect: []
+  - id: address-column-without-pin
+    text: 'Near Shiv Temple, Ward 5'
+    context: permanent_address
+    expect:
+      - {type: address, value: 'Near Shiv Temple, Ward 5', confidence: 0.97}
+  - id: address-column-devanagari-label
+    text: 'House 4, Sector 15, Noida'
+    context: 'पता'
+    expect:
+      - {type: address, value: 'House 4, Sector 15, Noida', confidence: 0.97}
+  - id: email-in-address-column-is-an-email
+    text: 'priya@example.com'
+    context: address
+    expect:
+      - {type: email, value: 'priya@example.com'}
+  - id: email-address-column-is-not-postal
+    text: 'Near Shiv Temple, Ward 5'
+    context: email_address
+    expect: []

@@ -1,5 +1,11 @@
 # credgate (development version)
 
+* Columns named for names (`customer_name`, `nominee`, `नाम`, ...) and for
+  addresses (`permanent_address`, `addr_line1`, `पता`, ...) - or values given
+  `context = "customer name"` - are read as names and addresses, in any
+  letter case or script. Only whole labels count: `product_name` and
+  `email_address` do not.
+
 * Custom detectors from a YAML file: `load_detectors()` reads an
   organisation's own formats in the same fields as the built-in detectors,
   with `examples` that must and must not match, checked whenever the file is

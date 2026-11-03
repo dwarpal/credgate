@@ -62,7 +62,7 @@ looks for the cues such notes *do* have:
 | Someone spoke to or paid a person | "Spoke with **Rahul Nair**", "Transferred to **Imran Khan**'s account" |
 | A role word before a name | "Customer **R. K. Sharma** wants a statement", "Borrower **Neha Rao**" |
 | A greeting or sign-off | "Hi **Anil**,", "Regards, **Sunita Devi**" |
-| A column named for names | a `customer_name`, `borrower`, `nominee` or `नाम` column: every value |
+| A column named for names | a `customer_name`, `borrower`, `nominee` or `नाम` column: every value (the built-in `person_name` does this too) |
 
 And it avoids what looks like a name but is not: "Customer Service called",
 "Hi Team", "the Branch Manager", "Payment Gateway called back", "Received
@@ -209,9 +209,14 @@ A cue-based detector is one of several ways to catch names; they combine
 well.
 
 1. **Say where the names are.** If you know a column or a field holds names,
-   say so: a column named for names, or `context="customer name"` on the
-   values. This is the most reliable method, because it does not depend on
-   how a name is written.
+   say so: the built-in detectors read every value of a column named for
+   names (`customer_name`, `first_name`, `nominee`, `borrower`, `नाम`) or for
+   addresses (`permanent_address`, `addr_line1`, `पता`) as one, and so does
+   `context="customer name"` on values you pass. Only whole labels count, so
+   `product_name` and `email_address` do not. This is the most reliable
+   method, because it does not depend on how a name is written. If your
+   systems use other column names, a custom detector's `column_label` adds
+   them.
 2. **Policies that protect free text.** For external models, a policy can
    redact or tokenise the whole `personal` class, and use `default_action:
    redact`, so whatever a detector finds in free text does not leave.
