@@ -1,5 +1,10 @@
 # credgate (development version)
 
+* A policy owns its custom detectors: `cg_policy()` compiles the files a
+  policy names for that policy and no longer registers them for other calls
+  (use `load_detectors()` for that), as in Python, so another revision
+  never changes what a loaded policy detects.
+
 * The policy editor has a Detectors tab, a workbench for custom detector
   files: write a detector with a form or edit a file the policy names (or
   a new one beside it), see live

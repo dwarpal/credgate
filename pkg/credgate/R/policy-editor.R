@@ -651,7 +651,8 @@ policy_editor_server <- function(path, user = NULL) {
     output$try_misses <- shiny::renderUI({
       shiny::req(is.null(problem()), nzchar(input$try_text))
       x <- tryCatch(
-        explain_pii(input$try_text, min_confidence = policy()$min_confidence %||% 0)$misses,
+        explain_pii(input$try_text, min_confidence = policy()$min_confidence %||% 0,
+                    detectors = cg_policy(policy(), dirname(path))$detectors)$misses,
         error = function(e) NULL
       )
       shiny::tagList(
@@ -734,7 +735,8 @@ policy_editor_server <- function(path, user = NULL) {
     })
     save_tests <- function(x) {
       ok <- tryCatch({
-        if (length(x)) write_policy_tests(x, tests_file) else unlink(tests_file)
+        types <- tryCatch(names(cg_policy(policy(), dirname(path))$detectors), error = function(e) names(get_detectors(NULL)))
+        if (length(x)) write_policy_tests(x, tests_file, types) else unlink(tests_file)
         TRUE
       }, error = function(e) {
         shiny::showNotification(paste("Tests not saved:", conditionMessage(e)), type = "error")
@@ -982,10 +984,6 @@ policy_editor_server <- function(path, user = NULL) {
       tmp <- paste0(target, ".tmp")
       writeLines(enc2utf8(sub("\n*$", "\n", text)), tmp, useBytes = TRUE, sep = "")
       file.rename(tmp, target)
-      loaded <- tryCatch(load_detectors(target, replace = TRUE), error = function(e) {
-        shiny::showNotification(paste("Saved, but not loaded:", conditionMessage(e)), type = "error")
-        NULL
-      })
       if (new) {
         edit(function(x) {
           x$detectors <- c(x$detectors, list(f))

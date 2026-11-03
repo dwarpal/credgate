@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -11,9 +12,9 @@ from typing import Any
 
 import yaml
 
+from . import detectors as _reg
 from ._frames import texts as _texts
-from .detect import Span, detect_pii
-from .detectors import detectors as _detectors
+from .detect import Span, _detect_with
 from .redact import placeholder
 from .tokenise import Vault
 
@@ -139,6 +140,7 @@ class Policy:
         default_action: str,
         min_confidence: float = 0.0,
         description: str | None = None,
+        detectors: Mapping[str, _reg.Detector] | None = None,
     ) -> None:
         self.id = id
         self.revision = revision
@@ -147,6 +149,26 @@ class Policy:
         self.default_action = default_action
         self.min_confidence = min_confidence
         self.description = description
+        # The detectors this policy decides with: those registered when it
+        # was loaded plus its own files. Fixed, so a policy loaded later (a
+        # proxy reloading) never changes what this one detects. None: the
+        # detectors registered at the time of each decision.
+        self._detectors = None if detectors is None else dict(detectors)
+        # The files it was loaded from, with a digest of each (see sources).
+        self._sources: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def detector_ids(self) -> list[str]:
+        """The ids of the detectors this policy decides with."""
+        dets = self._detectors if self._detectors is not None else _reg._detectors()
+        return list(dets)
+
+    @property
+    def sources(self) -> tuple[tuple[str, str], ...]:
+        """The files the policy was loaded from - the policy file and its
+        custom detector files - each with the SHA-256 of its contents, so a
+        change to any of them can be noticed. Empty for :meth:`from_dict`."""
+        return self._sources
 
     def __repr__(self) -> str:
         return (
@@ -157,9 +179,11 @@ class Policy:
     @classmethod
     def load(cls, path: str | os.PathLike[str]) -> Policy:
         """Load and validate a policy file (YAML)."""
-        with Path(path).open(encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return _parse(data, Path(path).parent)
+        raw = Path(path).read_bytes()
+        data = yaml.safe_load(raw.decode("utf-8"))
+        policy = _parse(data, Path(path).parent)
+        policy._sources = ((str(path), hashlib.sha256(raw).hexdigest()), *policy._sources)
+        return policy
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Policy:
@@ -173,7 +197,8 @@ class Policy:
         dest = self._destination(destination)
         tier = dest.tier
         docs = _texts(text)[0]
-        spans = detect_pii(docs, min_confidence=self.min_confidence)
+        dets = self._detectors if self._detectors is not None else _reg._detectors()
+        spans = _detect_with(list(dets.values()), docs, [""] * len(docs), self.min_confidence)
         found = {s.type for s in spans}
         matches = []
         for span in spans:
@@ -236,21 +261,33 @@ class Policy:
         return found
 
 
-def _load_custom_detectors(files: Any, base: Path) -> None:
-    """Custom detector files named by the policy, before its rules are
-    checked, so rules can name their types."""
+def _load_custom_detectors(
+    files: Any, base: Path
+) -> tuple[list[_reg.Detector], list[tuple[str, str]]]:
+    """The custom detector files named by the policy, compiled for the
+    policy alone (not registered), so rules can name their types; and each
+    file with the digest of its contents."""
     if files is None:
-        return
+        return [], []
     if not isinstance(files, list) or not all(isinstance(f, str) and f for f in files):
         raise PolicyError("`detectors` must be a list of custom detector files.")
-    from .custom import load_detectors
+    from .custom import _compile_source
 
+    dets: list[_reg.Detector] = []
+    sources = []
     for f in files:
         path = Path(f) if Path(f).is_absolute() else base / f
         try:
-            load_detectors(path)
+            raw = path.read_bytes()
+            compiled = _compile_source(path)
         except (OSError, ValueError) as e:
             raise PolicyError(f"Custom detectors {f}: {e}") from None
+        for det, _ in compiled:
+            if any(d.id == det.id for d in dets):
+                raise PolicyError(f"Custom detectors {f}: `{det.id}` is also in another file.")
+            dets.append(det)
+        sources.append((str(path), hashlib.sha256(raw).hexdigest()))
+    return dets, sources
 
 
 def _parse(data: Any, base: Path) -> Policy:
@@ -259,7 +296,9 @@ def _parse(data: Any, base: Path) -> Policy:
     _check_fields(data, _TOP_FIELDS, "policy")
     if data.get("version") != 1:
         raise PolicyError(f"Unsupported policy format version {data.get('version')!r}.")
-    _load_custom_detectors(data.get("detectors"), base)
+    own, sources = _load_custom_detectors(data.get("detectors"), base)
+    registry = dict(_reg._detectors())
+    registry.update({d.id: d for d in own})
     pid = data.get("id")
     if not isinstance(pid, str) or not pid:
         raise PolicyError("The policy needs an `id`.")
@@ -301,8 +340,8 @@ def _parse(data: Any, base: Path) -> Policy:
             spec.get("blocked", False),
         )
 
-    types = {d["id"] for d in _detectors()}
-    classes = set(CLASSES) | {d["class"] for d in _detectors()}
+    types = set(registry)
+    classes = set(CLASSES) | {d.data_class for d in registry.values()}
     rules: list[Rule] = []
     seen: set[str] = set()
     raw_rules = data.get("rules")
@@ -348,7 +387,7 @@ def _parse(data: Any, base: Path) -> Policy:
     default = data.get("default_action")
     if default not in ACTIONS:
         raise PolicyError(f"`default_action` must be one of {', '.join(ACTIONS)}, not {default!r}.")
-    return Policy(
+    policy = Policy(
         pid,
         revision,
         destinations,
@@ -356,7 +395,10 @@ def _parse(data: Any, base: Path) -> Policy:
         default,
         min_confidence=float(min_conf),
         description=data.get("description"),
+        detectors=registry,
     )
+    policy._sources = tuple(sources)
+    return policy
 
 
 def _check_fields(data: Mapping[str, Any], allowed: set[str], where: str) -> None:

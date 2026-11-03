@@ -197,9 +197,10 @@ test_that("the detector workbench checks, tries and saves a custom detectors fil
     # saved: written beside the policy, loaded, and added to the draft policy
     session$setInputs(det_yaml = det_template, det_save = 2)
     expect_true(file.exists(file.path(dirname(path), "bank-detectors.yaml")))
-    expect_true("loan_account" %in% cg_detectors()$id)
     expect_identical(unlist(policy()$detectors), "bank-detectors.yaml")
     expect_null(problem())
+    expect_true("loan_account" %in% names(cg_policy(policy(), dirname(path))$detectors))
+    expect_false("loan_account" %in% cg_detectors()$id) # the policy's own, not global
     # a file name with folders is refused
     session$setInputs(det_file = "", det_name = "../x.yaml", det_save = 3)
     expect_false(file.exists(file.path(dirname(dirname(path)), "x.yaml")))
