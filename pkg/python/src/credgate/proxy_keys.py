@@ -170,3 +170,43 @@ def list_users(
             status = "active"
         out.append({"name": name, "created": e.created, "expires": e.expires, "status": status})
     return out
+
+
+def expire_unused(
+    keys: str | os.PathLike[str],
+    audit: str | os.PathLike[str],
+    days: int = 60,
+    now: _dt.datetime | None = None,
+) -> list[str]:
+    """Expire the keys of users who have not used the proxy for `days` days.
+
+    The last use of each key is read from the proxy's audit log (its monthly
+    files included): a request recorded under the user's name. A key made
+    within the last `days` days is left alone. An expired key stays in the
+    file, so the person can be given a new one with `rotate_key`. Returns the
+    names whose keys were expired.
+    """
+    from .audit import audit_read
+
+    if isinstance(days, bool) or not isinstance(days, int) or days < 1:
+        raise ValueError("`days` must be a whole number of at least 1.")
+    now = now or _now()
+    cutoff = now - _dt.timedelta(days=days)
+    last: dict[str, _dt.datetime] = {}
+    for r in audit_read(audit):
+        t = _dt.datetime.fromisoformat(str(r.get("time", "")).replace("Z", "+00:00"))
+        who = r.get("actor")
+        if who and (who not in last or t > last[who]):
+            last[who] = t
+    path = Path(keys)
+    users = read_keys(path)
+    expired = []
+    for name, e in users.items():
+        if e.expired(now) or (e.created is not None and _parse(e.created) > cutoff):
+            continue
+        if last.get(name, _dt.datetime.min.replace(tzinfo=_dt.UTC)) < cutoff:
+            users[name] = KeyEntry(e.hash, e.created, _iso(now))
+            expired.append(name)
+    if expired:
+        _write(path, users)
+    return sorted(expired)

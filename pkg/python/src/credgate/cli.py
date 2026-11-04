@@ -138,6 +138,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "checking this often (default: only on SIGHUP)",
     )
     ps.add_argument(
+        "--users",
+        help="the app's users file: keys of users not in it, or inactive, are refused",
+    )
+    ps.add_argument(
         "--require-tests",
         action="store_true",
         help="refuse a policy without a tests file beside it (<policy>.tests.yaml)",
@@ -169,6 +173,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     pd.add_argument("--keys", required=True, help="keys file")
     pl = px_sub.add_parser("list-users", help="list users with their key's dates and status")
     pl.add_argument("--keys", required=True, help="keys file")
+    pe = px_sub.add_parser(
+        "expire-unused", help="expire keys not used for a while (read from the audit log)"
+    )
+    pe.add_argument("--keys", required=True, help="keys file")
+    pe.add_argument("--audit", required=True, help="the proxy's audit log")
+    pe.add_argument("--days", type=int, default=60, help="unused for this long (default 60)")
 
     pol = sub.add_parser("policy", help="work with policies")
     pol_sub = pol.add_subparsers(dest="policy_command", required=True)
@@ -322,6 +332,13 @@ def _proxy(args: argparse.Namespace) -> int:
             remove_user(args.keys, args.name)
             print(f"Removed {args.name} from {args.keys}. {reload_note}", file=sys.stderr)
             return 0
+        if args.proxy_command == "expire-unused":
+            from .proxy_keys import expire_unused
+
+            gone = expire_unused(args.keys, args.audit, days=args.days)
+            msg = ", ".join(gone) if gone else "none"
+            print(f"Keys unused for {args.days} days, now expired: {msg}. {reload_note}")
+            return 0
         if args.proxy_command == "list-users":
             rows = list_users(args.keys)
             print(f"{'user':<24} {'created':<21} {'expires':<21} status")
@@ -353,6 +370,7 @@ def _proxy(args: argparse.Namespace) -> int:
             audit_retention_years=args.audit_retention_years,
             watch=args.watch,
             require_tests=args.require_tests,
+            users=args.users,
         )
     except (ValueError, OSError) as e:
         print(f"credgate proxy: {e}", file=sys.stderr)

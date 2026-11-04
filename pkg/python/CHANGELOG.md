@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Leavers and unused keys**: `credgate proxy serve --users users.yaml`
+  refuses the key of anyone not in the users file, or inactive, with
+  "no longer has access" (401, `access_revoked`); the users file reloads
+  with the keys file. `credgate proxy expire-unused --keys --audit
+  [--days 60]` (and `expire_unused()`) expires keys not used for that long,
+  judged from the audit log.
 - **Users file and `credgate users`** (`credgate.users`): who may use the
   app and in which role (admin, auditor, user), whether they are active,
   and the limits admins set (longest key, activity window). Changed only
