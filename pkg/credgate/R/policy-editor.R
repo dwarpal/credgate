@@ -18,20 +18,42 @@
 #' @param path The policy file (YAML). A new file starts from the bank
 #'   example policy.
 #' @param user Who is editing, for the change log; defaults to the signed-in
-#'   Shiny user or the operating-system user.
+#'   Shiny user or the operating-system user. With `users`, also who is
+#'   signed in, for their role (on a server the signed-in user is used).
+#' @param users A users file (see [cg_users()]): who may use the app and in
+#'   which role. Admins see and change everything; auditors see the policy,
+#'   tests and change log but change nothing; users try the saved policy,
+#'   see test results and try detectors. Anyone not in the file, or
+#'   inactive, has no access. Without a users file everyone is an admin.
 #' @return A Shiny app; printing it (or [shiny::runApp()]) runs it.
 #' @export
 #' @examples
 #' if (interactive()) {
 #'   policy_editor(file.path(tempdir(), "bank.yaml"))
 #' }
-policy_editor <- function(path, user = NULL) {
+policy_editor <- function(path, user = NULL, users = NULL) {
   check_installed("shiny")
   check_installed("bslib")
-  stopifnot(rlang::is_string(path))
-  shiny::shinyApp(policy_editor_ui(path), policy_editor_server(path, user), onStart = function() {
+  stopifnot(rlang::is_string(path), is.null(users) || rlang::is_string(users))
+  shiny::shinyApp(policy_editor_ui(path), policy_editor_server(path, user, users), onStart = function() {
     shiny::onStop(writable_temp_assets)
   })
+}
+
+# The tabs each role sees, and the role of a signed-in name (NULL: no
+# access). Without a users file everyone is an admin, as before roles.
+editor_tabs <- list(
+  admin = c("Endpoints", "Rules", "Try it", "Tests", "Detectors", "Changes"),
+  auditor = c("Endpoints", "Rules", "Tests", "Changes"),
+  user = c("Try it", "Tests", "Detectors", "Changes")
+)
+
+editor_role <- function(users, name) {
+  if (is.null(users)) {
+    return("admin")
+  }
+  u <- tryCatch(cg_users(users), error = function(e) NULL)  # an invalid file lets no one in
+  if (is.null(u)) NULL else user_role(u, name)
 }
 
 policy_template <- function() {
@@ -88,6 +110,9 @@ policy_editor_ui <- function(path) {
       section("Policy file"),
       shiny::div(class = "cg-file", path),
       shiny::uiOutput("status"),
+      shiny::uiOutput("role_note"),
+      shiny::div(
+      id = "cg-admin-controls",
       section("Policy"),
       shiny::textInput("policy_id", tip("Policy id", "A short name for this policy. It is recorded with every decision in the audit log, together with the revision.")),
       shiny::textAreaInput("description", "Description", rows = 3),
@@ -99,9 +124,11 @@ policy_editor_ui <- function(path) {
       shiny::uiOutput("save_anyway_ui"),
       bslib::tooltip(shiny::actionButton("save", "Save new revision", class = "btn-primary"), "Writes the policy with its revision raised by one and adds an entry to the change log. Only possible when the draft is valid and has changes."),
       bslib::tooltip(shiny::actionButton("reload", "Discard changes", class = "btn-link btn-sm"), "Throws away the draft and reloads the saved file.")
+      )
     ),
     shiny::uiOutput("stats", class = "cg-stats"),
     bslib::navset_card_tab(
+      id = "tabs",
       bslib::nav_panel(
         "Endpoints",
         shiny::p(class = "cg-lede", "The model endpoints requests may go to. An endpoint not listed here receives nothing. Click a row to edit it."),
@@ -274,8 +301,44 @@ policy_editor_ui <- function(path) {
 }
 
 
-policy_editor_server <- function(path, user = NULL) {
+policy_editor_server <- function(path, user = NULL, users = NULL) {
   function(input, output, session) {
+    # Who is signed in, and what they may do. Changes to the policy, its tests
+    # and detector files are refused here on the server, not only hidden.
+    signed_in <- user %||% session$user
+    role <- editor_role(users, signed_in)
+    if (is.null(role)) {
+      shiny::removeUI(".bslib-sidebar-layout")
+      shiny::showModal(shiny::modalDialog(
+        title = "No access",
+        if (is.null(signed_in)) "You are not signed in." else
+          sprintf("%s has no access to this app. Ask your InfoSec team.", signed_in),
+        footer = NULL, easyClose = FALSE
+      ))
+      return(invisible())
+    }
+    can_edit <- identical(role, "admin")
+    if (!can_edit) {
+      shiny::removeUI("#cg-admin-controls")
+      for (control in c("test_add", "test_delete", "det_save")) {
+        shiny::removeUI(sprintf(".cg-actions:has(#%s)", control))
+      }
+    }
+    for (tab in setdiff(editor_tabs$admin, editor_tabs[[role]])) {
+      bslib::nav_remove("tabs", tab, session = session)
+    }
+    output$role_note <- shiny::renderUI({
+      if (is.null(users)) {
+        return(NULL)
+      }
+      what <- c(
+        admin = "can change the policy",
+        auditor = "read-only: sees everything, changes nothing",
+        user = "read-only: tries the saved policy"
+      )[[role]]
+      shiny::div(class = "cg-status neutral", shiny::strong(sprintf("%s \u00b7 %s. ", signed_in, role)), what)
+    })
+
     saved <- shiny::reactiveVal(policy_read_file(path))
     policy <- shiny::reactiveVal(policy_read_file(path))
     saved_at <- shiny::reactiveVal(0)
@@ -292,7 +355,7 @@ policy_editor_server <- function(path, user = NULL) {
     }
     load_fields(shiny::isolate(policy()))
 
-    edit <- function(f) policy(f(policy()))
+    edit <- function(f) if (can_edit) policy(f(policy()))
 
     shiny::observeEvent(input$policy_id, edit(function(x) {
       x$id <- input$policy_id
@@ -734,6 +797,9 @@ policy_editor_server <- function(path, user = NULL) {
                                selected = if (!is.null(keep) && keep %in% ids) keep else ids[1])
     })
     save_tests <- function(x) {
+      if (!can_edit) {
+        return(FALSE)
+      }
       ok <- tryCatch({
         types <- tryCatch(names(cg_policy(policy(), dirname(path))$detectors), error = function(e) names(get_detectors(NULL)))
         if (length(x)) write_policy_tests(x, tests_file, types) else unlink(tests_file)
@@ -952,6 +1018,9 @@ policy_editor_server <- function(path, user = NULL) {
       for (f in c("gen_match", "gen_no_match")) shiny::updateTextAreaInput(session, f, value = "")
     })
     shiny::observeEvent(input$det_save, {
+      if (!can_edit) {
+        return()
+      }
       f <- input$det_file %||% ""
       new <- !nzchar(f)
       if (new) {
@@ -1012,6 +1081,17 @@ policy_editor_server <- function(path, user = NULL) {
     })
     output$history <- shiny::renderUI({
       h <- history()
+      if (identical(role, "user")) {
+        # Users see when the policy changed, not who changed it or why.
+        if (nrow(h) == 0) {
+          return(shiny::div(class = "cg-empty", "The policy has not been changed yet."))
+        }
+        h <- h[rev(seq_len(nrow(h))), ]
+        return(shiny::tags$ul(class = "cg-diff", lapply(seq_len(nrow(h)), function(i) shiny::tags$li(sprintf(
+          "Revision %d \u00b7 %s \u00b7 %d change%s", h$revision[i], substr(h$time[i], 1, 10),
+          length(h$changes[[i]]), if (length(h$changes[[i]]) == 1) "" else "s"
+        )))))
+      }
       alert <- if (!isTRUE(attr(h, "intact"))) {
         shiny::div(class = "cg-alert", "The change log was altered: entries were edited or removed after they were written.")
       }
@@ -1035,6 +1115,9 @@ policy_editor_server <- function(path, user = NULL) {
       shiny::updateActionButton(session, "save", disabled = !can_save())
     })
     shiny::observeEvent(input$save, {
+      if (!can_edit) {
+        return()
+      }
       if (!can_save()) {
         return()
       }

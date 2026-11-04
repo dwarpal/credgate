@@ -4,14 +4,21 @@
 \alias{policy_editor}
 \title{Policy editor for InfoSec and compliance}
 \usage{
-policy_editor(path, user = NULL)
+policy_editor(path, user = NULL, users = NULL)
 }
 \arguments{
 \item{path}{The policy file (YAML). A new file starts from the bank
 example policy.}
 
 \item{user}{Who is editing, for the change log; defaults to the signed-in
-Shiny user or the operating-system user.}
+Shiny user or the operating-system user. With \code{users}, also who is
+signed in, for their role (on a server the signed-in user is used).}
+
+\item{users}{A users file (see \code{\link[=cg_users]{cg_users()}}): who may use the app and in
+which role. Admins see and change everything; auditors see the policy,
+tests and change log but change nothing; users try the saved policy,
+see test results and try detectors. Anyone not in the file, or
+inactive, has no access. Without a users file everyone is an admin.}
 }
 \value{
 A Shiny app; printing it (or \code{\link[shiny:runApp]{shiny::runApp()}}) runs it.

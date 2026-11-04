@@ -1,5 +1,14 @@
 # credgate (development version)
 
+* Roles in the policy editor: `policy_editor(path, users = "users.yaml")`
+  reads a users file (`cg_users()`) and shows each person what their role
+  allows - admins change the policy, tests and detectors; auditors see
+  everything and change nothing; users try the saved policy, see test
+  results and try detectors, and see when the policy changed but not who
+  or why. Changes are refused on the server, not only hidden. Anyone not
+  in the file, or inactive, has no access. Without a users file everyone
+  is an admin, as before.
+
 * Addresses without a label are found when they have the usual shape: a
   house number, the locality, a known Indian city or district, and a PIN
   code. The city list comes from India Post's All India Pincode Directory

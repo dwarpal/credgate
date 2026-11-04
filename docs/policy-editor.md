@@ -151,6 +151,57 @@ code: `run_policy_tests("bank-default.yaml")` in R and
 `credgate.run_policy_tests("bank-default.yaml")` in Python, which read the
 same files and give the same results.
 
+## Roles
+
+With a **users file**, the editor shows each person what their role allows,
+and refuses the rest on the server (a hidden button cannot be used either):
+
+| | Admin (InfoSec) | Auditor | User (analyst) |
+|---|:---:|:---:|:---:|
+| Endpoints and rules | change | see | - |
+| Try it | the draft | - | the saved policy |
+| Tests | add, remove, save anyway | see | see |
+| Detectors | try and save | - | try |
+| Changes | everything | everything | when the policy changed (not who or why) |
+| Save a new revision | yes | - | - |
+
+Anyone not in the file, or marked inactive, sees only "No access"; so does
+everyone if the file is not valid.
+
+```yaml
+# users.yaml
+kind: credgate-users
+version: 1
+users:
+  priya: {role: admin}
+  meera: {role: auditor}
+  arjun: {role: user}
+  ravi:  {role: user, active: false}   # a leaver
+```
+
+The file is kept on the server and changed only there, by whoever looks
+after the server (the **super admin**, who has no account in the app):
+
+```sh
+credgate users add priya --role admin --file users.yaml
+credgate users set-role arjun --role auditor --file users.yaml
+credgate users deactivate ravi --file users.yaml
+credgate users list --file users.yaml
+```
+
+Names are the same as in the proxy's keys file, so a person's account and
+their proxy key match. With single sign-on, the file can be generated from
+directory groups (AD, LDAP) by a scheduled export.
+
+**Trying the roles locally**, without single sign-on, name the person:
+
+```r
+credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml")
+```
+
+On a server, the signed-in user is used. Without a users file, everyone is
+an admin, as before.
+
 ## Running it for a team
 
 On Shiny Server or Posit Connect, put this in an `app.R`:

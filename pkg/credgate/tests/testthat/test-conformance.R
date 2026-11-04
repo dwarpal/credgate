@@ -451,3 +451,17 @@ for (case in policy_tests_spec$invalid) {
     expect_true(grepl(tolower(case$error), tolower(msg), fixed = TRUE), info = msg)
   })
 }
+
+for (case in conformance("users.yaml")$cases) {
+  test_that(paste("users file:", case$id), {
+    if (isTRUE(case$invalid)) {
+      expect_error(cg_users(case$file), class = "credgate_users_error")
+      return(invisible())
+    }
+    users <- cg_users(case$file)
+    for (n in names(case$roles)) {
+      expect_identical(credgate:::user_role(users, n), case$roles[[n]], info = n)
+    }
+    expect_identical(users$settings, lapply(case$settings, as.integer))
+  })
+}

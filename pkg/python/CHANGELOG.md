@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Users file and `credgate users`** (`credgate.users`): who may use the
+  app and in which role (admin, auditor, user), whether they are active,
+  and the limits admins set (longest key, activity window). Changed only
+  from the server's command line: `add`, `set-role`, `activate`,
+  `deactivate`, `remove`, `list`, `set`. The format is in the spec with
+  conformance cases; R reads the same file.
 - **Managing proxy users**: `credgate proxy rotate-key`, `remove-user` and
   `list-users` join `add-user` (and `rotate_key`, `remove_user`,
   `list_users` in Python). **Keys now expire**: valid for 1 to 180 days

@@ -250,3 +250,65 @@ test_that("the workbench keeps one-item lists as lists", {
   expect_match(out, "patterns:\n      - X[0-9]{3}", fixed = TRUE)
   expect_match(out, "match:\n        - X123", fixed = TRUE)
 })
+
+test_that("roles decide what the editor lets people change", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  users <- withr::local_tempfile(fileext = ".yaml")
+  yaml::write_yaml(list(
+    kind = "credgate-users", version = 1L,
+    users = list(
+      priya = list(role = "admin"), meera = list(role = "auditor"),
+      arjun = list(role = "user"), ravi = list(role = "user", active = FALSE)
+    )
+  ), users)
+  before <- readLines(path)
+
+  for (who in c("arjun", "meera")) {
+    shiny::testServer(credgate:::policy_editor_server(path, user = who, users = users), {
+      expect_false(can_edit)
+      session$setInputs(policy_id = "bank-default", default_action = "redact")  # starting values
+      session$setInputs(policy_id = "changed", default_action = "allow")
+      expect_identical(policy()$id, "bank-default")        # the draft does not change
+      session$setInputs(user = who, note = "x", save = 1)
+      session$setInputs(try_endpoint = "claude", try_text = "PAN ABCPE1234F")
+      session$setInputs(test_id = "t", test_add = 1)
+      expect_length(tests(), 0)                              # no test saved
+      session$setInputs(det_file = "", det_name = "d.yaml", det_yaml = det_template, det_save = 1)
+    })
+  }
+  expect_identical(readLines(path), before)
+  expect_false(file.exists(credgate:::policy_tests_path(path)))
+  expect_false(file.exists(file.path(dirname(path), "d.yaml")))
+
+  # a user tries the saved policy, and sees when it changed but not who or why
+  policy_write(yaml::read_yaml(path), path, user = "priya", note = "secret reason")
+  shiny::testServer(credgate:::policy_editor_server(path, user = "arjun", users = users), {
+    session$setInputs(try_endpoint = "claude", try_text = "PAN ABCPE1234F")
+    expect_identical(decision()$matches$type, "pan")
+    html <- as.character(output$history$html)
+    expect_match(html, "Revision 2")
+    expect_false(grepl("secret reason|priya", html))
+  })
+
+  # an admin changes and saves, as without a users file
+  shiny::testServer(credgate:::policy_editor_server(path, user = "priya", users = users), {
+    expect_true(can_edit)
+    session$setInputs(default_action = "redact")  # the starting value
+    session$setInputs(default_action = "block")
+    expect_identical(policy()$default_action, "block")
+  })
+
+  # someone not in the file, inactive, or with an invalid file: no access
+  for (who in list("ravi", "nobody", NULL)) {
+    shiny::testServer(credgate:::policy_editor_server(path, user = who, users = users), {
+      expect_false(exists("can_edit", inherits = FALSE))
+    })
+  }
+  writeLines("kind: something-else", users)
+  shiny::testServer(credgate:::policy_editor_server(path, user = "priya", users = users), {
+    expect_false(exists("can_edit", inherits = FALSE))
+  })
+})
