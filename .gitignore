@@ -16,3 +16,8 @@ credgate_check_*.csv
 # Python bytecode
 __pycache__/
 *.pyc
+
+# External benchmark: downloaded data, tool environments and raw run output
+benchmark/external/data/
+benchmark/external/envs/
+benchmark/external/runs/

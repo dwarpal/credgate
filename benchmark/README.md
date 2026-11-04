@@ -30,6 +30,20 @@ At the recommended threshold (`min_confidence = 0.5`):
   that pass the Aadhaar checksum by chance cut Aadhaar precision; they are
   reported (at 0.42-0.48) so callers can decide.
 
+## Public datasets and other tools
+
+This corpus is ours, so it favours credgate. [`external/`](external/)
+runs credgate, MaskFlow, Microsoft Presidio and Kavach PII on two public
+Indian PII datasets written by others - the
+[Ylemis India-PII Benchmark](https://huggingface.co/datasets/Pranshurs/ylemis-india-pii-benchmark)
+(10,000 documents) and [IndiaPII-Bench](https://huggingface.co/datasets/maskflow-ai/indiapii-bench)
+(2,000) - and on this corpus's test split, with one set of scoring rules.
+credgate is the most precise of the four and 20-30 times faster than the
+tools that run a language model; it leads on IndiaPII-Bench (F1 95.9) and
+this corpus (98.0), and trails MaskFlow on Ylemis (59.0 against 79.6)
+because Ylemis's names and addresses mostly have no cue. Method, results
+and caveats: [external/README.md](external/README.md).
+
 ### Corpus version 2 (2026-11-01)
 
 The corpus now includes the identifiers added after 0.5.0 - CKYC, ration
@@ -525,10 +539,13 @@ PYTHONPATH=pkg/python/src presidio-env/bin/python benchmark/compare_presidio.py
 
 ## Next improvements
 
-1. Names in running text without a cue (17 misses): a names list checked for
-   coverage across regions, and other Hinglish cues ("bhai", "sahab").
+1. Names and addresses without a cue: 17 names missed in this corpus, and
+   most of the public Ylemis dataset's (credgate finds 1.6% of its names and
+   26% of its addresses; see [external/](external/README.md)). Options: a
+   names list checked for coverage across regions, more cues ("bhai",
+   "sahab"), address shapes without a label.
 2. Voter IDs without context: cues from record structure, beyond the
    column names `scan_pii` already uses.
-3. An independently written evaluation corpus, so improvements are measured
-   on text the rules were not developed against.
-4. More template families; comparisons with other tools once verified.
+3. Vehicle registration numbers, which credgate does not detect yet.
+4. More template families. (Independent datasets and comparisons with other
+   tools: done, in [external/](external/README.md).)
