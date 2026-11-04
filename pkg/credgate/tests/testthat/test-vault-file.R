@@ -6,7 +6,9 @@ test_that("a saved vault opens again and continues numbering", {
   vault <- cg_vault()
   tokenise("PAN ABCPE1234F, mobile 9876543210", vault)
   vault_save(vault, path, passphrase = pass)
-  expect_identical(format(file.mode(path)), "600")
+  if (.Platform$OS.type != "windows") { # Windows has no Unix file modes
+    expect_identical(format(file.mode(path)), "600")
+  }
   expect_identical(readBin(path, "raw", 8L), c(charToRaw("CGVAULT"), as.raw(1L)))
   opened <- vault_open(path, passphrase = pass)
   expect_identical(opened$entries, vault$entries)
