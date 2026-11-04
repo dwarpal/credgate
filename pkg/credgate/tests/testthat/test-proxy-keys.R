@@ -4,7 +4,9 @@ test_that("R manages the proxy keys file as Python does", {
   priya <- proxy_add_user(keys, "priya", days = 30)
   expect_match(priya, "^cgk_[A-Za-z0-9_-]{43}$")
   expect_false(grepl(priya, paste(readLines(keys), collapse = ""), fixed = TRUE))
-  expect_identical(file.mode(keys), as.octmode("600"))
+  if (.Platform$OS.type != "windows") { # Windows has no Unix file modes
+    expect_identical(file.mode(keys), as.octmode("600"))
+  }
   arjun <- proxy_add_user(keys, "arjun", days = 3)
   u <- proxy_users(keys)
   expect_identical(u$status[u$name == "priya"], "active")

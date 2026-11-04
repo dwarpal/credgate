@@ -1,0 +1,44 @@
+# R CMD check --as-cran on Windows. Nix (the main CI) does not run on
+# Windows, and CRAN and R-universe check the package there, so this catches
+# Windows-only failures (file modes, paths, encodings) and CRAN warnings
+# before a change is merged rather than after R-universe builds it.
+name: R on Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ["pkg/credgate/**", "spec/**", ".github/workflows/r-windows.yml"]
+  pull_request:
+    paths: ["pkg/credgate/**", "spec/**", ".github/workflows/r-windows.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  r-check-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_FORCE_SUGGESTS_: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          r-version: release
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          working-directory: pkg/credgate
+          extra-packages: any::rcmdcheck
+          needs: check
+      # Fails on a WARNING as well as an ERROR, as CRAN would.
+      - uses: r-lib/actions/check-r-package@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          working-directory: pkg/credgate
+          args: 'c("--no-manual", "--as-cran")'
+          error-on: '"warning"'
+          upload-snapshots: false
