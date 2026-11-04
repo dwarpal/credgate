@@ -154,6 +154,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     pa = px_sub.add_parser("add-user", help="add a user to a keys file and print their key")
     pa.add_argument("name", help="user name, recorded in the audit log")
     pa.add_argument("--keys", required=True, help="keys file (created if missing)")
+    pa.add_argument(
+        "--days", type=int, default=90, help="how long the key is valid (1-180, default 90)"
+    )
+    pr = px_sub.add_parser("rotate-key", help="give a user a new key (the old one stops working)")
+    pr.add_argument("name")
+    pr.add_argument("--keys", required=True, help="keys file")
+    pr.add_argument(
+        "--days", type=int, default=90, help="how long the new key is valid (1-180, default 90)"
+    )
+    pd = px_sub.add_parser("remove-user", help="remove a user (their key stops working)")
+    pd.add_argument("name")
+    pd.add_argument("--keys", required=True, help="keys file")
+    pl = px_sub.add_parser("list-users", help="list users with their key's dates and status")
+    pl.add_argument("--keys", required=True, help="keys file")
 
     pol = sub.add_parser("policy", help="work with policies")
     pol_sub = pol.add_subparsers(dest="policy_command", required=True)
@@ -216,13 +230,45 @@ def _policy_test(args: argparse.Namespace) -> int:
 
 
 def _proxy(args: argparse.Namespace) -> int:
-    from .proxy import ProxyConfig, add_user, serve
+    from .proxy import ProxyConfig, serve
+    from .proxy_keys import add_user, list_users, remove_user, rotate_key
 
-    if args.proxy_command == "add-user":
-        key = add_user(args.keys, args.name)
-        print(f"Added {args.name} to {args.keys}. Their key (shown only once):", file=sys.stderr)
-        print(key)
-        return 0
+    reload_note = "It takes effect when the proxy reloads (SIGHUP, or within --watch)."
+    try:
+        if args.proxy_command == "add-user":
+            key = add_user(args.keys, args.name, days=args.days)
+            print(
+                f"Added {args.name} to {args.keys}, valid for {args.days} days. "
+                f"{reload_note} Their key (shown only once):",
+                file=sys.stderr,
+            )
+            print(key)
+            return 0
+        if args.proxy_command == "rotate-key":
+            key = rotate_key(args.keys, args.name, days=args.days)
+            print(
+                f"New key for {args.name}, valid for {args.days} days; the old one stops "
+                f"working. {reload_note} The new key (shown only once):",
+                file=sys.stderr,
+            )
+            print(key)
+            return 0
+        if args.proxy_command == "remove-user":
+            remove_user(args.keys, args.name)
+            print(f"Removed {args.name} from {args.keys}. {reload_note}", file=sys.stderr)
+            return 0
+        if args.proxy_command == "list-users":
+            rows = list_users(args.keys)
+            print(f"{'user':<24} {'created':<21} {'expires':<21} status")
+            for r in rows:
+                print(
+                    f"{r['name']:<24} {r['created'] or '-':<21} {r['expires'] or '-':<21} "
+                    f"{r['status']}"
+                )
+            return 0
+    except (ValueError, OSError) as e:
+        print(f"credgate proxy: {e}", file=sys.stderr)
+        return 2
     try:
         config = ProxyConfig(
             policy=args.policy,

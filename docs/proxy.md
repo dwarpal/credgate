@@ -77,6 +77,36 @@ The keys file holds only hashes of the keys. Use TLS (`--certfile`,
 `--keyfile`) or put the proxy behind the organisation's TLS-terminating
 reverse proxy.
 
+### Managing users
+
+Each person gets one key, made with `add-user` and shown **once**: hand it
+to them over a channel you trust. They put it where their tool takes an API
+key (for Claude Code `ANTHROPIC_API_KEY`, for the OpenAI SDK and similar
+tools `api_key`), with the tool's base URL pointed at the proxy. They never
+see the endpoints' own keys, which stay on the server
+(`CREDGATE_UPSTREAM_KEY_<NAME>`).
+
+```sh
+credgate proxy add-user    priya --keys keys.json --days 90   # new user; prints the key once
+credgate proxy rotate-key  priya --keys keys.json             # new key; the old one stops working
+credgate proxy remove-user priya --keys keys.json             # the key stops working
+credgate proxy list-users        --keys keys.json             # names, dates and status - never keys
+```
+
+- **Keys expire.** A key is valid for 1 to 180 days (`--days`, default 90).
+  An expired key is refused with a message saying when it expired;
+  `list-users` shows keys that expire within 7 days as "expires soon", and
+  `rotate-key` gives the person a new one.
+- **Changes reach a running proxy at its next reload** - within the
+  interval with `--watch`, or on SIGHUP (`systemctl reload`). No restart,
+  no dropped requests; see [Rolling out a new revision](#rolling-out-a-new-revision).
+- **Only hashes are stored.** `keys.json` holds the SHA-256 of each key
+  and its dates, and is readable by its owner only; someone who reads it
+  cannot use the keys. The last user cannot be removed.
+- The same is available from Python: `credgate.proxy.add_user`,
+  `rotate_key`, `remove_user` and `list_users`. The file's format is in the
+  [specification](spec.md#proxy-keys-file-credgate_proxy_keys).
+
 ## Choose the server
 
 The proxy runs on one of two HTTP servers, with the same code for

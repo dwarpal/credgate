@@ -425,3 +425,32 @@ def test_invalid_policy_tests(case):
     pol = credgate.Policy.from_dict(POLICY_TESTS_SPEC["policy"])
     with pytest.raises(ValueError, match=r"(?i)" + __import__("re").escape(case["error"])):
         credgate.run_policy_tests(pol, case["tests"])
+
+
+PROXY_KEYS_SPEC = conformance("proxy_keys.yaml")
+
+
+def test_proxy_key_hashes():
+    from credgate.proxy_keys import hash_key
+
+    for case in PROXY_KEYS_SPEC["hashes"]:
+        assert hash_key(case["key"]) == case["hash"]
+
+
+@pytest.mark.parametrize(
+    "case", PROXY_KEYS_SPEC["files"], ids=[c["id"] for c in PROXY_KEYS_SPEC["files"]]
+)
+def test_proxy_keys_file(case, tmp_path):
+    import datetime as dt
+    import json
+
+    from credgate.proxy_keys import list_users, read_keys
+
+    path = tmp_path / "keys.json"
+    path.write_text(json.dumps(case["file"]))
+    if case.get("invalid"):
+        with pytest.raises(ValueError, match=r"keys file|sha256|UTC time"):
+            read_keys(path)
+        return
+    now = dt.datetime.strptime(case["now"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.UTC)
+    assert {r["name"]: r["status"] for r in list_users(path, now=now)} == case["users"]

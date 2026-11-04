@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Managing proxy users**: `credgate proxy rotate-key`, `remove-user` and
+  `list-users` join `add-user` (and `rotate_key`, `remove_user`,
+  `list_users` in Python). **Keys now expire**: valid for 1 to 180 days
+  (`--days`, default 90); the proxy refuses an expired key with a message
+  saying when it expired, and `list-users` shows keys expiring within 7
+  days. The keys file records each key's creation and expiry; files from
+  earlier versions still load, as keys without expiry. The last user cannot
+  be removed. The file format is in the spec, with conformance cases.
+
 ## 0.10.0 (2026-11-04)
 
 Better detection of Indian addresses, voter IDs and phone numbers, found

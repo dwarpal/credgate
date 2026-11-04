@@ -79,6 +79,14 @@ from typing import Any
 
 from .audit import AuditLog
 from .policy import Policy
+from .proxy_keys import KeyEntry, hash_key
+
+# Public as credgate.proxy.add_user (and the other user commands) since 0.5.
+from .proxy_keys import add_user as add_user
+from .proxy_keys import list_users as list_users
+from .proxy_keys import read_keys as _read_keys
+from .proxy_keys import remove_user as remove_user
+from .proxy_keys import rotate_key as rotate_key
 from .tokenise import Vault, restore
 
 MAX_BODY = 20 * 1024 * 1024
@@ -87,7 +95,6 @@ MAX_ANSWER = 50 * 1024 * 1024
 # process: threads competing for it are slower in total than taking turns.
 # Waiting for endpoints still overlaps; more cores need more workers.
 _CPU = threading.Lock()
-_KEY_PREFIX = "cgk_"
 
 
 @dataclass
@@ -153,7 +160,7 @@ class ProxyConfig:
     concurrency: int = 256
     watch: float | None = None
     require_tests: bool = False
-    _users: dict[str, str] = field(default_factory=dict, init=False, repr=False)
+    _users: dict[str, KeyEntry] = field(default_factory=dict, init=False, repr=False)
     _policy_path: str | None = field(default=None, init=False, repr=False)
     _keys_digest: str = field(default="", init=False, repr=False)
 
@@ -541,36 +548,6 @@ class _Server(ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
-def add_user(keys: str | os.PathLike[str], name: str) -> str:
-    """Add a user to a keys file (created if missing) and return their new
-    API key. Only a hash of the key is stored; the key is shown once."""
-    if not re.fullmatch(r"[A-Za-z0-9._@-]{1,100}", name):
-        raise ValueError("User names may contain letters, digits, '.', '_', '@' and '-'.")
-    path = Path(keys)
-    users = _read_keys(path) if path.exists() else {}
-    if name in users:
-        raise ValueError(f"User {name!r} already exists in {path}.")
-    key = _KEY_PREFIX + secrets.token_urlsafe(32)
-    users[name] = "sha256:" + hashlib.sha256(key.encode()).hexdigest()
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump({"credgate_proxy_keys": 1, "users": users}, f, indent=2, sort_keys=True)
-        f.write("\n")
-    os.replace(tmp, path)
-    return key
-
-
-def _read_keys(path: str | os.PathLike[str]) -> dict[str, str]:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or data.get("credgate_proxy_keys") != 1:
-        raise ValueError(f"{path} is not a credgate proxy keys file.")
-    users = data.get("users", {})
-    if not all(isinstance(v, str) and v.startswith("sha256:") for v in users.values()):
-        raise ValueError(f"{path}: every user needs a `sha256:` key hash.")
-    return dict(users)
-
-
 def _is_loopback(host: str) -> bool:
     if host == "localhost":
         return True
@@ -717,9 +694,16 @@ class _Exchange:
         header = self.headers.get("Authorization", "")
         key = header[7:].strip() if header.lower().startswith("bearer ") else ""
         key = key or self.headers.get("x-api-key", "").strip()
-        digest = "sha256:" + hashlib.sha256(key.encode()).hexdigest()
-        for name, stored in users.items():
-            if hmac.compare_digest(digest, stored):
+        digest = hash_key(key)
+        for name, entry in users.items():
+            if hmac.compare_digest(digest, entry.hash):
+                if entry.expired():
+                    raise _ProxyError(
+                        401,
+                        "key_expired",
+                        f"This credgate proxy key expired on {entry.expires}; "
+                        "ask for a new one (credgate proxy rotate-key).",
+                    )
                 return name
         raise _ProxyError(401, "unauthorized", "A valid credgate proxy key is required.")
 
