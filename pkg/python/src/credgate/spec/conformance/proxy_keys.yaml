@@ -1,0 +1,46 @@
+# Proxy keys file conformance cases (spec/README.md, "Proxy keys file").
+#
+# hashes:  a key and the hash stored for it.
+# files:   a keys file, the time to judge it at (`now`), and either the
+#          users it holds with each one's status, or `invalid: true`.
+#
+# All keys and names are synthetic.
+
+spec_version: 1
+
+hashes:
+  - key: cgk_conformance-example-key-0000000000000000000000
+    hash: sha256:21e569cd66ce7c8b11e00076ec0bfcf485af55a9332877db3c7d742f473f2f01
+
+files:
+  - id: current-format
+    now: '2026-11-04T10:00:00Z'
+    file:
+      credgate_proxy_keys: 1
+      users:
+        priya: {hash: 'sha256:aa', created: '2026-11-01T00:00:00Z', expires: '2027-01-30T00:00:00Z'}
+        arjun: {hash: 'sha256:bb', created: '2026-10-01T00:00:00Z', expires: '2026-11-08T00:00:00Z'}
+        meera: {hash: 'sha256:cc', created: '2026-08-01T00:00:00Z', expires: '2026-11-04T10:00:00Z'}
+    users:
+      priya: active
+      arjun: expires soon
+      meera: expired          # expiring exactly now is expired
+  - id: bare-hash-from-earlier-files
+    now: '2026-11-04T10:00:00Z'
+    file:
+      credgate_proxy_keys: 1
+      users:
+        old: 'sha256:dd'
+    users:
+      old: no expiry
+  - id: no-expiry-object
+    now: '2026-11-04T10:00:00Z'
+    file:
+      credgate_proxy_keys: 1
+      users:
+        service: {hash: 'sha256:ee'}
+    users:
+      service: no expiry
+  - {id: wrong-kind, now: '2026-11-04T10:00:00Z', file: {credgate_proxy_keys: 2, users: {}}, invalid: true}
+  - {id: not-sha256, now: '2026-11-04T10:00:00Z', file: {credgate_proxy_keys: 1, users: {x: {hash: 'md5:aa'}}}, invalid: true}
+  - {id: date-not-utc-form, now: '2026-11-04T10:00:00Z', file: {credgate_proxy_keys: 1, users: {x: {hash: 'sha256:aa', expires: '2027-01-30'}}}, invalid: true}

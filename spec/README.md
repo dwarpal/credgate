@@ -782,6 +782,52 @@ first remaining record must have `seq = last_seq + 1` and `prev = head`.
 Conformance cases are in `conformance/audit.yaml`, with logs written by each
 implementation in `conformance/audit/`.
 
+## Proxy keys file (`credgate_proxy_keys`)
+
+Who may use a shared proxy. One JSON file, read by the proxy and written by
+the tools that manage users (the command line now; the editor later), so
+every implementation reads and writes it the same way:
+
+```json
+{
+  "credgate_proxy_keys": 1,
+  "users": {
+    "priya": {
+      "hash": "sha256:7b7e0e73f318...",
+      "created": "2026-11-04T10:00:00Z",
+      "expires": "2027-02-02T10:00:00Z"
+    }
+  }
+}
+```
+
+- **Names**: 1 to 100 of letters, digits, `.`, `_`, `@` and `-`; recorded
+  as the actor in the audit log.
+- **Keys** are `cgk_` followed by 43 URL-safe random characters (32 random
+  bytes), shown once when made and never stored. `hash` is `sha256:` and the
+  lower-case hex SHA-256 of the key's UTF-8 bytes; a request's key is hashed
+  and compared with every user's hash.
+- **Dates** are UTC, `YYYY-MM-DDTHH:MM:SSZ`. A key is **expired** when
+  `expires` is at or before now; the proxy refuses it (HTTP 401,
+  `key_expired`). `created` and `expires` are optional: a key without
+  `expires` does not expire.
+- **Earlier files** gave each user a bare hash string instead of an object;
+  they load as keys without dates. Writing a file writes objects.
+- **Status** (for listings; never the key or its hash): `expired`,
+  `expires soon` (within 7 days), `active`, or `no expiry`.
+- **Making keys**: a key is valid for 1 to 180 days (default 90). Adding a
+  name that exists is an error; rotating replaces the user's hash and dates;
+  the last user cannot be removed (a shared proxy with no users refuses
+  everyone).
+- **Writing**: the whole file at once (write a temporary file, then rename),
+  readable and writable by its owner only, so a proxy watching the file
+  sees the old file or the new one, never part of one.
+- A file that is not valid JSON, has another `credgate_proxy_keys` value, a
+  user without a `sha256:` hash or a date in another form is not a keys
+  file: it is refused, and a running proxy keeps the users it has.
+
+Conformance cases are in `conformance/proxy_keys.yaml`.
+
 ## Evaluation (`evaluate`)
 
 Measures detection against labelled text.
