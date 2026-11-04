@@ -4,3 +4,8 @@ authors:
     description: Data scientist; author of credgate
     avatar: assets/authors/bharat.svg
     url: https://github.com/bharatsikka
+  aishwarya:
+    name: Aishwarya Bais
+    description: Contributor to credgate
+    avatar: assets/authors/aishwarya.svg
+    url: https://github.com/aishwaryabais
