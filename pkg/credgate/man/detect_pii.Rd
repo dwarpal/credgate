@@ -19,7 +19,7 @@ detect_pii(
 detectors (see \code{\link[=cg_detectors]{cg_detectors()}}).}
 
 \item{context}{Optional extra context per element of \code{text} (recycled),
-treated as if it appeared next to every match. \code{scan_pii()} (planned) passes column
+treated as if it appeared next to every match. \code{scan_pii()} passes column
 names here, so a column called \code{voter_id} supports Voter ID matches.}
 
 \item{min_confidence}{Drop matches scoring below this value.}

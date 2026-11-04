@@ -9,7 +9,7 @@
 #' @param detectors Detector ids to run; `NULL` runs all registered
 #'   detectors (see [cg_detectors()]).
 #' @param context Optional extra context per element of `text` (recycled),
-#'   treated as if it appeared next to every match. `scan_pii()` (planned) passes column
+#'   treated as if it appeared next to every match. `scan_pii()` passes column
 #'   names here, so a column called `voter_id` supports Voter ID matches.
 #' @param min_confidence Drop matches scoring below this value.
 #' @param window Number of characters either side of a match searched for
@@ -374,7 +374,9 @@ print.cg_spans <- function(x, ..., reveal = FALSE) {
 # Replace letters and digits with "X", keeping the last 4 characters (2 for
 # short values) - the same convention as UIDAI's masked Aadhaar. Values of the
 # "personal" class (names, addresses) keep nothing: their end identifies a
-# person, unlike the last digits of an ID number.
+# person, unlike the last digits of an ID number. Nor do values of the
+# "sensitive_auth" class (card verification codes): they are so short that
+# the last 2 digits would show most of the code.
 # The option `credgate.mask` (or the environment variable `CREDGATE_MASK`)
 # set to "full" keeps nothing for any value; see ?credgate-package.
 full_mask_classes <- c("personal", "sensitive_auth")
