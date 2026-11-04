@@ -81,6 +81,14 @@ cases:
     text: 'मतदाता ABC1234567'
     expect:
       - {type: voter_epic, value: ABC1234567, confidence: 0.97}
+  - id: voter-hindi-word
+    text: 'वोटर आईडी QMF1202883 जमा'
+    expect:
+      - {type: voter_epic, value: QMF1202883, confidence: 0.97}
+  - id: voter-bengali-word
+    text: 'ভোটার আইডি MDU6387510 জমা'
+    expect:
+      - {type: voter_epic, value: MDU6387510, confidence: 0.97}
   - id: voter-context-argument
     text: 'JFK5504535'
     context: voter_id
@@ -159,6 +167,17 @@ cases:
     text: 'account 9876543210'
     expect:
       - {type: bank_account, value: '9876543210', confidence: 0.97}
+
+  - id: bank-account-after-ifsc
+    text: 'IFSC SBIN0001234, 123456789012'
+    expect:
+      - {type: ifsc, value: SBIN0001234}
+      - {type: bank_account, value: '123456789012', confidence: 0.97}
+  - id: contact-number-after-ifsc-is-a-mobile
+    text: "IFSC Code: SBIN0001234\nContact Number: 08386591503"
+    expect:
+      - {type: ifsc, value: SBIN0001234}
+      - {type: mobile_in, value: '08386591503', confidence: 0.97}
 
   - id: csv-fields-stay-separate
     text: 'ABCPE1234F,9876543210,8826781145'

@@ -53,7 +53,9 @@ tables:
 
 fragments:
   aadhaar_context: 'aadhaa?r|\badhar\b|\buid(?:ai)?\b|आधार'
-  phone_context: '\bmob|\bphone|\bcell\b|whats ?app|\btel\b|\bph\b|मोबाइल|फ़ोन|फोन'
+  # Also the negative context of bank account numbers: "Contact Number:"
+  # before a number marks it as a phone even when an IFSC is nearby.
+  phone_context: '\bmob|\bphone|\bcell\b|whats ?app|\btel\b|\bph\b|\bcontact|मोबाइल|फ़ोन|फोन|संपर्क'
   ifsc_code: '\b[A-Z]{4}0[A-Z0-9]{6}\b'
   id_negative_context: '\border\b|\binvoice\b|\btxn\b|\btransaction\b|\bref(erence)?\b|\bticket\b|\btracking\b|\bawb\b|\butr\b'
   # Money context: a 10-digit amount is not a phone number.
@@ -174,7 +176,9 @@ detectors:
     base: 0.85
     # The format alone (3 letters, 7 digits) could be a product code.
     base_without_context: 0.3
-    context: '\bvoter|\bepic\b|election|electoral|मतदाता'
+    # "Voter" and "elector" in Hindi, Marathi, Bengali, Tamil, Telugu,
+    # Gujarati, Kannada and Punjabi, as Indian-language text writes them.
+    context: '\bvoter|\bepic\b|election|electoral|मतदाता|मतदार|वोटर|ভোটার|வாக்காளர்|ఓటరు|ఓటర్|મતદાર|ಮತದಾರ|ਵੋਟਰ'
 
   - id: passport
     class: identity_strong
@@ -344,7 +348,7 @@ detectors:
       default: 0.65
       rules:
         - {match: '^(?:\+91|0|91[ -])', value: 0.85}
-    context: '{{phone_context}}|\bcontact|संपर्क'
+    context: '{{phone_context}}'
     negative: '{{money_context}}|{{id_negative_context}}'
     canonical: last10_digits
 
