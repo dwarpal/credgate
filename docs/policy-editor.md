@@ -223,8 +223,10 @@ credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml",
                         keys = "keys.json", audit = "audit.jsonl")
 ```
 
-On a server, the signed-in user is used. Without a users file, everyone is
-an admin, as before.
+On a server, the signed-in user is used: with single sign-on in front, the
+name comes from the sign-in proxy's header (`trust_header`); see
+[Deployment](deployment.md). Without a users file, everyone is an admin, as
+before.
 
 ## Running it for a team
 

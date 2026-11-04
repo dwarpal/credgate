@@ -33,20 +33,29 @@
 #'   their own recent requests (endpoint, time, allowed or blocked and why;
 #'   never content), limited by the users file's `activity_days` and
 #'   `activity_max` (7 days and 100 requests unless changed).
+#' @param trust_header With single sign-on in front of the app (OAuth2
+#'   Proxy, Keycloak, a web server's SSO module), the request header that
+#'   carries the signed-in user, e.g. `"X-Auth-Request-User"` or
+#'   `"X-Forwarded-User"`. Only set it when the app can be reached through
+#'   that sign-in proxy alone (listening on `127.0.0.1`): anyone who reaches
+#'   the app directly could send the header themselves.
 #' @return A Shiny app; printing it (or [shiny::runApp()]) runs it.
 #' @export
 #' @examples
 #' if (interactive()) {
 #'   policy_editor(file.path(tempdir(), "bank.yaml"))
 #' }
-policy_editor <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL) {
+policy_editor <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL,
+                          trust_header = NULL) {
   check_installed("shiny")
   check_installed("bslib")
   stopifnot(
     rlang::is_string(path), is.null(users) || rlang::is_string(users),
-    is.null(keys) || rlang::is_string(keys), is.null(audit) || rlang::is_string(audit)
+    is.null(keys) || rlang::is_string(keys), is.null(audit) || rlang::is_string(audit),
+    is.null(trust_header) || rlang::is_string(trust_header)
   )
-  shiny::shinyApp(policy_editor_ui(path), policy_editor_server(path, user, users, keys, audit), onStart = function() {
+  server <- policy_editor_server(path, user, users, keys, audit, trust_header)
+  shiny::shinyApp(policy_editor_ui(path), server, onStart = function() {
     shiny::onStop(writable_temp_assets)
   })
 }
@@ -66,6 +75,20 @@ editor_role <- function(users, name) {
   }
   u <- tryCatch(cg_users(users), error = function(e) NULL)  # an invalid file lets no one in
   if (is.null(u)) NULL else user_role(u, name)
+}
+
+# The signed-in user from a sign-in proxy's header (NULL if not set, or not
+# a valid name). Shiny gives headers as HTTP_ variables of the request.
+header_user <- function(req, header) {
+  if (is.null(header) || is.null(req)) {
+    return(NULL)
+  }
+  v <- req[[paste0("HTTP_", toupper(gsub("-", "_", header)))]]
+  if (!rlang::is_string(v)) {
+    return(NULL)
+  }
+  v <- trimws(v)
+  if (grepl("^[A-Za-z0-9._@-]{1,100}$", v)) v else NULL
 }
 
 policy_template <- function() {
@@ -337,11 +360,12 @@ policy_editor_ui <- function(path) {
 }
 
 
-policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL) {
+policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL,
+                                 trust_header = NULL) {
   function(input, output, session) {
     # Who is signed in, and what they may do. Changes to the policy, its tests
     # and detector files are refused here on the server, not only hidden.
-    signed_in <- user %||% session$user
+    signed_in <- user %||% session$user %||% header_user(session$request, trust_header)
     role <- editor_role(users, signed_in)
     if (is.null(role)) {
       shiny::removeUI(".bslib-sidebar-layout")

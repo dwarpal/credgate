@@ -4,7 +4,14 @@
 \alias{policy_editor}
 \title{Policy editor for InfoSec and compliance}
 \usage{
-policy_editor(path, user = NULL, users = NULL, keys = NULL, audit = NULL)
+policy_editor(
+  path,
+  user = NULL,
+  users = NULL,
+  keys = NULL,
+  audit = NULL,
+  trust_header = NULL
+)
 }
 \arguments{
 \item{path}{The policy file (YAML). A new file starts from the bank
@@ -29,6 +36,13 @@ users file's \code{key_max_days}), and admins manage everyone's under
 their own recent requests (endpoint, time, allowed or blocked and why;
 never content), limited by the users file's \code{activity_days} and
 \code{activity_max} (7 days and 100 requests unless changed).}
+
+\item{trust_header}{With single sign-on in front of the app (OAuth2
+Proxy, Keycloak, a web server's SSO module), the request header that
+carries the signed-in user, e.g. \code{"X-Auth-Request-User"} or
+\code{"X-Forwarded-User"}. Only set it when the app can be reached through
+that sign-in proxy alone (listening on \verb{127.0.0.1}): anyone who reaches
+the app directly could send the header themselves.}
 }
 \value{
 A Shiny app; printing it (or \code{\link[shiny:runApp]{shiny::runApp()}}) runs it.

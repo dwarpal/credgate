@@ -1,5 +1,11 @@
 # credgate (development version)
 
+* Single sign-on: `policy_editor(..., trust_header = "X-Auth-Request-User")`
+  takes the signed-in user from the header a sign-in proxy (OAuth2 Proxy,
+  Keycloak, a web server's SSO module) sets, for an app reachable only
+  through it. A deployment guide (one server or several, sign-in, roles
+  from AD/LDAP, housekeeping) is on the documentation site.
+
 * **My activity** in the editor (`policy_editor(..., audit = "audit.jsonl")`):
   everyone sees their own recent proxy requests - endpoint, allowed or
   blocked and why, identifiers by action, never content - for the last 7

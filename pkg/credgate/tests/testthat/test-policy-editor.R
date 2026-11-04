@@ -386,3 +386,12 @@ test_that("my activity shows only my own recent requests, within the limits", {
     expect_false(grepl("ABCPE1234F|9876543210", html))             # never content
   })
 })
+
+test_that("the signed-in user comes from the sign-in proxy's header only when trusted", {
+  req <- list(HTTP_X_AUTH_REQUEST_USER = " priya@bank.example ", HTTP_X_FORWARDED_USER = "x y")
+  expect_identical(credgate:::header_user(req, "X-Auth-Request-User"), "priya@bank.example")
+  expect_null(credgate:::header_user(req, NULL))                    # not trusted unless named
+  expect_null(credgate:::header_user(req, "X-Forwarded-User"))      # not a valid name
+  expect_null(credgate:::header_user(req, "X-Remote-User"))         # not sent
+  expect_null(credgate:::header_user(NULL, "X-Auth-Request-User"))
+})
