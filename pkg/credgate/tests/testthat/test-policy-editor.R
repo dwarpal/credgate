@@ -250,3 +250,148 @@ test_that("the workbench keeps one-item lists as lists", {
   expect_match(out, "patterns:\n      - X[0-9]{3}", fixed = TRUE)
   expect_match(out, "match:\n        - X123", fixed = TRUE)
 })
+
+test_that("roles decide what the editor lets people change", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  users <- withr::local_tempfile(fileext = ".yaml")
+  yaml::write_yaml(list(
+    kind = "credgate-users", version = 1L,
+    users = list(
+      priya = list(role = "admin"), meera = list(role = "auditor"),
+      arjun = list(role = "user"), ravi = list(role = "user", active = FALSE)
+    )
+  ), users)
+  before <- readLines(path)
+
+  for (who in c("arjun", "meera")) {
+    shiny::testServer(credgate:::policy_editor_server(path, user = who, users = users), {
+      expect_false(can_edit)
+      session$setInputs(policy_id = "bank-default", default_action = "redact")  # starting values
+      session$setInputs(policy_id = "changed", default_action = "allow")
+      expect_identical(policy()$id, "bank-default")        # the draft does not change
+      session$setInputs(user = who, note = "x", save = 1)
+      session$setInputs(try_endpoint = "claude", try_text = "PAN ABCPE1234F")
+      session$setInputs(test_id = "t", test_add = 1)
+      expect_length(tests(), 0)                              # no test saved
+      session$setInputs(det_file = "", det_name = "d.yaml", det_yaml = det_template, det_save = 1)
+    })
+  }
+  expect_identical(readLines(path), before)
+  expect_false(file.exists(credgate:::policy_tests_path(path)))
+  expect_false(file.exists(file.path(dirname(path), "d.yaml")))
+
+  # a user tries the saved policy, and sees when it changed but not who or why
+  policy_write(yaml::read_yaml(path), path, user = "priya", note = "secret reason")
+  shiny::testServer(credgate:::policy_editor_server(path, user = "arjun", users = users), {
+    session$setInputs(try_endpoint = "claude", try_text = "PAN ABCPE1234F")
+    expect_identical(decision()$matches$type, "pan")
+    html <- as.character(output$history$html)
+    expect_match(html, "Revision 2")
+    expect_false(grepl("secret reason|priya", html))
+  })
+
+  # an admin changes and saves, as without a users file
+  shiny::testServer(credgate:::policy_editor_server(path, user = "priya", users = users), {
+    expect_true(can_edit)
+    session$setInputs(default_action = "redact")  # the starting value
+    session$setInputs(default_action = "block")
+    expect_identical(policy()$default_action, "block")
+  })
+
+  # someone not in the file, inactive, or with an invalid file: no access
+  for (who in list("ravi", "nobody", NULL)) {
+    shiny::testServer(credgate:::policy_editor_server(path, user = who, users = users), {
+      expect_false(exists("can_edit", inherits = FALSE))
+    })
+  }
+  writeLines("kind: something-else", users)
+  shiny::testServer(credgate:::policy_editor_server(path, user = "priya", users = users), {
+    expect_false(exists("can_edit", inherits = FALSE))
+  })
+})
+
+test_that("everyone manages their own key, admins everyone's, and the access log records it", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  dir <- dirname(path)
+  users <- file.path(dir, "users.yaml")
+  keys <- file.path(dir, "keys.json")
+  yaml::write_yaml(list(
+    kind = "credgate-users", version = 1L, settings = list(key_max_days = 90L),
+    users = list(priya = list(role = "admin"), arjun = list(role = "user"))
+  ), users)
+
+  shiny::testServer(credgate:::policy_editor_server(path, user = "arjun", users = users, keys = keys), {
+    expect_identical(unname(durations()), c(30L, 90L))           # 6 months is above key_max_days
+    session$setInputs(my_days = "180", my_new_key = 1)
+    expect_false(file.exists(keys))                               # refused: over the limit
+    session$setInputs(my_days = "30", my_new_key = 2)
+    expect_identical(proxy_users(keys)$name, "arjun")
+    session$setInputs(user_pick = "priya", user_days = "30", user_new_key = 1)
+    expect_identical(proxy_users(keys)$name, "arjun")             # a user cannot make others' keys
+  })
+  first <- jsonlite::fromJSON(keys)$users$arjun$hash
+
+  shiny::testServer(credgate:::policy_editor_server(path, user = "priya", users = users, keys = keys), {
+    session$setInputs(user_pick = "arjun", user_days = "90", user_new_key = 1)   # rotate arjun's
+    session$setInputs(user_pick = "priya", user_days = "30", user_new_key = 2)   # create priya's
+    session$setInputs(user_pick = "arjun", user_remove_key = 1)
+  })
+  expect_identical(proxy_users(keys)$name, "priya")
+  log <- proxy_access(keys)
+  expect_true(attr(log, "intact"))
+  expect_identical(log$action, c("create", "rotate", "create", "remove"))
+  expect_identical(log$by, c("arjun", "priya", "priya", "priya"))
+  expect_false(any(grepl("cgk_|sha256", readLines(credgate:::proxy_access_path(keys)))))
+  expect_false(identical(first, jsonlite::fromJSON(keys)$users$priya$hash))
+})
+
+test_that("my activity shows only my own recent requests, within the limits", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  dir <- dirname(path)
+  users <- file.path(dir, "users.yaml")
+  yaml::write_yaml(list(
+    kind = "credgate-users", version = 1L, settings = list(activity_days = 7L, activity_max = 2L),
+    users = list(arjun = list(role = "user"), priya = list(role = "admin"))
+  ), users)
+  audit <- file.path(dir, "audit.jsonl")
+  pol <- cg_policy(path)
+  rec <- function(actor, text, when) {
+    audit_record(cg_audit_log(audit, actor = actor, rotate = FALSE), policy_decide(pol, text, "claude"), time = when)
+  }
+  now <- Sys.time()
+  rec("arjun", "PAN ABCPE1234F", now - 20 * 86400)                       # too old
+  rec("arjun", "Card 4111 1111 1111 1111, CVV 123, expiry 08/29", now - 3600)
+  rec("priya", "PAN ABCPE1234F", now - 1800)                             # someone else
+  rec("arjun", "PAN ABCPE1234F", now - 600)
+  rec("arjun", "mobile 9876543210", now - 60)
+
+  a <- credgate:::own_activity(audit, "arjun", days = 7, max = 10)
+  expect_identical(nrow(a), 3L)                                   # not the 20-day-old one, not priya's
+  expect_identical(a$allowed, c(TRUE, TRUE, FALSE))               # newest first
+  expect_match(a$blocked_by[3], "card-with-cvv-and-expiry")
+
+  shiny::testServer(credgate:::policy_editor_server(path, user = "arjun", users = users, audit = audit), {
+    html <- as.character(output$my_activity$html)
+    expect_match(html, "at most 2 requests")
+    expect_identical(lengths(regmatches(html, gregexpr("<tr>", html))), 3L)  # header and 2 rows
+    expect_false(grepl("ABCPE1234F|9876543210", html))             # never content
+  })
+})
+
+test_that("the signed-in user comes from the sign-in proxy's header only when trusted", {
+  req <- list(HTTP_X_AUTH_REQUEST_USER = " priya@bank.example ", HTTP_X_FORWARDED_USER = "x y")
+  expect_identical(credgate:::header_user(req, "X-Auth-Request-User"), "priya@bank.example")
+  expect_null(credgate:::header_user(req, NULL))                    # not trusted unless named
+  expect_null(credgate:::header_user(req, "X-Forwarded-User"))      # not a valid name
+  expect_null(credgate:::header_user(req, "X-Remote-User"))         # not sent
+  expect_null(credgate:::header_user(NULL, "X-Auth-Request-User"))
+})

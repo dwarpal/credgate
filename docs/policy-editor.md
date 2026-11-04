@@ -151,6 +151,83 @@ code: `run_policy_tests("bank-default.yaml")` in R and
 `credgate.run_policy_tests("bank-default.yaml")` in Python, which read the
 same files and give the same results.
 
+## Roles
+
+With a **users file**, the editor shows each person what their role allows,
+and refuses the rest on the server (a hidden button cannot be used either):
+
+| | Admin (InfoSec) | Auditor | User (analyst) |
+|---|:---:|:---:|:---:|
+| Endpoints and rules | change | see | - |
+| Try it | the draft | - | the saved policy |
+| Tests | add, remove, save anyway | see | see |
+| Detectors | try and save | - | try |
+| Changes | everything | everything | when the policy changed (not who or why) |
+| Save a new revision | yes | - | - |
+
+Anyone not in the file, or marked inactive, sees only "No access"; so does
+everyone if the file is not valid.
+
+```yaml
+# users.yaml
+kind: credgate-users
+version: 1
+users:
+  priya: {role: admin}
+  meera: {role: auditor}
+  arjun: {role: user}
+  ravi:  {role: user, active: false}   # a leaver
+```
+
+The file is kept on the server and changed only there, by whoever looks
+after the server (the **super admin**, who has no account in the app):
+
+```sh
+credgate users add priya --role admin --file users.yaml
+credgate users set-role arjun --role auditor --file users.yaml
+credgate users deactivate ravi --file users.yaml
+credgate users list --file users.yaml
+```
+
+Names are the same as in the proxy's keys file, so a person's account and
+their proxy key match. With single sign-on, the file can be generated from
+directory groups (AD, LDAP) by a scheduled export.
+
+### Proxy keys in the editor
+
+Given the proxy's keys file, everyone manages **their own key** under **My
+key**: make one valid for 1, 3 or 6 months (up to the users file's
+`key_max_days`, 90 days unless changed), make a new one (the old one stops
+working), or delete it. The key is shown once, with a copy button; credgate
+keeps only its hash. Admins also manage **everyone's** keys under
+**Users**, which lists each person's role, access and key; auditors see
+the list read-only. Every key made, renewed or removed is recorded in a
+hash-chained **access log** beside the keys file (`keys.access.jsonl`), with
+who did it and until when the key is valid, never the key itself;
+`proxy_access("keys.json")` reads it in R.
+
+### My activity
+
+Given the proxy's audit log (`audit = "audit.jsonl"`), everyone sees **their
+own** recent requests under **My activity**: when, which endpoint, allowed
+or blocked and by which rule, and how many identifiers were redacted,
+tokenised or allowed - never the request's content, which the audit log
+does not hold. It shows the last 7 days and at most 100 requests (the users
+file's `activity_days` and `activity_max`), and reads only the monthly
+audit files that can hold them.
+
+**Trying the roles locally**, without single sign-on, name the person:
+
+```r
+credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml",
+                        keys = "keys.json", audit = "audit.jsonl")
+```
+
+On a server, the signed-in user is used: with single sign-on in front, the
+name comes from the sign-in proxy's header (`trust_header`); see
+[Deployment](deployment.md). Without a users file, everyone is an admin, as
+before.
+
 ## Running it for a team
 
 On Shiny Server or Posit Connect, put this in an `app.R`:

@@ -88,6 +88,7 @@ from .proxy_keys import read_keys as _read_keys
 from .proxy_keys import remove_user as remove_user
 from .proxy_keys import rotate_key as rotate_key
 from .tokenise import Vault, restore
+from .users import Users, read_users
 
 MAX_BODY = 20 * 1024 * 1024
 MAX_ANSWER = 50 * 1024 * 1024
@@ -139,6 +140,9 @@ class ProxyConfig:
             (``<policy>.tests.yaml``), at start and on reload. A tests file
             that exists is always run, and a failing test always refuses the
             policy.
+        users: The app's users file (see :mod:`credgate.users`): a key whose
+            owner is not in it, or is inactive, is refused, so a leaver loses
+            access when they are deactivated. Reloaded like the keys file.
     """
 
     policy: Policy | str | os.PathLike[str]
@@ -160,9 +164,12 @@ class ProxyConfig:
     concurrency: int = 256
     watch: float | None = None
     require_tests: bool = False
+    users: str | os.PathLike[str] | None = None
     _users: dict[str, KeyEntry] = field(default_factory=dict, init=False, repr=False)
     _policy_path: str | None = field(default=None, init=False, repr=False)
     _keys_digest: str = field(default="", init=False, repr=False)
+    _people: Users | None = field(default=None, init=False, repr=False)
+    _people_digest: str = field(default="", init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.policy, Policy):
@@ -181,6 +188,9 @@ class ProxyConfig:
                 raise ValueError(
                     f"No users in {self.keys}; add one with `credgate proxy add-user`."
                 )
+        if self.users is not None:
+            self._people = read_users(self.users)
+            self._people_digest = _digest(self.users)
         if self.audit_retention_years and self.audit_retention_years < 1:
             raise ValueError(
                 "`audit_retention_years` must be at least 1 (or 0 to keep everything)."
@@ -364,6 +374,15 @@ def reload(config: ProxyConfig, log: Callable[[str], Any] | None = None) -> bool
                 changed = True
             except Exception as e:
                 log(f"credgate proxy: keys not reloaded, the current ones stay: {e}")
+        if config.users is not None and _digest(config.users) != config._people_digest:
+            try:
+                config._people = read_users(config.users)
+                config._people_digest = _digest(config.users)
+                active = sum(u.active for u in config._people.users.values())
+                log(f"credgate proxy: users reloaded ({active} active)")
+                changed = True
+            except Exception as e:
+                log(f"credgate proxy: users not reloaded, the current ones stay: {e}")
         if config._policy_path is None:
             return changed
         running: Policy = config.policy  # type: ignore[assignment]
@@ -429,7 +448,8 @@ def _watch(config: ProxyConfig, log: Callable[[str], Any], children: list[int]) 
 
     def stamp() -> list[tuple[str, float, int]]:
         running: Policy = config.policy  # type: ignore[assignment]
-        paths = [p for p, _ in running.sources] + ([str(config.keys)] if config.keys else [])
+        paths = [p for p, _ in running.sources]
+        paths += [str(f) for f in (config.keys, config.users) if f]
         out = []
         for p in paths:
             try:
@@ -591,6 +611,7 @@ class _Exchange:
         # reload does meanwhile.
         self.policy: Policy = config.policy  # type: ignore[assignment]
         self.users = config._users
+        self.people = config._people
         self.command = method
         self.path = path
         self.headers = headers
@@ -703,6 +724,10 @@ class _Exchange:
                         "key_expired",
                         f"This credgate proxy key expired on {entry.expires}; "
                         "ask for a new one (credgate proxy rotate-key).",
+                    )
+                if self.people is not None and self.people.role_of(name) is None:
+                    raise _ProxyError(
+                        401, "access_revoked", f"{name} no longer has access to this proxy."
                     )
                 return name
         raise _ProxyError(401, "unauthorized", "A valid credgate proxy key is required.")

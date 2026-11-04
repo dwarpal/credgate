@@ -103,6 +103,16 @@ credgate proxy list-users        --keys keys.json             # names, dates and
 - **Only hashes are stored.** `keys.json` holds the SHA-256 of each key
   and its dates, and is readable by its owner only; someone who reads it
   cannot use the keys. The last user cannot be removed.
+- **Leavers lose access with the users file.** Start the proxy with the
+  app's users file (`--users users.yaml`, see the [policy
+  editor](policy-editor.md#roles)): a key whose owner is not in it, or is
+  marked inactive (`credgate users deactivate ravi`), is refused with
+  "no longer has access", even before the key expires. The users file
+  reloads with the keys file.
+- **Unused keys expire.** Run `credgate proxy expire-unused --keys
+  keys.json --audit audit.jsonl` daily (cron): keys not used for 60 days
+  (`--days`) - judged from the audit log - are expired; the person can be
+  given a new one. Keys made in that time are left alone.
 - The same is available from Python: `credgate.proxy.add_user`,
   `rotate_key`, `remove_user` and `list_users`. The file's format is in the
   [specification](spec.md#proxy-keys-file-credgate_proxy_keys).

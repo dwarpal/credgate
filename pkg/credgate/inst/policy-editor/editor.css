@@ -177,3 +177,8 @@ body, .bslib-page-sidebar, .bslib-sidebar-layout > .main { background: var(--cg-
 .cg-sample { border: 1px solid var(--cg-line); border-radius: 8px; padding: .5rem .7rem; margin-bottom: .6rem; font-size: .88rem; background: var(--cg-surface); }
 .cg-sample .line { padding: .15rem 0; }
 .cg-sample mark { background: var(--cg-brand-soft); color: inherit; border-bottom: 2px solid var(--cg-brand); padding: 0 .1rem; border-radius: 2px; }
+
+/* A new proxy key, with its copy button; the signed-in name always shows. */
+.cg-key-row { display: flex; align-items: center; gap: .6rem; margin: .6rem 0; }
+.cg-key { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; padding: .55rem .7rem; border: 1px solid var(--cg-line); border-radius: 8px; background: var(--cg-soft); word-break: break-all; user-select: all; }
+.cg-header-status .cg-signed .cg-badge { display: inline-block !important; }

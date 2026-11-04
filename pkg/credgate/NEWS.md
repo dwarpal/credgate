@@ -1,5 +1,35 @@
 # credgate (development version)
 
+* Single sign-on: `policy_editor(..., trust_header = "X-Auth-Request-User")`
+  takes the signed-in user from the header a sign-in proxy (OAuth2 Proxy,
+  Keycloak, a web server's SSO module) sets, for an app reachable only
+  through it. A deployment guide (one server or several, sign-in, roles
+  from AD/LDAP, housekeeping) is on the documentation site.
+
+* **My activity** in the editor (`policy_editor(..., audit = "audit.jsonl")`):
+  everyone sees their own recent proxy requests - endpoint, allowed or
+  blocked and why, identifiers by action, never content - for the last 7
+  days and at most 100 requests (the users file's `activity_days` and
+  `activity_max`).
+
+* Proxy keys from R and in the editor: `proxy_add_user()`,
+  `proxy_rotate_key()`, `proxy_remove_user()` and `proxy_users()` manage the
+  proxy's keys file as the Python package does (same format and hashes).
+  `policy_editor(..., keys = "keys.json")` adds **My key** (each person
+  makes, renews or deletes their own key, valid 1, 3 or 6 months up to the
+  users file's limit; shown once) and, for admins, **Users** (everyone's
+  role, access and key). Each change is recorded in a hash-chained access
+  log, read with `proxy_access()`.
+
+* Roles in the policy editor: `policy_editor(path, users = "users.yaml")`
+  reads a users file (`cg_users()`) and shows each person what their role
+  allows - admins change the policy, tests and detectors; auditors see
+  everything and change nothing; users try the saved policy, see test
+  results and try detectors, and see when the policy changed but not who
+  or why. Changes are refused on the server, not only hidden. Anyone not
+  in the file, or inactive, has no access. Without a users file everyone
+  is an admin, as before.
+
 * Addresses without a label are found when they have the usual shape: a
   house number, the locality, a known Indian city or district, and a PIN
   code. The city list comes from India Post's All India Pincode Directory

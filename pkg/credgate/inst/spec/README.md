@@ -828,6 +828,42 @@ every implementation reads and writes it the same way:
 
 Conformance cases are in `conformance/proxy_keys.yaml`.
 
+## Users file (`credgate-users`)
+
+Who may use the credgate app, in which role, and the limits admins set. It
+is kept on the server and changed only from the server's command line
+(`credgate users ...`): whoever can do that is the **super admin**, who
+manages admins and auditors and has no account in the app. With single
+sign-on, the file can instead be generated from directory groups (AD,
+LDAP) by a scheduled export.
+
+```yaml
+kind: credgate-users
+version: 1
+settings:                 # optional; these are the defaults
+  key_max_days: 90        # the longest proxy key a user may make, 30-180
+  activity_days: 7        # a user's own activity: at most this many days
+  activity_max: 100       # ... and this many requests
+users:
+  priya: {role: admin}
+  meera: {role: auditor}
+  arjun: {role: user}
+  ravi:  {role: user, active: false}
+```
+
+- **Names** follow the proxy keys file's rule, and are the same names: a
+  user's proxy key and their account share it.
+- **Roles**: `admin` (InfoSec: the policy, its tests and detectors, users'
+  keys), `auditor` (sees everything, changes nothing) and `user` (tries the
+  saved policy, sees test results, tries detectors, manages their own key).
+- **`active`** (default `true`): an inactive user cannot use the app, and
+  (once implemented) their proxy key is refused - how leavers lose access.
+- Unknown fields, roles and settings out of range make the file invalid; an
+  app given an invalid file refuses everyone rather than guess.
+- A name that is not in the file, or is inactive, has no access.
+
+Conformance cases are in `conformance/users.yaml`.
+
 ## Evaluation (`evaluate`)
 
 Measures detection against labelled text.

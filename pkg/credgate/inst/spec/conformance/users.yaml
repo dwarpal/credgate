@@ -1,0 +1,36 @@
+# Users file conformance cases (spec/README.md, "Users file").
+#
+# Each case is a users file and, if valid, the role of some names (null:
+# no access) and the settings in effect; or `invalid: true`.
+#
+# All names are synthetic.
+
+spec_version: 1
+
+cases:
+  - id: roles-and-defaults
+    file:
+      kind: credgate-users
+      version: 1
+      users:
+        priya: {role: admin}
+        meera: {role: auditor}
+        arjun: {role: user}
+        ravi: {role: user, active: false}
+    roles: {priya: admin, meera: auditor, arjun: user, ravi: null, nobody: null}
+    settings: {key_max_days: 90, activity_days: 7, activity_max: 100}
+  - id: settings-given
+    file:
+      kind: credgate-users
+      version: 1
+      settings: {key_max_days: 30, activity_days: 3, activity_max: 50}
+      users:
+        priya: {role: admin, active: true}
+    roles: {priya: admin}
+    settings: {key_max_days: 30, activity_days: 3, activity_max: 50}
+  - {id: wrong-kind, file: {kind: credgate-keys, version: 1, users: {}}, invalid: true}
+  - {id: unknown-role, file: {kind: credgate-users, version: 1, users: {x: {role: owner}}}, invalid: true}
+  - {id: bad-name, file: {kind: credgate-users, version: 1, users: {'a b': {role: user}}}, invalid: true}
+  - {id: unknown-field, file: {kind: credgate-users, version: 1, users: {x: {role: user, email: x@example.org}}}, invalid: true}
+  - {id: key-days-out-of-range, file: {kind: credgate-users, version: 1, settings: {key_max_days: 365}, users: {x: {role: user}}}, invalid: true}
+  - {id: active-not-boolean, file: {kind: credgate-users, version: 1, users: {x: {role: user, active: 'no'}}}, invalid: true}

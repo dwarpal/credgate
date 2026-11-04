@@ -41,6 +41,7 @@ nav:
   - Guides:
       - Proxy: proxy.md
       - Policy editor: policy-editor.md
+      - Deployment: deployment.md
       - Custom detectors: custom-detectors.md
       - Large data: large-data.md
       - Threat model: threat-model.md

@@ -168,3 +168,66 @@ def test_the_commands(tmp_path):
     assert r.returncode == 2
     assert "last user" in r.stderr
     assert cli("add-user", "--keys", str(keys), "x", "--days", "365").returncode == 2
+
+
+def test_leavers_lose_access_through_the_users_file(tmp_path, policy):
+    from credgate.users import set_user
+
+    keys = tmp_path / "keys.json"
+    users = tmp_path / "users.yaml"
+    priya = add_user(keys, "priya")
+    arjun = add_user(keys, "arjun")
+    stray = add_user(keys, "stray")  # has a key, but no account
+    set_user(users, "priya", role="admin")
+    set_user(users, "arjun", role="user")
+    config = ProxyConfig(policy=policy, audit=tmp_path / "a.jsonl", port=0, keys=keys, users=users)
+    assert _who(config, arjun) == "arjun"
+    with pytest.raises(_ProxyError, match="no longer has access"):
+        _who(config, stray)
+
+    set_user(users, "arjun", active=False)  # arjun leaves
+    assert reload(config, lambda line: None)
+    with pytest.raises(_ProxyError, match="arjun no longer has access") as e:
+        _who(config, arjun)
+    assert e.value.code == "access_revoked"
+    assert _who(config, priya) == "priya"
+
+    users.write_text("not: a users file\n")  # a broken file keeps the current users
+    assert not reload(config, lambda line: None)
+    assert _who(config, priya) == "priya"
+
+
+def test_keys_unused_for_a_while_expire(tmp_path):
+    from credgate.proxy_keys import expire_unused
+
+    now = dt.datetime(2026, 11, 4, tzinfo=dt.UTC)
+    old = "2026-06-01T00:00:00Z"
+    keys = tmp_path / "keys.json"
+    keys.write_text(
+        json.dumps(
+            {
+                "credgate_proxy_keys": 1,
+                "users": {
+                    "busy": {"hash": "sha256:a", "created": old, "expires": "2027-01-01T00:00:00Z"},
+                    "idle": {"hash": "sha256:b", "created": old, "expires": "2027-01-01T00:00:00Z"},
+                    "never": {
+                        "hash": "sha256:c",
+                        "created": old,
+                        "expires": "2027-01-01T00:00:00Z",
+                    },
+                    "new": {"hash": "sha256:d", "created": "2026-10-20T00:00:00Z"},
+                },
+            }
+        )
+    )
+    audit = tmp_path / "audit.jsonl"
+    audit.write_text(
+        json.dumps({"time": "2026-10-30T09:00:00Z", "actor": "busy"})
+        + "\n"
+        + json.dumps({"time": "2026-07-01T09:00:00Z", "actor": "idle"})
+        + "\n"
+    )
+    assert expire_unused(keys, audit, days=60, now=now) == ["idle", "never"]
+    status = {r["name"]: r["status"] for r in list_users(keys, now=now + dt.timedelta(seconds=1))}
+    assert status == {"busy": "active", "idle": "expired", "never": "expired", "new": "no expiry"}
+    assert expire_unused(keys, audit, days=60, now=now) == []  # already expired

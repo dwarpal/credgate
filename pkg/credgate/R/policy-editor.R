@@ -18,20 +18,77 @@
 #' @param path The policy file (YAML). A new file starts from the bank
 #'   example policy.
 #' @param user Who is editing, for the change log; defaults to the signed-in
-#'   Shiny user or the operating-system user.
+#'   Shiny user or the operating-system user. With `users`, also who is
+#'   signed in, for their role (on a server the signed-in user is used).
+#' @param users A users file (see [cg_users()]): who may use the app and in
+#'   which role. Admins see and change everything; auditors see the policy,
+#'   tests and change log but change nothing; users try the saved policy,
+#'   see test results and try detectors. Anyone not in the file, or
+#'   inactive, has no access. Without a users file everyone is an admin.
+#' @param keys The proxy's keys file (see [proxy_add_user()]): everyone
+#'   manages their own key under **My key** (1, 3 or 6 months, up to the
+#'   users file's `key_max_days`), and admins manage everyone's under
+#'   **Users**; each change is recorded in the access log ([proxy_access()]).
+#' @param audit The proxy's audit log: under **My activity** everyone sees
+#'   their own recent requests (endpoint, time, allowed or blocked and why;
+#'   never content), limited by the users file's `activity_days` and
+#'   `activity_max` (7 days and 100 requests unless changed).
+#' @param trust_header With single sign-on in front of the app (OAuth2
+#'   Proxy, Keycloak, a web server's SSO module), the request header that
+#'   carries the signed-in user, e.g. `"X-Auth-Request-User"` or
+#'   `"X-Forwarded-User"`. Only set it when the app can be reached through
+#'   that sign-in proxy alone (listening on `127.0.0.1`): anyone who reaches
+#'   the app directly could send the header themselves.
 #' @return A Shiny app; printing it (or [shiny::runApp()]) runs it.
 #' @export
 #' @examples
 #' if (interactive()) {
 #'   policy_editor(file.path(tempdir(), "bank.yaml"))
 #' }
-policy_editor <- function(path, user = NULL) {
+policy_editor <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL,
+                          trust_header = NULL) {
   check_installed("shiny")
   check_installed("bslib")
-  stopifnot(rlang::is_string(path))
-  shiny::shinyApp(policy_editor_ui(path), policy_editor_server(path, user), onStart = function() {
+  stopifnot(
+    rlang::is_string(path), is.null(users) || rlang::is_string(users),
+    is.null(keys) || rlang::is_string(keys), is.null(audit) || rlang::is_string(audit),
+    is.null(trust_header) || rlang::is_string(trust_header)
+  )
+  server <- policy_editor_server(path, user, users, keys, audit, trust_header)
+  shiny::shinyApp(policy_editor_ui(path), server, onStart = function() {
     shiny::onStop(writable_temp_assets)
   })
+}
+
+# The tabs each role sees, and the role of a signed-in name (NULL: no
+# access). Without a users file everyone is an admin, as before roles.
+editor_tabs <- list(
+  admin = c("Endpoints", "Rules", "Try it", "Tests", "Detectors", "My key", "My activity", "Users", "Changes"),
+  auditor = c("Endpoints", "Rules", "Tests", "My key", "My activity", "Users", "Changes"),
+  user = c("Try it", "Tests", "Detectors", "My key", "My activity", "Changes")
+)
+key_durations <- c("1 month" = 30L, "3 months" = 90L, "6 months" = 180L)
+
+editor_role <- function(users, name) {
+  if (is.null(users)) {
+    return("admin")
+  }
+  u <- tryCatch(cg_users(users), error = function(e) NULL)  # an invalid file lets no one in
+  if (is.null(u)) NULL else user_role(u, name)
+}
+
+# The signed-in user from a sign-in proxy's header (NULL if not set, or not
+# a valid name). Shiny gives headers as HTTP_ variables of the request.
+header_user <- function(req, header) {
+  if (is.null(header) || is.null(req)) {
+    return(NULL)
+  }
+  v <- req[[paste0("HTTP_", toupper(gsub("-", "_", header)))]]
+  if (!rlang::is_string(v)) {
+    return(NULL)
+  }
+  v <- trimws(v)
+  if (grepl("^[A-Za-z0-9._@-]{1,100}$", v)) v else NULL
 }
 
 policy_template <- function() {
@@ -88,6 +145,9 @@ policy_editor_ui <- function(path) {
       section("Policy file"),
       shiny::div(class = "cg-file", path),
       shiny::uiOutput("status"),
+      shiny::uiOutput("role_note"),
+      shiny::div(
+      id = "cg-admin-controls",
       section("Policy"),
       shiny::textInput("policy_id", tip("Policy id", "A short name for this policy. It is recorded with every decision in the audit log, together with the revision.")),
       shiny::textAreaInput("description", "Description", rows = 3),
@@ -99,9 +159,11 @@ policy_editor_ui <- function(path) {
       shiny::uiOutput("save_anyway_ui"),
       bslib::tooltip(shiny::actionButton("save", "Save new revision", class = "btn-primary"), "Writes the policy with its revision raised by one and adds an entry to the change log. Only possible when the draft is valid and has changes."),
       bslib::tooltip(shiny::actionButton("reload", "Discard changes", class = "btn-link btn-sm"), "Throws away the draft and reloads the saved file.")
+      )
     ),
     shiny::uiOutput("stats", class = "cg-stats"),
     bslib::navset_card_tab(
+      id = "tabs",
       bslib::nav_panel(
         "Endpoints",
         shiny::p(class = "cg-lede", "The model endpoints requests may go to. An endpoint not listed here receives nothing. Click a row to edit it."),
@@ -166,7 +228,7 @@ policy_editor_ui <- function(path) {
       ),
       bslib::nav_panel(
         "Try it",
-        shiny::p(class = "cg-lede", "What the draft policy (before saving) does with a request. Use synthetic data only."),
+        shiny::p(class = "cg-lede", "What the policy does with a request: allowed or blocked, and what happens to each identifier (for admins, the draft before saving). Nothing typed here is stored or logged."),
         bslib::layout_columns(
           shiny::div(
             shiny::textAreaInput(
@@ -259,6 +321,30 @@ policy_editor_ui <- function(path) {
         )
       ),
       bslib::nav_panel(
+        "My key",
+        shiny::p(class = "cg-lede", "Your key for the credgate proxy. Put it where your tool takes an API key (for Claude Code `ANTHROPIC_API_KEY`, for the OpenAI SDK `api_key`) and point the tool at the proxy. It is shown once, when it is made: keep it like a password."),
+        shiny::uiOutput("my_key")
+      ),
+      bslib::nav_panel(
+        "My activity",
+        shiny::p(class = "cg-lede", "Your own recent requests through the proxy: where they went, and whether they were allowed or blocked and why. Never their content."),
+        shiny::uiOutput("my_activity")
+      ),
+      bslib::nav_panel(
+        "Users",
+        shiny::p(class = "cg-lede", "Everyone in the users file, their role, and their proxy key. Roles are changed on the server (credgate users ...); keys here."),
+        shiny::uiOutput("users_table"),
+        shiny::div(
+          id = "cg-user-actions", class = "cg-actions cg-field-row",
+          shiny::selectInput("user_pick", "User", NULL),
+          shiny::selectInput("user_days", tip("Valid for", "How long the new key works. The longest allowed is set on the server (key_max_days)."), NULL),
+          bslib::tooltip(shiny::actionButton("user_new_key", "New key", class = "btn-outline-primary btn-sm"), "Makes a key for this user (their old one stops working) and shows it once, for you to hand over."),
+          bslib::tooltip(shiny::actionButton("user_remove_key", "Remove key", class = "btn-outline-danger btn-sm"), "Their key stops working at the proxy's next reload.")
+        ),
+        shiny::h6(class = "cg-section", "Access log"),
+        shiny::uiOutput("access_log")
+      ),
+      bslib::nav_panel(
         "Changes",
         shiny::h6(class = "cg-section", "Since the last save"),
         shiny::uiOutput("pending"),
@@ -274,8 +360,57 @@ policy_editor_ui <- function(path) {
 }
 
 
-policy_editor_server <- function(path, user = NULL) {
+policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL,
+                                 trust_header = NULL) {
   function(input, output, session) {
+    # Who is signed in, and what they may do. Changes to the policy, its tests
+    # and detector files are refused here on the server, not only hidden.
+    signed_in <- user %||% session$user %||% header_user(session$request, trust_header)
+    role <- editor_role(users, signed_in)
+    if (is.null(role)) {
+      shiny::removeUI(".bslib-sidebar-layout")
+      shiny::showModal(shiny::modalDialog(
+        title = "No access",
+        if (is.null(signed_in)) "You are not signed in." else
+          sprintf("%s has no access to this app. Ask your InfoSec team.", signed_in),
+        footer = NULL, easyClose = FALSE
+      ))
+      return(invisible())
+    }
+    can_edit <- identical(role, "admin")
+    if (!can_edit) {
+      shiny::removeUI("#cg-admin-controls")
+      for (control in c("test_add", "test_delete", "det_save", "user_new_key")) {
+        shiny::removeUI(sprintf(".cg-actions:has(#%s)", control))
+      }
+      shiny::removeUI(".form-group:has(#try_min_confidence)") # a policy setting
+    }
+    if (identical(role, "user")) {
+      # Users see their tabs only: not the policy's make-up (endpoints, rules,
+      # unsaved changes) nor the sidebar with the policy file and its status.
+      shiny::removeUI("#stats")
+      shiny::insertUI("head", "beforeEnd", shiny::tags$style(
+        ".bslib-sidebar-layout { grid-template-columns: 1fr !important; }"
+      ), immediate = TRUE)
+      shiny::removeUI(".bslib-sidebar-layout > aside.sidebar")
+      shiny::removeUI(".bslib-sidebar-layout > .collapse-toggle")
+      shiny::removeUI(".bslib-sidebar-layout > .bslib-sidebar-resize-handle")
+    }
+    for (tab in setdiff(editor_tabs$admin, editor_tabs[[role]])) {
+      bslib::nav_remove("tabs", tab, session = session)
+    }
+    output$role_note <- shiny::renderUI({
+      if (is.null(users)) {
+        return(NULL)
+      }
+      what <- c(
+        admin = "can change the policy",
+        auditor = "read-only: sees everything, changes nothing",
+        user = "read-only: tries the saved policy"
+      )[[role]]
+      shiny::div(class = "cg-status neutral", shiny::strong(sprintf("%s \u00b7 %s. ", signed_in, role)), what)
+    })
+
     saved <- shiny::reactiveVal(policy_read_file(path))
     policy <- shiny::reactiveVal(policy_read_file(path))
     saved_at <- shiny::reactiveVal(0)
@@ -292,7 +427,7 @@ policy_editor_server <- function(path, user = NULL) {
     }
     load_fields(shiny::isolate(policy()))
 
-    edit <- function(f) policy(f(policy()))
+    edit <- function(f) if (can_edit) policy(f(policy()))
 
     shiny::observeEvent(input$policy_id, edit(function(x) {
       x$id <- input$policy_id
@@ -348,7 +483,14 @@ policy_editor_server <- function(path, user = NULL) {
       }
     })
     output$header_status <- shiny::renderUI({
+      signed <- if (!is.null(users)) {
+        shiny::span(class = "cg-signed", cg_badge(sprintf("%s \u00b7 %s", signed_in, role), "neutral", title = "Signed in"))
+      }
+      if (identical(role, "user")) {
+        return(signed)
+      }
       shiny::tagList(
+        signed,
         cg_badge(policy()$id %||% "(no id)", "neutral"),
         cg_badge(sprintf("revision %s", saved()$revision), "neutral"),
         if (is.data.frame(test_results())) {
@@ -734,6 +876,9 @@ policy_editor_server <- function(path, user = NULL) {
                                selected = if (!is.null(keep) && keep %in% ids) keep else ids[1])
     })
     save_tests <- function(x) {
+      if (!can_edit) {
+        return(FALSE)
+      }
       ok <- tryCatch({
         types <- tryCatch(names(cg_policy(policy(), dirname(path))$detectors), error = function(e) names(get_detectors(NULL)))
         if (length(x)) write_policy_tests(x, tests_file, types) else unlink(tests_file)
@@ -952,6 +1097,9 @@ policy_editor_server <- function(path, user = NULL) {
       for (f in c("gen_match", "gen_no_match")) shiny::updateTextAreaInput(session, f, value = "")
     })
     shiny::observeEvent(input$det_save, {
+      if (!can_edit) {
+        return()
+      }
       f <- input$det_file %||% ""
       new <- !nzchar(f)
       if (new) {
@@ -997,6 +1145,205 @@ policy_editor_server <- function(path, user = NULL) {
       ), type = "message", duration = 8)
     })
 
+    # --- proxy keys ----------------------------------------------------------------
+    me <- signed_in %||% who
+    keys_changed <- shiny::reactiveVal(0)
+    users_file <- shiny::reactive({
+      keys_changed()
+      if (is.null(users)) NULL else tryCatch(cg_users(users), error = function(e) NULL)
+    })
+    durations <- shiny::reactive({
+      max_days <- users_file()$settings$key_max_days %||% 90L
+      key_durations[key_durations <= max_days]
+    })
+    show_new_key <- function(title, key, for_whom) {
+      shiny::showModal(shiny::modalDialog(
+        title = title, easyClose = FALSE,
+        shiny::p(sprintf("The key for %s. Copy it now: it is not shown again, and credgate keeps only a hash of it.", for_whom)),
+        shiny::div(
+          class = "cg-key-row",
+          shiny::tags$code(class = "cg-key", id = "cg-new-key", key),
+          shiny::tags$button(type = "button", class = "btn btn-primary btn-sm", onclick = "cgCopyKey(this)", "Copy")
+        ),
+        footer = shiny::modalButton("Done")
+      ))
+    }
+    key_row <- function(name) {
+      u <- proxy_users(keys)
+      u[u$name == name, , drop = FALSE]
+    }
+    output$my_key <- shiny::renderUI({
+      keys_changed()
+      if (is.null(keys)) {
+        return(shiny::div(class = "cg-empty", "No keys file is set up for this app; ask your InfoSec team."))
+      }
+      row <- tryCatch(key_row(me), error = function(e) NULL)
+      has_key <- !is.null(row) && nrow(row) == 1
+      shiny::tagList(
+        if (has_key) {
+          shiny::div(class = "cg-status neutral",
+                     shiny::strong(sprintf("%s: %s. ", me, row$status)),
+                     sprintf("Made %s, valid until %s.", substr(row$created %|% "-", 1, 10), substr(row$expires %|% "never", 1, 10)))
+        } else {
+          shiny::div(class = "cg-empty", sprintf("%s has no proxy key yet.", me))
+        },
+        shiny::div(
+          class = "cg-actions cg-field-row",
+          # A plain select: in UI made on the fly, selectize's scripts would be
+          # copied again from a read-only library and fail (Nix, locked libraries).
+          shiny::selectInput("my_days", "Valid for", durations(), selected = max(durations()), selectize = FALSE),
+          shiny::actionButton("my_new_key", if (has_key) "New key (the old one stops working)" else "Make my key", class = "btn-primary btn-sm"),
+          if (has_key) shiny::actionButton("my_remove_key", "Delete my key", class = "btn-outline-danger btn-sm")
+        )
+      )
+    })
+    days_ok <- function(days) {
+      days <- suppressWarnings(as.integer(days))
+      if (is.na(days) || !days %in% durations()) {
+        shiny::showNotification("Choose how long the key is valid.", type = "error")
+        return(NULL)
+      }
+      days
+    }
+    make_key <- function(name, days, by) {
+      exists <- file.exists(keys) && name %in% proxy_users(keys)$name
+      key <- if (exists) proxy_rotate_key(keys, name, days) else proxy_add_user(keys, name, days)
+      log_access(keys, by, if (exists) "rotate" else "create", name, key_row(name)$expires)
+      keys_changed(keys_changed() + 1)
+      key
+    }
+    shiny::observeEvent(input$my_new_key, {
+      days <- days_ok(input$my_days)
+      if (is.null(days) || is.null(keys)) {
+        return()
+      }
+      key <- tryCatch(make_key(me, days, me), error = function(e) {
+        shiny::showNotification(conditionMessage(e), type = "error")
+        NULL
+      })
+      if (!is.null(key)) show_new_key("Your new key", key, me)
+    })
+    shiny::observeEvent(input$my_remove_key, {
+      if (is.null(keys)) {
+        return()
+      }
+      ok <- tryCatch({
+        proxy_remove_user(keys, me)
+        log_access(keys, me, "remove", me)
+        TRUE
+      }, error = function(e) {
+        shiny::showNotification(conditionMessage(e), type = "error")
+        FALSE
+      })
+      if (ok) {
+        keys_changed(keys_changed() + 1)
+        shiny::showNotification("Your key is deleted; it stops working at the proxy's next reload.", type = "message")
+      }
+    })
+    output$users_table <- shiny::renderUI({
+      keys_changed()
+      u <- users_file()
+      k <- if (!is.null(keys) && file.exists(keys)) proxy_users(keys) else proxy_users(tempfile())
+      people <- if (!is.null(u)) u$users else data.frame(name = k$name, role = NA_character_, active = TRUE)
+      if (nrow(people) == 0) {
+        return(shiny::div(class = "cg-empty", "No users yet."))
+      }
+      shiny::div(class = "cg-scroll", shiny::tags$table(
+        class = "cg-table",
+        shiny::tags$thead(shiny::tags$tr(lapply(c("User", "Role", "Access", "Proxy key", "Valid until"), shiny::tags$th))),
+        shiny::tags$tbody(lapply(seq_len(nrow(people)), function(i) {
+          kr <- k[k$name == people$name[i], , drop = FALSE]
+          shiny::tags$tr(
+            shiny::tags$td(shiny::strong(people$name[i])),
+            shiny::tags$td(people$role[i] %|% "-"),
+            shiny::tags$td(if (people$active[i]) cg_badge("active", "allow") else cg_badge("inactive", "block")),
+            shiny::tags$td(if (nrow(kr)) kr$status else "none"),
+            shiny::tags$td(class = "mono", if (nrow(kr)) substr(kr$expires %|% "-", 1, 10) else "-")
+          )
+        }))
+      ))
+    })
+    shiny::observe({
+      u <- users_file()
+      names <- if (!is.null(u)) u$users$name else if (!is.null(keys) && file.exists(keys)) proxy_users(keys)$name else character()
+      shiny::updateSelectInput(session, "user_pick", choices = names, selected = shiny::isolate(input$user_pick))
+      shiny::updateSelectInput(session, "user_days", choices = durations(), selected = max(durations()))
+    })
+    shiny::observeEvent(input$user_new_key, {
+      if (!can_edit || is.null(keys) || !nzchar(input$user_pick %||% "")) {
+        return()
+      }
+      days <- days_ok(input$user_days)
+      if (is.null(days)) {
+        return()
+      }
+      key <- tryCatch(make_key(input$user_pick, days, me), error = function(e) {
+        shiny::showNotification(conditionMessage(e), type = "error")
+        NULL
+      })
+      if (!is.null(key)) show_new_key(sprintf("New key for %s", input$user_pick), key, input$user_pick)
+    })
+    shiny::observeEvent(input$user_remove_key, {
+      if (!can_edit || is.null(keys) || !nzchar(input$user_pick %||% "")) {
+        return()
+      }
+      tryCatch({
+        proxy_remove_user(keys, input$user_pick)
+        log_access(keys, me, "remove", input$user_pick)
+        keys_changed(keys_changed() + 1)
+        shiny::showNotification(sprintf("%s's key is removed.", input$user_pick), type = "message")
+      }, error = function(e) shiny::showNotification(conditionMessage(e), type = "error"))
+    })
+    output$access_log <- shiny::renderUI({
+      keys_changed()
+      if (is.null(keys)) {
+        return(NULL)
+      }
+      a <- proxy_access(keys)
+      alert <- if (!isTRUE(attr(a, "intact"))) shiny::div(class = "cg-alert", "The access log was altered: entries were edited or removed after they were written.")
+      if (nrow(a) == 0) {
+        return(shiny::tagList(alert, shiny::div(class = "cg-empty", "No key changes yet.")))
+      }
+      a <- a[rev(seq_len(nrow(a))), ]
+      shiny::tagList(alert, shiny::tags$ul(class = "cg-diff", lapply(seq_len(nrow(a)), function(i) shiny::tags$li(sprintf(
+        "%s · %s: %s key for %s%s", sub("T", " ", sub("Z$", "", a$time[i])), a$by[i], a$action[i], a$user[i],
+        if (is.na(a$expires[i])) "" else paste0(", valid until ", substr(a$expires[i], 1, 10))
+      )))))
+    })
+
+
+    output$my_activity <- shiny::renderUI({
+      if (is.null(audit)) {
+        return(shiny::div(class = "cg-empty", "No audit log is set up for this app."))
+      }
+      settings <- users_file()$settings
+      days <- settings$activity_days %||% 7L
+      most <- settings$activity_max %||% 100L
+      a <- tryCatch(own_activity(audit, me, days, most), error = function(e) NULL)
+      if (is.null(a)) {
+        return(shiny::div(class = "cg-alert", "The audit log could not be read."))
+      }
+      if (nrow(a) == 0) {
+        return(shiny::div(class = "cg-empty", sprintf("No requests from %s in the last %d days.", me, days)))
+      }
+      shiny::tagList(
+        shiny::p(class = "cg-hint", sprintf("The last %d days, at most %d requests, newest first.", days, most)),
+        shiny::div(class = "cg-scroll", shiny::tags$table(
+          class = "cg-table",
+          shiny::tags$thead(shiny::tags$tr(lapply(c("When", "Endpoint", "Result", "Identifiers"), shiny::tags$th))),
+          shiny::tags$tbody(lapply(seq_len(nrow(a)), function(i) shiny::tags$tr(
+            shiny::tags$td(class = "mono", sub("T", " ", substr(a$time[i], 1, 19))),
+            shiny::tags$td(a$endpoint[i]),
+            shiny::tags$td(
+              if (a$allowed[i]) cg_badge("allowed", "allow") else cg_badge("blocked", "block"),
+              if (!a$allowed[i]) shiny::div(class = "desc", a$blocked_by[i])
+            ),
+            shiny::tags$td(class = "desc", a$found[i])
+          )))
+        ))
+      )
+    })
+
     # --- changes and saving --------------------------------------------------------
     output$pending <- shiny::renderUI({
       ch <- changes()
@@ -1012,6 +1359,17 @@ policy_editor_server <- function(path, user = NULL) {
     })
     output$history <- shiny::renderUI({
       h <- history()
+      if (identical(role, "user")) {
+        # Users see when the policy changed, not who changed it or why.
+        if (nrow(h) == 0) {
+          return(shiny::div(class = "cg-empty", "The policy has not been changed yet."))
+        }
+        h <- h[rev(seq_len(nrow(h))), ]
+        return(shiny::tags$ul(class = "cg-diff", lapply(seq_len(nrow(h)), function(i) shiny::tags$li(sprintf(
+          "Revision %d \u00b7 %s \u00b7 %d change%s", h$revision[i], substr(h$time[i], 1, 10),
+          length(h$changes[[i]]), if (length(h$changes[[i]]) == 1) "" else "s"
+        )))))
+      }
       alert <- if (!isTRUE(attr(h, "intact"))) {
         shiny::div(class = "cg-alert", "The change log was altered: entries were edited or removed after they were written.")
       }
@@ -1035,6 +1393,9 @@ policy_editor_server <- function(path, user = NULL) {
       shiny::updateActionButton(session, "save", disabled = !can_save())
     })
     shiny::observeEvent(input$save, {
+      if (!can_edit) {
+        return()
+      }
       if (!can_save()) {
         return()
       }
@@ -1193,8 +1554,8 @@ badge_help <- c(
   blocked = "Every request to this endpoint is refused"
 )
 
-cg_badge <- function(text, kind) {
-  help <- if (kind %in% names(badge_help)) badge_help[[kind]]
+cg_badge <- function(text, kind, title = NULL) {
+  help <- title %||% if (kind %in% names(badge_help)) badge_help[[kind]]
   shiny::span(class = paste0("cg-badge cg-", kind), title = help, text)
 }
 

@@ -74,6 +74,11 @@ reference:
       - policy_editor
       - run_policy_tests
       - cg_audit_log
+  - title: Users, roles and proxy keys
+    contents:
+      - cg_users
+      - proxy_add_user
+      - proxy_access
   - title: Evaluation and test data
     contents:
       - cg_evaluate

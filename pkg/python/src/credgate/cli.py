@@ -8,6 +8,7 @@ import csv
 import json
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from . import __version__
 from ._spec import spec_path
@@ -137,6 +138,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "checking this often (default: only on SIGHUP)",
     )
     ps.add_argument(
+        "--users",
+        help="the app's users file: keys of users not in it, or inactive, are refused",
+    )
+    ps.add_argument(
         "--require-tests",
         action="store_true",
         help="refuse a policy without a tests file beside it (<policy>.tests.yaml)",
@@ -168,6 +173,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     pd.add_argument("--keys", required=True, help="keys file")
     pl = px_sub.add_parser("list-users", help="list users with their key's dates and status")
     pl.add_argument("--keys", required=True, help="keys file")
+    pe = px_sub.add_parser(
+        "expire-unused", help="expire keys not used for a while (read from the audit log)"
+    )
+    pe.add_argument("--keys", required=True, help="keys file")
+    pe.add_argument("--audit", required=True, help="the proxy's audit log")
+    pe.add_argument("--days", type=int, default=60, help="unused for this long (default 60)")
 
     pol = sub.add_parser("policy", help="work with policies")
     pol_sub = pol.add_subparsers(dest="policy_command", required=True)
@@ -177,6 +188,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     pt.add_argument("--policy", required=True, help="policy file (YAML)")
     pt.add_argument("--tests", help="tests file (default: beside the policy, <name>.tests.yaml)")
     _add_detectors_option(pt)
+
+    us = sub.add_parser(
+        "users", help="manage who may use the app, and their roles (super admin, on the server)"
+    )
+    us_sub = us.add_subparsers(dest="users_command", required=True)
+    for cmd, helptext in (
+        ("add", "add a user with a role"),
+        ("set-role", "change a user's role"),
+        ("deactivate", "stop a user's access (a leaver)"),
+        ("activate", "restore a user's access"),
+        ("remove", "remove a user from the file"),
+    ):
+        c = us_sub.add_parser(cmd, help=helptext)
+        c.add_argument("name")
+        c.add_argument("--file", required=True, help="users file (YAML; created by `add`)")
+        if cmd in ("add", "set-role"):
+            c.add_argument("--role", required=True, choices=["admin", "auditor", "user"])
+    ul = us_sub.add_parser("list", help="list users, roles and settings")
+    ul.add_argument("--file", required=True, help="users file")
+    uset = us_sub.add_parser("set", help="change a setting, e.g. key_max_days 30")
+    uset.add_argument("setting", choices=["key_max_days", "activity_days", "activity_max"])
+    uset.add_argument("value", type=int)
+    uset.add_argument("--file", required=True, help="users file")
 
     dl = sub.add_parser(
         "detectors", help="list the registered detectors (and check custom detector files)"
@@ -206,6 +240,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _proxy(args)
     if args.command == "policy":
         return _policy_test(args)
+    if args.command == "users":
+        return _users(args)
     if args.command in ("redact", "preview"):
         return _redact(args)
     return _detect(args)
@@ -227,6 +263,45 @@ def _policy_test(args: argparse.Namespace) -> int:
     failed = sum(not r.passed for r in results)
     print(f"{len(results) - failed} passed, {failed} failed")
     return 1 if failed else 0
+
+
+def _users(args: argparse.Namespace) -> int:
+    from . import users as u
+
+    try:
+        cmd = args.users_command
+        if cmd == "add":
+            if Path(args.file).exists() and args.name in u.read_users(args.file).users:
+                raise ValueError(f"{args.name!r} is already in {args.file}; use set-role.")
+            u.set_user(args.file, args.name, role=args.role, active=True)
+        elif cmd == "set-role":
+            if args.name not in u.read_users(args.file).users:
+                raise ValueError(f"No user {args.name!r} in {args.file}.")
+            u.set_user(args.file, args.name, role=args.role)
+        elif cmd in ("deactivate", "activate"):
+            if args.name not in u.read_users(args.file).users:
+                raise ValueError(f"No user {args.name!r} in {args.file}.")
+            u.set_user(args.file, args.name, active=cmd == "activate")
+        elif cmd == "remove":
+            u.remove_user(args.file, args.name)
+        elif cmd == "set":
+            u.set_setting(args.file, args.setting, args.value)
+        users = u.read_users(args.file)
+        if cmd == "list":
+            print(f"{'user':<24} {'role':<8} access")
+            for name, user in sorted(users.users.items()):
+                print(f"{name:<24} {user.role:<8} {'active' if user.active else 'inactive'}")
+            print("settings: " + ", ".join(f"{k} {v}" for k, v in users.settings.items()))
+        else:
+            what = f"{args.setting} = {args.value}" if cmd == "set" else f"{cmd} {args.name}"
+            print(f"{args.file}: {what}.", file=sys.stderr)
+        if not any(x.role == "admin" and x.active for x in users.users.values()):
+            note = "Note: no active admin; the app's policy tabs are open to no one."
+            print(note, file=sys.stderr)
+        return 0
+    except (ValueError, OSError) as e:
+        print(f"credgate users: {e}", file=sys.stderr)
+        return 2
 
 
 def _proxy(args: argparse.Namespace) -> int:
@@ -256,6 +331,13 @@ def _proxy(args: argparse.Namespace) -> int:
         if args.proxy_command == "remove-user":
             remove_user(args.keys, args.name)
             print(f"Removed {args.name} from {args.keys}. {reload_note}", file=sys.stderr)
+            return 0
+        if args.proxy_command == "expire-unused":
+            from .proxy_keys import expire_unused
+
+            gone = expire_unused(args.keys, args.audit, days=args.days)
+            msg = ", ".join(gone) if gone else "none"
+            print(f"Keys unused for {args.days} days, now expired: {msg}. {reload_note}")
             return 0
         if args.proxy_command == "list-users":
             rows = list_users(args.keys)
@@ -288,6 +370,7 @@ def _proxy(args: argparse.Namespace) -> int:
             audit_retention_years=args.audit_retention_years,
             watch=args.watch,
             require_tests=args.require_tests,
+            users=args.users,
         )
     except (ValueError, OSError) as e:
         print(f"credgate proxy: {e}", file=sys.stderr)

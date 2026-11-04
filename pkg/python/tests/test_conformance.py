@@ -454,3 +454,19 @@ def test_proxy_keys_file(case, tmp_path):
         return
     now = dt.datetime.strptime(case["now"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.UTC)
     assert {r["name"]: r["status"] for r in list_users(path, now=now)} == case["users"]
+
+
+USERS_SPEC = conformance("users.yaml")
+
+
+@pytest.mark.parametrize("case", USERS_SPEC["cases"], ids=[c["id"] for c in USERS_SPEC["cases"]])
+def test_users_file(case):
+    from credgate.users import parse_users
+
+    if case.get("invalid"):
+        with pytest.raises(ValueError, match=r"."):
+            parse_users(case["file"])
+        return
+    users = parse_users(case["file"])
+    assert {n: users.role_of(n) for n in case["roles"]} == case["roles"]
+    assert users.settings == case["settings"]
