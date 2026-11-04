@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 (2026-11-04)
+
+Better detection of Indian addresses, voter IDs and phone numbers, found
+by running public Indian PII datasets, and an audit log fix. Detection is
+about 15-20% slower than in 0.9.0 because of the city list for addresses.
 
 - **Addresses without a label**: a house number, the locality, then a known
   Indian city or district and a PIN code ("210 Hauz Khas, Ahmedabad
