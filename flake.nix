@@ -15,7 +15,7 @@
       credgateR = pkgs:
         pkgs.rPackages.buildRPackage {
           name = "credgate";
-          version = "0.1.0.9000";
+          version = "0.1.0.9001";
           src = ./pkg/credgate;
           propagatedBuildInputs = with pkgs.rPackages; [ cli jsonlite rlang stringi yaml ];
           nativeBuildInputs = with pkgs.rPackages; [ cli jsonlite rlang stringi yaml ];

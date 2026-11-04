@@ -28,7 +28,11 @@ Releases are cut from `main` only, after a `release/…` pull request is merged.
 1. On `release/py-X.Y.Z` or `release/r-X.Y.Z`, bump the version
    (`pkg/python/pyproject.toml` and `src/credgate/__init__.py`, or
    `pkg/credgate/DESCRIPTION`) and update `pkg/python/CHANGELOG.md` or
-   `pkg/credgate/NEWS.md`.
+   `pkg/credgate/NEWS.md`. A Python release also raises the R package's
+   development number by one (`0.1.0.9001`, `0.1.0.9002`, ... in
+   `pkg/credgate/DESCRIPTION` and `flake.nix`), so `packageVersion("credgate")`
+   shows which code an R installation came from; a CRAN release sets the
+   version to the submitted number instead.
 2. Merge the pull request once CI passes.
 3. Tag the merge commit on `main`:
    - `py-vX.Y.Z` publishes to PyPI automatically (the `publish-pypi`
