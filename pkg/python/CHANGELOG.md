@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 (2026-11-04)
+
+Managing who may use a shared proxy: each person has their own key that
+expires, people who leave lose access, and keys nobody uses expire. In R,
+the policy editor gives each person a role and their own key and activity,
+behind the bank's single sign-on; a deployment guide is on the
+documentation site.
+
+**Upgrading several proxies**: the keys file now records when each key was
+made and expires, which proxies before 0.11.0 cannot read. Upgrade every
+proxy before anyone makes keys with the new commands or the editor. Keys
+files from earlier versions still load.
 
 - **Leavers and unused keys**: `credgate proxy serve --users users.yaml`
   refuses the key of anyone not in the users file, or inactive, with
