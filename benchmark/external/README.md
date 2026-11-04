@@ -8,8 +8,9 @@ rules. Full tables for every configuration and metric:
 [results.md](results.md).
 
 Measured on 2026-11-04 with credgate from `main` after
-[#56](https://github.com/dwarpal/credgate/pull/56) (Python package version
-0.9.0 plus that change), on a 2019 MacBook Pro (Intel Core i5-8257U, 4 cores,
+[#56](https://github.com/dwarpal/credgate/pull/56) and the address rule
+built on India Post's city list (Python package version 0.9.0 plus those
+changes), on a 2019 MacBook Pro (Intel Core i5-8257U, 4 cores,
 8 GB), macOS 15.8.
 
 ## Summary
@@ -19,8 +20,8 @@ settings, credgate at its recommended `min_confidence = 0.5`):
 
 | Tool | Ylemis India-PII | IndiaPII-Bench | credgate corpus | PII-free documents flagged (Ylemis) | Docs/s | Memory |
 |---|---:|---:|---:|---:|---:|---:|
-| **credgate** | 59.0 | **95.9** | **98.0** | **0%** | 1,300-3,300 | 30 MB |
-| credgate + [names-by-cue](../../examples/detectors/names-by-cue.yaml) | 59.9 | **95.9** | **98.7** | **0%** | 990-2,600 | 30 MB |
+| **credgate** | 67.0 | **95.9** | **98.0** | **0%** | 1,050-2,800 | 35 MB |
+| credgate + [names-by-cue](../../examples/detectors/names-by-cue.yaml) | 67.7 | **95.9** | **98.7** | **0%** | 860-2,400 | 35 MB |
 | MaskFlow 0.9.2 | **79.6** | 77.0 | 71.3 | 8% | 50-130 | 175 MB |
 | Presidio 2.2.366, India-configured | 63.6 | 43.6 | 47.9 | 62% | 63-120 | 750 MB |
 | Presidio 2.2.366, default | 52.6 | 35.6 | 41.0 | 38% | 57-114 | 670-750 MB |
@@ -34,21 +35,21 @@ approach to some degree, so read the three columns together.
 **Where credgate is strong.** Indian identifiers - Aadhaar, PAN, GSTIN, IFSC,
 UPI, ABHA, passport, driving licence, bank accounts, phones and email - are
 found at or near 100% recall and precision on all three datasets, and so are
-voter IDs written with a word such as "voter". (A bare voter ID or CKYC number
+voter IDs written with a word such as "voter" and addresses (100% on all
+three, with or without a label). (A bare voter ID or CKYC number
 with no such word is reported below 0.5 by design, since the format alone
 could be a product code: 51% and 67% recall on credgate's corpus.) Precision is the clearest difference: at 0.5, credgate flagged
 none of Ylemis's 1,756 PII-free documents (810 ordinary, 946 deliberately
 PII-shaped), against 8% for MaskFlow and 38-62% for Presidio; it hit 7% of
 IndiaPII-Bench's 1,403 PII-shaped decoys, against 66-74% for Presidio. It is
-20-30 times faster than the tools that run a language model, and uses about
-30 MB of memory, against 175 MB for MaskFlow and 670-750 MB for Presidio.
+15-25 times faster than the tools that run a language model, and uses about
+35 MB of memory, against 175 MB for MaskFlow and 670-750 MB for Presidio.
 
-**Where it is weak.** Names and addresses written without a cue. Ylemis's
-text mostly has none ("Delivery to Sandeep Pillai, 210 Hauz Khas,
-Ahmedabad"): credgate finds 1.6% of its 8,244 names (4.9% with
-names-by-cue) and 26% of its addresses, where MaskFlow and Presidio, which
-run spaCy's named-entity models, find 90-99% of names. That is the whole
-reason credgate trails on Ylemis. Also not detected: vehicle registration
+**Where it is weak.** Names written without a cue. Ylemis's text mostly has
+none ("Delivery to Sandeep Pillai"): credgate finds 1.6% of its 8,244 names
+(4.9% with names-by-cue), where MaskFlow and Presidio, which run spaCy's
+named-entity models (and MaskFlow a list of 114,000 Indian names), find
+90-99%. That is the whole reason credgate trails on Ylemis. Also not detected: vehicle registration
 numbers, and types no tool covers - Ylemis's internal reference numbers
 (`policy_5628203_824`), organisations and medical record numbers, which an
 organisation adds as [custom detectors](../../docs/custom-detectors.md).
@@ -57,6 +58,10 @@ organisation adds as [custom detectors](../../docs/custom-detectors.md).
 voter IDs after "वोटर आईडी" or "ভোটার আইডি" (Ylemis voter ID recall at 0.5:
 50% to 100%), and a mobile number under "Contact Number:" taken for a bank
 account when an IFSC was nearby (IndiaPII phone recall: 96% to 100%).
+Then addresses without a label: a house number, the locality, a known Indian
+city or district (from India Post's directory, data.gov.in, Government Open
+Data License - India) and a PIN code, and "address" in seven more Indian
+languages (Ylemis address recall: 26% to 100%, with no new false positives).
 credgate's own benchmark tables did not change.
 
 ## Datasets

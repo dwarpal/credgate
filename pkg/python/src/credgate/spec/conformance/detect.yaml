@@ -324,6 +324,22 @@ cases:
     text: 'पता: ग्राम रामपुर, जिला सीतापुर 261001'
     expect:
       - {type: address, value: 'ग्राम रामपुर, जिला सीतापुर 261001'}
+  - id: address-house-number-locality-city-pin
+    text: 'Delivery to the branch, 210 Hauz Khas, Ahmedabad 380015; driver assigned'
+    expect:
+      - {type: address, value: '210 Hauz Khas, Ahmedabad 380015', confidence: 0.97}
+  - id: address-several-localities-renamed-city
+    text: 'Ship to 12, 3rd Cross, Indiranagar, Bengaluru 560038 today'
+    expect:
+      - {type: address, value: '12, 3rd Cross, Indiranagar, Bengaluru 560038'}
+  - id: address-bengali-label
+    text: 'ঠিকানা 784 Gomti Nagar, Bhopal 462016'
+    expect:
+      - {type: address, value: '784 Gomti Nagar, Bhopal 462016'}
+  - id: address-tamil-label
+    text: 'முகவரி: 137 Anna Nagar, Chennai 600040'
+    expect:
+      - {type: address, value: '137 Anna Nagar, Chennai 600040'}
 
   # --- Whole records ----------------------------------------------------------------
   - id: mixed-customer-record

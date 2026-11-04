@@ -28,6 +28,10 @@ negatives:
   - {id: decimal-amount, text: 'Paid 9876543210.50 in total'}
   - {id: indian-grouping, text: 'Total 1,98,765.43210 units'}
   - {id: population, text: 'Population of India is 1428627663'}
+  # Numbers before a city and a PIN code that are not house numbers
+  - {id: invoice-quantity-city-pin, text: 'Invoice 552 for 3 units, Pune 411001 branch'}
+  - {id: ticket-number-city-pin, text: 'Ticket 4471 Escalated, Delhi 110001 office'}
+  - {id: order-shipped-to-city-pin, text: 'Order 1234 shipped today to Mumbai 400001'}
   # Technical strings
   - {id: uuid, text: 'UUID 3f2b9c1e-8d4a-4b7e-9c1a-2e5f6a7b8c9d'}
   - {id: ip-and-port, text: 'Server 192.168.100.200 port 8080'}

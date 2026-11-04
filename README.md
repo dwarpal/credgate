@@ -398,7 +398,7 @@ settings, the same scoring rules for all:
 
 | F1 (overlap) | Ylemis India-PII | IndiaPII-Bench | credgate corpus | PII-free documents flagged | Docs/s | Memory |
 |---|---:|---:|---:|---:|---:|---:|
-| **credgate** | 59.0 | **95.9** | **98.0** | **0%** | 1,300-3,300 | 30 MB |
+| **credgate** | 67.0 | **95.9** | **98.0** | **0%** | 1,050-2,800 | 35 MB |
 | MaskFlow | **79.6** | 77.0 | 71.3 | 8% | 50-130 | 175 MB |
 | Presidio, India-configured | 63.6 | 43.6 | 47.9 | 62% | 63-120 | 750 MB |
 | Presidio, default | 52.6 | 35.6 | 41.0 | 38% | 57-114 | 670-750 MB |
@@ -419,19 +419,21 @@ of three runs. Method, per-type results and caveats:
 **Where credgate is strong.** Indian identifiers - Aadhaar, PAN, GSTIN, IFSC,
 UPI, ABHA, passport, driving licence, bank accounts, cards, phones, and voter
 IDs written with a word such as "voter" - found at or near 100% on every
-dataset, almost without false alarms; 20-30
+dataset, almost without false alarms; addresses in the usual Indian shape
+(house number, locality, city, PIN code) with or without a label; 15-25
 times the speed of the tools that run a language model, in a fraction of the
 memory.
 
 **Where others do better.**
 
-- **Names and addresses without a cue**: MaskFlow and Presidio run spaCy's
-  named-entity models and find 90-99% of Ylemis's names ("Delivery to
-  Sandeep Pillai"); credgate finds names after a title, label or relation
-  ("Smt.", "Name:", "S/o"), in columns named for names, and with the example
-  custom detector [`names-by-cue.yaml`](docs/custom-detectors.md) from cues
-  such as "X called" - but only 1.6% (4.9%) of Ylemis's names and 26% of its
-  addresses. That is why it trails on Ylemis.
+- **Names without a cue**: MaskFlow and Presidio run spaCy's named-entity
+  models, and MaskFlow also matches a list of 114,000 Indian names; they find
+  90-99% of Ylemis's names ("Delivery to Sandeep Pillai"). credgate finds
+  names after a title, label or relation ("Smt.", "Name:", "S/o"), in
+  columns named for names, and with the example custom detector
+  [`names-by-cue.yaml`](docs/custom-detectors.md) from cues such as "X
+  called" - but only 1.6% (4.9%) of Ylemis's names. That is why it trails on
+  Ylemis; organisations can add their own name lists as custom detectors.
 - **Vehicle registration numbers**: MaskFlow and Presidio find them;
   credgate does not yet.
 - **Bare voter IDs and CKYC numbers** with no word such as "voter" or "CKYC"

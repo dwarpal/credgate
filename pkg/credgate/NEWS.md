@@ -1,5 +1,12 @@
 # credgate (development version)
 
+* Addresses without a label are found when they have the usual shape: a
+  house number, the locality, a known Indian city or district, and a PIN
+  code. The city list comes from India Post's All India Pincode Directory
+  (data.gov.in, Government Open Data License - India). "Address" written
+  in Bengali, Tamil, Punjabi, Gujarati, Marathi, Telugu or Kannada is now a
+  label as well. Shared detector definitions, so Python changes too.
+
 * Voter IDs are recognised with "voter" or "elector" written in Hindi,
   Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada or Punjabi, and a
   mobile number under "Contact Number:" is no longer taken for a bank

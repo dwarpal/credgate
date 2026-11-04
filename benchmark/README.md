@@ -38,10 +38,10 @@ Indian PII datasets written by others - the
 [Ylemis India-PII Benchmark](https://huggingface.co/datasets/Pranshurs/ylemis-india-pii-benchmark)
 (10,000 documents) and [IndiaPII-Bench](https://huggingface.co/datasets/maskflow-ai/indiapii-bench)
 (2,000) - and on this corpus's test split, with one set of scoring rules.
-credgate is the most precise of the four and 20-30 times faster than the
+credgate is the most precise of the four and 15-25 times faster than the
 tools that run a language model; it leads on IndiaPII-Bench (F1 95.9) and
-this corpus (98.0), and trails MaskFlow on Ylemis (59.0 against 79.6)
-because Ylemis's names and addresses mostly have no cue. Method, results
+this corpus (98.0), and trails MaskFlow on Ylemis (67.0 against 79.6)
+because Ylemis's names mostly have no cue. Method, results
 and caveats: [external/README.md](external/README.md).
 
 ### Corpus version 2 (2026-11-01)
@@ -539,11 +539,11 @@ PYTHONPATH=pkg/python/src presidio-env/bin/python benchmark/compare_presidio.py
 
 ## Next improvements
 
-1. Names and addresses without a cue: 17 names missed in this corpus, and
-   most of the public Ylemis dataset's (credgate finds 1.6% of its names and
-   26% of its addresses; see [external/](external/README.md)). Options: a
-   names list checked for coverage across regions, more cues ("bhai",
-   "sahab"), address shapes without a label.
+1. Names without a cue: 17 names missed in this corpus, and most of the
+   public Ylemis dataset's (credgate finds 1.6% of them; see
+   [external/](external/README.md)). Options: a names list with a clean
+   licence, checked for coverage across regions; more cues ("bhai",
+   "sahab"). (Addresses without a label: done, with India Post's city list.)
 2. Voter IDs without context: cues from record structure, beyond the
    column names `scan_pii` already uses.
 3. Vehicle registration numbers, which credgate does not detect yet.
