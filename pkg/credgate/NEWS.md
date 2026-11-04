@@ -1,5 +1,10 @@
 # credgate (development version)
 
+* `policy_apply()` with an `audit` log no longer records a request as
+  allowed when it then fails because the policy tokenises and no `vault`
+  was given: it fails first, and nothing is recorded, since nothing is
+  sent. Python had the same order and is fixed too.
+
 * A policy owns its custom detectors: `cg_policy()` compiles the files a
   policy names for that policy and no longer registers them for other calls
   (use `load_detectors()` for that), as in Python, so another revision

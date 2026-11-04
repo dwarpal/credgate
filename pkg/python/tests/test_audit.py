@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 import credgate
 
 POLICY = {
@@ -70,8 +72,6 @@ def test_empty_or_missing_log(tmp_path):
 # --- rotation and retention -----------------------------------------------------
 
 from datetime import UTC, datetime  # noqa: E402
-
-import pytest  # noqa: E402
 
 DECISION = credgate.Policy.from_dict(POLICY).decide([TEXT], "claude")
 
@@ -231,4 +231,25 @@ def test_the_logs_folder_is_created_if_it_does_not_exist(tmp_path):
     path = tmp_path / "logs" / "2026" / "audit.jsonl"
     credgate.AuditLog(path, rotate=True).record(DECISION)
     assert path.exists()
+    assert credgate.audit_verify(path).ok
+
+
+def test_a_request_that_cannot_be_applied_is_not_recorded(tmp_path):
+    """Tokenising without a vault raises before the record is written: the
+    request is never sent, so the log must not show it as allowed."""
+    tokenising = dict(POLICY, rules=[POLICY["rules"][0], {"id": "ids", "action": "tokenise"}])
+    policy = credgate.Policy.from_dict(tokenising)
+    path = tmp_path / "audit.jsonl"
+    log = credgate.AuditLog(path, actor="analyst1")
+    with pytest.raises(credgate.PolicyError, match="vault"):
+        policy.apply(["PAN ABCPE1234F"], "claude", audit=log)
+    assert not path.exists() or credgate.audit_read(path) == []
+
+    # a blocked request needs no vault and is still recorded
+    d = policy.apply([TEXT + ", CVV 123"], "claude", audit=log)
+    assert not d.allowed
+    # with a vault, the request is applied and recorded as allowed
+    policy.apply(["PAN ABCPE1234F"], "claude", vault=credgate.Vault(), audit=log)
+    records = credgate.audit_read(path)
+    assert [r["allowed"] for r in records] == [False, True]
     assert credgate.audit_verify(path).ok

@@ -261,7 +261,9 @@ parse_policy <- function(x, dir = getwd()) {
 #'   an error.
 #' @param vault A vault from [cg_vault()], needed when the policy tokenises.
 #' @param audit An audit log from [cg_audit_log()]: the decision is recorded,
-#'   blocked or not.
+#'   blocked or not. A request that cannot be applied (a policy that
+#'   tokenises, without a vault) fails before anything is recorded, since
+#'   nothing is sent.
 #' @return An object of class `cg_decision`: a list with `policy_id`,
 #'   `policy_revision`, `destination`, `tier`, `provider`, `url`, `allowed`,
 #'   `blocked_by` (`"destination-blocked"` and rule ids), `matches` (a data frame of the identifiers with their `action` and
@@ -309,15 +311,17 @@ policy_decide <- function(policy, text, destination) {
 #' @export
 policy_apply <- function(policy, text, destination, vault = NULL, audit = NULL) {
   decision <- policy_decide(policy, text, destination)
+  m <- decision$matches
+  # Checked before recording: a request that cannot be applied is never
+  # sent, so it must not appear in the audit log as allowed.
+  if (decision$allowed && is.null(vault) && any(m$action == "tokenise")) {
+    policy_fail("This policy tokenises; pass a vault to apply it.")
+  }
   if (!is.null(audit)) {
     audit_record(audit, decision)
   }
   if (!decision$allowed) {
     return(decision)
-  }
-  m <- decision$matches
-  if (is.null(vault) && any(m$action == "tokenise")) {
-    policy_fail("This policy tokenises; pass a vault to apply it.")
   }
   text <- from_arrow(text)$text
   docs <- ifelse(is.na(text), "", text)

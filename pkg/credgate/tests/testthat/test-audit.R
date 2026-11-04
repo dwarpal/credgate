@@ -146,3 +146,29 @@ test_that("the log's folder is created if it does not exist, as in Python", {
   expect_true(file.exists(path))
   expect_true(audit_verify(path)$ok)
 })
+
+test_that("a request that cannot be applied is not recorded", {
+  # Tokenising without a vault fails before the record is written: the
+  # request is never sent, so the log must not show it as allowed.
+  skip_if_not_installed("openssl")
+  policy <- cg_policy(list(
+    policy = "credgate-policy", version = 1L, id = "audit-test", revision = 2L,
+    destinations = list(claude = list(tier = "frontier", provider = "anthropic")),
+    rules = list(
+      list(id = "card-cvv", when = list(all_of = list("card", "card_cvv")), action = "block"),
+      list(id = "ids", action = "tokenise")
+    ),
+    default_action = "redact"
+  ))
+  path <- withr::local_tempfile(fileext = ".jsonl")
+  log <- cg_audit_log(path, actor = "analyst1")
+  expect_error(policy_apply(policy, "PAN ABCPE1234F", "claude", audit = log), "vault", class = "credgate_policy_error")
+  expect_false(file.exists(path) && length(readLines(path)) > 0)
+
+  # a blocked request needs no vault and is still recorded
+  expect_false(policy_apply(policy, paste0(text, ", CVV 123"), "claude", audit = log)$allowed)
+  # with a vault, the request is applied and recorded as allowed
+  policy_apply(policy, "PAN ABCPE1234F", "claude", vault = cg_vault(), audit = log)
+  expect_identical(audit_read(path)$allowed, c(FALSE, TRUE))
+  expect_true(audit_verify(path)$ok)
+})

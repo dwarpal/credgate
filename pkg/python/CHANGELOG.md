@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Audit log**: `Policy.apply()` with `audit=` no longer records a request
+  as allowed when it then raises because the policy tokenises and no
+  `vault` was given; it raises first and nothing is recorded, since nothing
+  is sent. The proxy always passes a vault and was not affected. R had the
+  same order and is fixed too.
+
 ## 0.9.0 (2026-11-03)
 
 Build, test and roll out policies from the policy editor: custom detectors,
