@@ -465,3 +465,24 @@ for (case in conformance("users.yaml")$cases) {
     expect_identical(users$settings, lapply(case$settings, as.integer))
   })
 }
+
+proxy_keys_spec <- conformance("proxy_keys.yaml")
+test_that("proxy key hashes", {
+  skip_if_not_installed("openssl")
+  for (case in proxy_keys_spec$hashes) {
+    expect_identical(credgate:::proxy_key_hash(case$key), case$hash)
+  }
+})
+for (case in proxy_keys_spec$files) {
+  test_that(paste("proxy keys file:", case$id), {
+    path <- withr::local_tempfile(fileext = ".json")
+    writeLines(jsonlite::toJSON(case$file, auto_unbox = TRUE), path)
+    if (isTRUE(case$invalid)) {
+      expect_error(proxy_users(path), class = "credgate_keys_error")
+      return(invisible())
+    }
+    got <- proxy_users(path, now = credgate:::key_time(case$now))
+    expect_identical(as.list(stats::setNames(got$status, got$name))[sort(names(case$users))],
+                     case$users[sort(names(case$users))])
+  })
+}

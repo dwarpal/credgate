@@ -312,3 +312,41 @@ test_that("roles decide what the editor lets people change", {
     expect_false(exists("can_edit", inherits = FALSE))
   })
 })
+
+test_that("everyone manages their own key, admins everyone's, and the access log records it", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  dir <- dirname(path)
+  users <- file.path(dir, "users.yaml")
+  keys <- file.path(dir, "keys.json")
+  yaml::write_yaml(list(
+    kind = "credgate-users", version = 1L, settings = list(key_max_days = 90L),
+    users = list(priya = list(role = "admin"), arjun = list(role = "user"))
+  ), users)
+
+  shiny::testServer(credgate:::policy_editor_server(path, user = "arjun", users = users, keys = keys), {
+    expect_identical(unname(durations()), c(30L, 90L))           # 6 months is above key_max_days
+    session$setInputs(my_days = "180", my_new_key = 1)
+    expect_false(file.exists(keys))                               # refused: over the limit
+    session$setInputs(my_days = "30", my_new_key = 2)
+    expect_identical(proxy_users(keys)$name, "arjun")
+    session$setInputs(user_pick = "priya", user_days = "30", user_new_key = 1)
+    expect_identical(proxy_users(keys)$name, "arjun")             # a user cannot make others' keys
+  })
+  first <- jsonlite::fromJSON(keys)$users$arjun$hash
+
+  shiny::testServer(credgate:::policy_editor_server(path, user = "priya", users = users, keys = keys), {
+    session$setInputs(user_pick = "arjun", user_days = "90", user_new_key = 1)   # rotate arjun's
+    session$setInputs(user_pick = "priya", user_days = "30", user_new_key = 2)   # create priya's
+    session$setInputs(user_pick = "arjun", user_remove_key = 1)
+  })
+  expect_identical(proxy_users(keys)$name, "priya")
+  log <- proxy_access(keys)
+  expect_true(attr(log, "intact"))
+  expect_identical(log$action, c("create", "rotate", "create", "remove"))
+  expect_identical(log$by, c("arjun", "priya", "priya", "priya"))
+  expect_false(any(grepl("cgk_|sha256", readLines(credgate:::proxy_access_path(keys)))))
+  expect_false(identical(first, jsonlite::fromJSON(keys)$users$priya$hash))
+})

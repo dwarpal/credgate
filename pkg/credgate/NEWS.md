@@ -1,5 +1,14 @@
 # credgate (development version)
 
+* Proxy keys from R and in the editor: `proxy_add_user()`,
+  `proxy_rotate_key()`, `proxy_remove_user()` and `proxy_users()` manage the
+  proxy's keys file as the Python package does (same format and hashes).
+  `policy_editor(..., keys = "keys.json")` adds **My key** (each person
+  makes, renews or deletes their own key, valid 1, 3 or 6 months up to the
+  users file's limit; shown once) and, for admins, **Users** (everyone's
+  role, access and key). Each change is recorded in a hash-chained access
+  log, read with `proxy_access()`.
+
 * Roles in the policy editor: `policy_editor(path, users = "users.yaml")`
   reads a users file (`cg_users()`) and shows each person what their role
   allows - admins change the policy, tests and detectors; auditors see

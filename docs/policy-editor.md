@@ -193,10 +193,23 @@ Names are the same as in the proxy's keys file, so a person's account and
 their proxy key match. With single sign-on, the file can be generated from
 directory groups (AD, LDAP) by a scheduled export.
 
+### Proxy keys in the editor
+
+Given the proxy's keys file, everyone manages **their own key** under **My
+key**: make one valid for 1, 3 or 6 months (up to the users file's
+`key_max_days`, 90 days unless changed), make a new one (the old one stops
+working), or delete it. The key is shown once, with a copy button; credgate
+keeps only its hash. Admins also manage **everyone's** keys under
+**Users**, which lists each person's role, access and key; auditors see
+the list read-only. Every key made, renewed or removed is recorded in a
+hash-chained **access log** beside the keys file (`keys.access.jsonl`), with
+who did it and until when the key is valid, never the key itself;
+`proxy_access("keys.json")` reads it in R.
+
 **Trying the roles locally**, without single sign-on, name the person:
 
 ```r
-credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml")
+credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml", keys = "keys.json")
 ```
 
 On a server, the signed-in user is used. Without a users file, everyone is
