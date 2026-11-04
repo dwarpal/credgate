@@ -350,3 +350,39 @@ test_that("everyone manages their own key, admins everyone's, and the access log
   expect_false(any(grepl("cgk_|sha256", readLines(credgate:::proxy_access_path(keys)))))
   expect_false(identical(first, jsonlite::fromJSON(keys)$users$priya$hash))
 })
+
+test_that("my activity shows only my own recent requests, within the limits", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("openssl")
+  path <- template()
+  dir <- dirname(path)
+  users <- file.path(dir, "users.yaml")
+  yaml::write_yaml(list(
+    kind = "credgate-users", version = 1L, settings = list(activity_days = 7L, activity_max = 2L),
+    users = list(arjun = list(role = "user"), priya = list(role = "admin"))
+  ), users)
+  audit <- file.path(dir, "audit.jsonl")
+  pol <- cg_policy(path)
+  rec <- function(actor, text, when) {
+    audit_record(cg_audit_log(audit, actor = actor, rotate = FALSE), policy_decide(pol, text, "claude"), time = when)
+  }
+  now <- Sys.time()
+  rec("arjun", "PAN ABCPE1234F", now - 20 * 86400)                       # too old
+  rec("arjun", "Card 4111 1111 1111 1111, CVV 123, expiry 08/29", now - 3600)
+  rec("priya", "PAN ABCPE1234F", now - 1800)                             # someone else
+  rec("arjun", "PAN ABCPE1234F", now - 600)
+  rec("arjun", "mobile 9876543210", now - 60)
+
+  a <- credgate:::own_activity(audit, "arjun", days = 7, max = 10)
+  expect_identical(nrow(a), 3L)                                   # not the 20-day-old one, not priya's
+  expect_identical(a$allowed, c(TRUE, TRUE, FALSE))               # newest first
+  expect_match(a$blocked_by[3], "card-with-cvv-and-expiry")
+
+  shiny::testServer(credgate:::policy_editor_server(path, user = "arjun", users = users, audit = audit), {
+    html <- as.character(output$my_activity$html)
+    expect_match(html, "at most 2 requests")
+    expect_identical(lengths(regmatches(html, gregexpr("<tr>", html))), 3L)  # header and 2 rows
+    expect_false(grepl("ABCPE1234F|9876543210", html))             # never content
+  })
+})

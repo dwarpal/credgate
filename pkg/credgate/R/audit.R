@@ -419,3 +419,27 @@ audit_manifest_problem <- function(anchor) {
   }
   NULL
 }
+
+# One person's recent proxy requests, newest first: at most `max` from the
+# last `days` days. Only the monthly files that can hold them are read.
+own_activity <- function(path, actor, days = 7L, max = 100L, now = Sys.time()) {
+  since <- now - days * 86400
+  segs <- audit_segments(path)
+  keep <- segs$path[segs$month >= format(since, "%Y-%m", tz = "UTC")]
+  files <- c(keep, if (file.exists(path)) path)
+  recs <- lapply(unlist(lapply(files, audit_lines)), jsonlite::fromJSON, simplifyVector = FALSE)
+  when <- function(t) as.POSIXct(substr(t, 1, 19), format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
+  recs <- Filter(function(r) identical(r$actor, actor) && when(r$time) >= since, recs)
+  recs <- utils::head(rev(recs), max)
+  data.frame(
+    time = vapply(recs, function(r) r$time, ""),
+    endpoint = vapply(recs, function(r) r$destination$name, ""),
+    allowed = vapply(recs, function(r) isTRUE(r$allowed), TRUE),
+    blocked_by = vapply(recs, function(r) paste(unlist(r$blocked_by), collapse = ", "), ""),
+    found = vapply(recs, function(r) {
+      a <- vapply(r$items %||% list(), function(i) i$action, "")
+      if (length(a)) paste(sprintf("%d %s", as.vector(table(a)), names(table(a))), collapse = ", ") else "nothing"
+    }, ""),
+    stringsAsFactors = FALSE
+  )
+}

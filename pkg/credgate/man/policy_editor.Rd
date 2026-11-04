@@ -4,7 +4,7 @@
 \alias{policy_editor}
 \title{Policy editor for InfoSec and compliance}
 \usage{
-policy_editor(path, user = NULL, users = NULL, keys = NULL)
+policy_editor(path, user = NULL, users = NULL, keys = NULL, audit = NULL)
 }
 \arguments{
 \item{path}{The policy file (YAML). A new file starts from the bank
@@ -24,6 +24,11 @@ inactive, has no access. Without a users file everyone is an admin.}
 manages their own key under \strong{My key} (1, 3 or 6 months, up to the
 users file's \code{key_max_days}), and admins manage everyone's under
 \strong{Users}; each change is recorded in the access log (\code{\link[=proxy_access]{proxy_access()}}).}
+
+\item{audit}{The proxy's audit log: under \strong{My activity} everyone sees
+their own recent requests (endpoint, time, allowed or blocked and why;
+never content), limited by the users file's \code{activity_days} and
+\code{activity_max} (7 days and 100 requests unless changed).}
 }
 \value{
 A Shiny app; printing it (or \code{\link[shiny:runApp]{shiny::runApp()}}) runs it.

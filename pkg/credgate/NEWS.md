@@ -1,5 +1,11 @@
 # credgate (development version)
 
+* **My activity** in the editor (`policy_editor(..., audit = "audit.jsonl")`):
+  everyone sees their own recent proxy requests - endpoint, allowed or
+  blocked and why, identifiers by action, never content - for the last 7
+  days and at most 100 requests (the users file's `activity_days` and
+  `activity_max`).
+
 * Proxy keys from R and in the editor: `proxy_add_user()`,
   `proxy_rotate_key()`, `proxy_remove_user()` and `proxy_users()` manage the
   proxy's keys file as the Python package does (same format and hashes).

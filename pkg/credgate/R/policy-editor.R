@@ -29,17 +29,24 @@
 #'   manages their own key under **My key** (1, 3 or 6 months, up to the
 #'   users file's `key_max_days`), and admins manage everyone's under
 #'   **Users**; each change is recorded in the access log ([proxy_access()]).
+#' @param audit The proxy's audit log: under **My activity** everyone sees
+#'   their own recent requests (endpoint, time, allowed or blocked and why;
+#'   never content), limited by the users file's `activity_days` and
+#'   `activity_max` (7 days and 100 requests unless changed).
 #' @return A Shiny app; printing it (or [shiny::runApp()]) runs it.
 #' @export
 #' @examples
 #' if (interactive()) {
 #'   policy_editor(file.path(tempdir(), "bank.yaml"))
 #' }
-policy_editor <- function(path, user = NULL, users = NULL, keys = NULL) {
+policy_editor <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL) {
   check_installed("shiny")
   check_installed("bslib")
-  stopifnot(rlang::is_string(path), is.null(users) || rlang::is_string(users), is.null(keys) || rlang::is_string(keys))
-  shiny::shinyApp(policy_editor_ui(path), policy_editor_server(path, user, users, keys), onStart = function() {
+  stopifnot(
+    rlang::is_string(path), is.null(users) || rlang::is_string(users),
+    is.null(keys) || rlang::is_string(keys), is.null(audit) || rlang::is_string(audit)
+  )
+  shiny::shinyApp(policy_editor_ui(path), policy_editor_server(path, user, users, keys, audit), onStart = function() {
     shiny::onStop(writable_temp_assets)
   })
 }
@@ -47,9 +54,9 @@ policy_editor <- function(path, user = NULL, users = NULL, keys = NULL) {
 # The tabs each role sees, and the role of a signed-in name (NULL: no
 # access). Without a users file everyone is an admin, as before roles.
 editor_tabs <- list(
-  admin = c("Endpoints", "Rules", "Try it", "Tests", "Detectors", "My key", "Users", "Changes"),
-  auditor = c("Endpoints", "Rules", "Tests", "My key", "Users", "Changes"),
-  user = c("Try it", "Tests", "Detectors", "My key", "Changes")
+  admin = c("Endpoints", "Rules", "Try it", "Tests", "Detectors", "My key", "My activity", "Users", "Changes"),
+  auditor = c("Endpoints", "Rules", "Tests", "My key", "My activity", "Users", "Changes"),
+  user = c("Try it", "Tests", "Detectors", "My key", "My activity", "Changes")
 )
 key_durations <- c("1 month" = 30L, "3 months" = 90L, "6 months" = 180L)
 
@@ -296,6 +303,11 @@ policy_editor_ui <- function(path) {
         shiny::uiOutput("my_key")
       ),
       bslib::nav_panel(
+        "My activity",
+        shiny::p(class = "cg-lede", "Your own recent requests through the proxy: where they went, and whether they were allowed or blocked and why. Never their content."),
+        shiny::uiOutput("my_activity")
+      ),
+      bslib::nav_panel(
         "Users",
         shiny::p(class = "cg-lede", "Everyone in the users file, their role, and their proxy key. Roles are changed on the server (credgate users ...); keys here."),
         shiny::uiOutput("users_table"),
@@ -325,7 +337,7 @@ policy_editor_ui <- function(path) {
 }
 
 
-policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL) {
+policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, audit = NULL) {
   function(input, output, session) {
     # Who is signed in, and what they may do. Changes to the policy, its tests
     # and detector files are refused here on the server, not only hidden.
@@ -1254,6 +1266,38 @@ policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL) {
       )))))
     })
 
+
+    output$my_activity <- shiny::renderUI({
+      if (is.null(audit)) {
+        return(shiny::div(class = "cg-empty", "No audit log is set up for this app."))
+      }
+      settings <- users_file()$settings
+      days <- settings$activity_days %||% 7L
+      most <- settings$activity_max %||% 100L
+      a <- tryCatch(own_activity(audit, me, days, most), error = function(e) NULL)
+      if (is.null(a)) {
+        return(shiny::div(class = "cg-alert", "The audit log could not be read."))
+      }
+      if (nrow(a) == 0) {
+        return(shiny::div(class = "cg-empty", sprintf("No requests from %s in the last %d days.", me, days)))
+      }
+      shiny::tagList(
+        shiny::p(class = "cg-hint", sprintf("The last %d days, at most %d requests, newest first.", days, most)),
+        shiny::div(class = "cg-scroll", shiny::tags$table(
+          class = "cg-table",
+          shiny::tags$thead(shiny::tags$tr(lapply(c("When", "Endpoint", "Result", "Identifiers"), shiny::tags$th))),
+          shiny::tags$tbody(lapply(seq_len(nrow(a)), function(i) shiny::tags$tr(
+            shiny::tags$td(class = "mono", sub("T", " ", substr(a$time[i], 1, 19))),
+            shiny::tags$td(a$endpoint[i]),
+            shiny::tags$td(
+              if (a$allowed[i]) cg_badge("allowed", "allow") else cg_badge("blocked", "block"),
+              if (!a$allowed[i]) shiny::div(class = "desc", a$blocked_by[i])
+            ),
+            shiny::tags$td(class = "desc", a$found[i])
+          )))
+        ))
+      )
+    })
 
     # --- changes and saving --------------------------------------------------------
     output$pending <- shiny::renderUI({

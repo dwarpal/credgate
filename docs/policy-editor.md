@@ -206,10 +206,21 @@ hash-chained **access log** beside the keys file (`keys.access.jsonl`), with
 who did it and until when the key is valid, never the key itself;
 `proxy_access("keys.json")` reads it in R.
 
+### My activity
+
+Given the proxy's audit log (`audit = "audit.jsonl"`), everyone sees **their
+own** recent requests under **My activity**: when, which endpoint, allowed
+or blocked and by which rule, and how many identifiers were redacted,
+tokenised or allowed - never the request's content, which the audit log
+does not hold. It shows the last 7 days and at most 100 requests (the users
+file's `activity_days` and `activity_max`), and reads only the monthly
+audit files that can hold them.
+
 **Trying the roles locally**, without single sign-on, name the person:
 
 ```r
-credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml", keys = "keys.json")
+credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml",
+                        keys = "keys.json", audit = "audit.jsonl")
 ```
 
 On a server, the signed-in user is used. Without a users file, everyone is
