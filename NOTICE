@@ -3,3 +3,10 @@ Copyright 2026 The CredGate Authors
 
 This product is licensed under the Apache License, Version 2.0 (see
 LICENSE). The CredGate Authors are listed in the AUTHORS file.
+
+This product includes data derived from the All India Pincode Directory,
+Department of Posts, Ministry of Communications, Government of India,
+published on the Open Government Data Platform India (data.gov.in) under
+the Government Open Data License - India
+(https://data.gov.in/government-open-data-license-india): the list of
+Indian districts and towns (`india_places`) in the detector definitions.

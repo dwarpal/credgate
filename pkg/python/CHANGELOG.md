@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Addresses without a label**: a house number, the locality, then a known
+  Indian city or district and a PIN code ("210 Hauz Khas, Ahmedabad
+  380015") is an address. The cities come from India Post's All India
+  Pincode Directory (Department of Posts, data.gov.in, Government Open Data
+  License - India): 1,194 district and head post office town names, built
+  by `tools/build_india_places.py`. Every word of the locality must start
+  with a capital or a digit, and the number must not follow a reference
+  word ("Ticket 4471 ..."), so sentences and reference numbers are not
+  taken for addresses. "Address" in Bengali, Tamil, Punjabi, Gujarati,
+  Marathi, Telugu and Kannada is now a label too. On the public Ylemis
+  dataset, address recall rises from 26% to 100% with no new false
+  positives; credgate's own benchmark is unchanged.
 - **Voter IDs in Indian languages**: "voter" and "elector" in Hindi,
   Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada and Punjabi now count
   as context, so "वोटर आईडी QMF1202883" scores 0.97 instead of 0.3.
