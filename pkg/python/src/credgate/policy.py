@@ -232,14 +232,20 @@ class Policy:
         """Decide, then rewrite the texts if the request is allowed: matches to
         redact become placeholders, matches to tokenise become tokens from
         ``vault``. A blocked request gets no texts. With ``audit`` (an
-        :class:`~credgate.AuditLog`), the decision is recorded, blocked or not."""
+        :class:`~credgate.AuditLog`), the decision is recorded, blocked or not;
+        a request that cannot be applied (no vault to tokenise with) raises
+        before anything is recorded, since nothing is sent."""
         decision = self.decide(text, destination)
+        if (
+            decision.allowed
+            and vault is None
+            and any(m.action == "tokenise" for m in decision.matches)
+        ):
+            raise PolicyError("This policy tokenises; pass a vault to apply it.")
         if audit is not None:
             audit.record(decision)
         if not decision.allowed:
             return decision
-        if vault is None and any(m.action == "tokenise" for m in decision.matches):
-            raise PolicyError("This policy tokenises; pass a vault to apply it.")
         out = list(_texts(text)[0])
         replacements = []
         for m in decision.matches:  # document, then position order: tokens numbered in order

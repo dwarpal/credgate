@@ -20,7 +20,9 @@ an error.}
 \item{vault}{A vault from \code{\link[=cg_vault]{cg_vault()}}, needed when the policy tokenises.}
 
 \item{audit}{An audit log from \code{\link[=cg_audit_log]{cg_audit_log()}}: the decision is recorded,
-blocked or not.}
+blocked or not. A request that cannot be applied (a policy that
+tokenises, without a vault) fails before anything is recorded, since
+nothing is sent.}
 }
 \value{
 An object of class \code{cg_decision}: a list with \code{policy_id},
