@@ -207,6 +207,10 @@ def _health(port):
 
 def _serve(tmp_path, policy, port, server_kind, *extra):
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+    # The proxy logs every request. To a pipe nobody reads, the log would fill
+    # its buffer during the health polling below and block the proxy (seen on
+    # slow CI runners); a file never fills.
+    log = tmp_path / "proxy.log"
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -227,8 +231,8 @@ def _serve(tmp_path, policy, port, server_kind, *extra):
             *extra,
         ],
         env=env,
-        stderr=subprocess.PIPE,
-        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=log.open("w"),
     )
     for _ in range(150):
         try:
@@ -237,7 +241,7 @@ def _serve(tmp_path, policy, port, server_kind, *extra):
         except OSError:
             time.sleep(0.1)
     proc.kill()
-    raise AssertionError(proc.stderr.read())
+    raise AssertionError(log.read_text())
 
 
 def _every_worker_reports(port, revision, timeout=20):
