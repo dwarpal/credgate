@@ -228,7 +228,7 @@ policy_editor_ui <- function(path) {
       ),
       bslib::nav_panel(
         "Try it",
-        shiny::p(class = "cg-lede", "What the draft policy (before saving) does with a request. Use synthetic data only."),
+        shiny::p(class = "cg-lede", "What the policy does with a request: allowed or blocked, and what happens to each identifier (for admins, the draft before saving). Nothing typed here is stored or logged."),
         bslib::layout_columns(
           shiny::div(
             shiny::textAreaInput(
@@ -383,6 +383,18 @@ policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, a
       for (control in c("test_add", "test_delete", "det_save", "user_new_key")) {
         shiny::removeUI(sprintf(".cg-actions:has(#%s)", control))
       }
+      shiny::removeUI(".form-group:has(#try_min_confidence)") # a policy setting
+    }
+    if (identical(role, "user")) {
+      # Users see their tabs only: not the policy's make-up (endpoints, rules,
+      # unsaved changes) nor the sidebar with the policy file and its status.
+      shiny::removeUI("#stats")
+      shiny::insertUI("head", "beforeEnd", shiny::tags$style(
+        ".bslib-sidebar-layout { grid-template-columns: 1fr !important; }"
+      ), immediate = TRUE)
+      shiny::removeUI(".bslib-sidebar-layout > aside.sidebar")
+      shiny::removeUI(".bslib-sidebar-layout > .collapse-toggle")
+      shiny::removeUI(".bslib-sidebar-layout > .bslib-sidebar-resize-handle")
     }
     for (tab in setdiff(editor_tabs$admin, editor_tabs[[role]])) {
       bslib::nav_remove("tabs", tab, session = session)
@@ -471,7 +483,14 @@ policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, a
       }
     })
     output$header_status <- shiny::renderUI({
+      signed <- if (!is.null(users)) {
+        shiny::span(class = "cg-signed", cg_badge(sprintf("%s \u00b7 %s", signed_in, role), "neutral", title = "Signed in"))
+      }
+      if (identical(role, "user")) {
+        return(signed)
+      }
       shiny::tagList(
+        signed,
         cg_badge(policy()$id %||% "(no id)", "neutral"),
         cg_badge(sprintf("revision %s", saved()$revision), "neutral"),
         if (is.data.frame(test_results())) {
@@ -1141,12 +1160,12 @@ policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, a
       shiny::showModal(shiny::modalDialog(
         title = title, easyClose = FALSE,
         shiny::p(sprintf("The key for %s. Copy it now: it is not shown again, and credgate keeps only a hash of it.", for_whom)),
-        shiny::tags$pre(class = "cg-out", id = "cg-new-key", key),
-        footer = shiny::tagList(
-          shiny::tags$button(type = "button", class = "btn btn-outline-primary",
-                             onclick = "navigator.clipboard.writeText(document.getElementById('cg-new-key').innerText)", "Copy"),
-          shiny::modalButton("Done")
-        )
+        shiny::div(
+          class = "cg-key-row",
+          shiny::tags$code(class = "cg-key", id = "cg-new-key", key),
+          shiny::tags$button(type = "button", class = "btn btn-primary btn-sm", onclick = "cgCopyKey(this)", "Copy")
+        ),
+        footer = shiny::modalButton("Done")
       ))
     }
     key_row <- function(name) {
@@ -1170,7 +1189,9 @@ policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, a
         },
         shiny::div(
           class = "cg-actions cg-field-row",
-          shiny::selectInput("my_days", "Valid for", durations(), selected = max(durations())),
+          # A plain select: in UI made on the fly, selectize's scripts would be
+          # copied again from a read-only library and fail (Nix, locked libraries).
+          shiny::selectInput("my_days", "Valid for", durations(), selected = max(durations()), selectize = FALSE),
           shiny::actionButton("my_new_key", if (has_key) "New key (the old one stops working)" else "Make my key", class = "btn-primary btn-sm"),
           if (has_key) shiny::actionButton("my_remove_key", "Delete my key", class = "btn-outline-danger btn-sm")
         )
@@ -1533,8 +1554,8 @@ badge_help <- c(
   blocked = "Every request to this endpoint is refused"
 )
 
-cg_badge <- function(text, kind) {
-  help <- if (kind %in% names(badge_help)) badge_help[[kind]]
+cg_badge <- function(text, kind, title = NULL) {
+  help <- title %||% if (kind %in% names(badge_help)) badge_help[[kind]]
   shiny::span(class = paste0("cg-badge cg-", kind), title = help, text)
 }
 
