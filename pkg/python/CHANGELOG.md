@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Voter IDs in Indian languages**: "voter" and "elector" in Hindi,
+  Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada and Punjabi now count
+  as context, so "वोटर आईडी QMF1202883" scores 0.97 instead of 0.3.
+- **"Contact Number:" marks a phone**: a mobile number written with the
+  leading 0 under "Contact Number:" was reported as a bank account when an
+  IFSC was on the line before; "contact" and "संपर्क" now count against a
+  bank account, as other phone words do. Both found by running the
+  Ylemis India-PII and IndiaPII-Bench datasets; credgate's own benchmark
+  tables are unchanged.
 - **Audit log**: `Policy.apply()` with `audit=` no longer records a request
   as allowed when it then raises because the policy tokenises and no
   `vault` was given; it raises first and nothing is recorded, since nothing

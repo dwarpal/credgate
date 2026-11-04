@@ -1,5 +1,11 @@
 # credgate (development version)
 
+* Voter IDs are recognised with "voter" or "elector" written in Hindi,
+  Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada or Punjabi, and a
+  mobile number under "Contact Number:" is no longer taken for a bank
+  account when an IFSC is nearby (shared detector definitions, so Python
+  changes too).
+
 * `policy_apply()` with an `audit` log no longer records a request as
   allowed when it then fails because the policy tokenises and no `vault`
   was given: it fails first, and nothing is recorded, since nothing is
