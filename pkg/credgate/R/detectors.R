@@ -173,11 +173,11 @@ cg_detectors <- function() {
 #' @export
 #' @examples
 #' register_detector(new_detector(
-#'   id = "employee_id", class = "internal", label = "Employee ID",
-#'   pattern = bounded("EMP[0-9]{6}")
-#' ))
+#'   id = "branch_code", class = "internal", label = "Branch code",
+#'   pattern = bounded("BR[0-9]{4}")
+#' ), overwrite = TRUE)
 #' reset_detectors()
-#' "employee_id" %in% cg_detectors()$id
+#' "branch_code" %in% cg_detectors()$id
 reset_detectors <- function() {
   load_spec()
   invisible(NULL)

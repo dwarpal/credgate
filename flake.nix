@@ -143,7 +143,8 @@
           ci-deps = pkgs.linkFarmFromDrvs "credgate-ci-deps" (
             (with pkgs.rPackages; [ testthat withr sodium openssl shiny bslib ])
             ++ (with pkgs.python311Packages; [ hatchling regex pyyaml pytest uvicorn httptools ])
-            ++ [ (shinyNoTests pkgs.python311Packages) ]
+            # Shiny for Python where nixpkgs can build it (not 3.11: Sphinx).
+            ++ builtins.filter (p: (builtins.tryEval p.drvPath).success) [ (shinyNoTests pkgs.python3Packages) ]
           );
 
           docs = pkgs.runCommand "credgate-docs" {

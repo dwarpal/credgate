@@ -45,6 +45,7 @@ nav:
       - Custom detectors: custom-detectors.md
       - Large data: large-data.md
       - Threat model: threat-model.md
+  - R and Python: r-and-python.md
   - Specification: spec.md
   - Blog:
       - blog/index.md

@@ -9,7 +9,8 @@ under the DPDP Act 2023 and RBI, SEBI and IRDAI expectations, including
 fully air-gapped setups.
 
 It ships as an R package and a Python package (with a CLI) that read the same
-detection rules, so both languages find exactly the same matches.
+detection rules, so both languages find exactly the same matches. How the
+two compare, name for name: [R and Python](https://dwarpal.github.io/credgate/r-and-python/).
 
 **Documentation:** <https://dwarpal.github.io/credgate/> - the Python API,
 the [R package site](https://dwarpal.github.io/credgate/r/), guides and the
