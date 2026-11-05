@@ -31,6 +31,9 @@
   the result may be larger than memory; with one connection the chunks wait
   in temporary files and are written in one transaction, with a second
   (`to_connection`) each is written as it is read.
+- The proxy on uvicorn no longer loads uvicorn's WebSocket support, which
+  the model APIs do not use (and which raised deprecation warnings from the
+  `websockets` library).
 - `Policy.from_dict()` takes `base`, the folder its custom detector files
   are found in; `Policy.detectors` gives the detectors a policy runs.
   `policy_tests.write_policy_tests()` and `test_from_decision()` save a
