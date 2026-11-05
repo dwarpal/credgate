@@ -394,7 +394,29 @@ current_mask <- function() {
   mode
 }
 
+#' Mask a value for display
+#'
+#' Replaces letters and digits with `X`, keeping the last 4 characters (2 for
+#' values shorter than 8) - the same convention as UIDAI's masked Aadhaar.
+#' Values of the `personal` class (names, addresses) and the `sensitive_auth`
+#' class (card verification codes) keep nothing, and neither does any value
+#' when the mask mode is `"full"`: set `options(credgate.mask = "full")` or
+#' the environment variable `CREDGATE_MASK=full`. credgate masks every value
+#' it shows this way.
+#'
+#' @param x Character vector of values.
+#' @param class Their data class (one, or one per value), or `NULL`.
+#' @param mode `"partial"` or `"full"`; by default the option or environment
+#'   variable, else `"partial"`.
+#' @return The masked values.
+#' @export
+#' @examples
+#' mask_value("2345 6789 0124")
+#' mask_value("Lakshmi Verma", class = "personal")
 mask_value <- function(x, class = NULL, mode = current_mask()) {
+  if (!rlang::is_string(mode) || !mode %in% mask_modes) {
+    rlang::abort('`mode` must be "partial" or "full".')
+  }
   n <- nchar(x)
   keep <- ifelse(n >= 8, 4L, 2L)
   if (!is.null(class)) keep[class %in% full_mask_classes] <- 0L

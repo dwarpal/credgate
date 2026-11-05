@@ -39,9 +39,11 @@ reference:
       - detect_pii
       - scan_pii
       - preview
+      - mask_value
       - cg_detectors
       - new_detector
       - register_detector
+      - reset_detectors
       - load_detectors
       - bounded
       - cg_normalise

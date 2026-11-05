@@ -164,6 +164,25 @@ cg_detectors <- function() {
   )
 }
 
+#' Restore the built-in detectors
+#'
+#' Removes every detector added with [register_detector()] or
+#' [load_detectors()], leaving the built-in ones.
+#'
+#' @return `NULL`, invisibly.
+#' @export
+#' @examples
+#' register_detector(new_detector(
+#'   id = "employee_id", class = "internal", label = "Employee ID",
+#'   pattern = bounded("EMP[0-9]{6}")
+#' ))
+#' reset_detectors()
+#' "employee_id" %in% cg_detectors()$id
+reset_detectors <- function() {
+  load_spec()
+  invisible(NULL)
+}
+
 get_detectors <- function(ids = NULL) {
   if (is.null(ids)) {
     return(the$detectors)

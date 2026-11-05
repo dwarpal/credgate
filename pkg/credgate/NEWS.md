@@ -6,6 +6,10 @@
   near-miss explanations behind Try it's "Not reported" are now in the
   shared spec, with conformance cases that R and Python both pass.
 
+* `reset_detectors()` removes detectors added with `register_detector()`
+  or `load_detectors()`; `luhn_check_digit()` and `mask_value()` are
+  exported. All three were in the Python package already.
+
 * R CMD check passes on Windows: the keys-file test no longer checks Unix
   file modes there, and the editor's access log uses an escape for its
   middle dot (CRAN's non-ASCII check).

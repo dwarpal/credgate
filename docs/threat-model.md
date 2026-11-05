@@ -214,7 +214,7 @@ from the tagged source.
 ### Large-data paths
 
 Parquet and database redaction write new files and tables: their access
-control is the organisation's. `redact_query()` with one connection holds
+control is the organisation's. `redact_query()` (R and Python) with one connection holds
 redacted chunks in temporary files (removed afterwards) - redacted data,
 but still written to local disk. Numbered tokens are not offered inside
 parallel engines (Polars, DuckDB) because results would depend on

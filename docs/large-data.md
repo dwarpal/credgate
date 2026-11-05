@@ -26,8 +26,8 @@ synthetic data; runnable versions are in [`examples/`](https://github.com/dwarpa
 | Polars | `pl.col("notes").credgate.redact()` | - | - |
 | Arrow tables, datasets | `credgate.arrow`, `scan_pii(dataset)` | `scan_pii(arrow::open_dataset(...))` | - |
 | Parquet larger than memory | `credgate.arrow.redact_parquet()` | `redact_parquet()` | `credgate redact --parquet` |
-| DuckDB | SQL: `cg_redact(notes)`, `cg_has_pii(notes)` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` | - |
-| Other databases (DBI) | - | `redact_query()`, `scan_pii()` on dbplyr tables | - |
+| DuckDB | SQL: `cg_redact(notes)`, `cg_has_pii(notes)`; `credgate.database.redact_query()` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` | - |
+| Other databases | `credgate.database.redact_query()` (SQLAlchemy) | `redact_query()` (DBI), `scan_pii()` on dbplyr tables | - |
 | Whole databases (inventory) | `credgate.database.inventory_database()` | `inventory_database()` | - |
 | BigQuery (scan, inventory) | `credgate.bigquery` | `bq_scan_pii()`, `bq_pii_inventory()` | - |
 | Spark (scan, inventory) | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) | - |
@@ -107,6 +107,17 @@ cannot write on a connection while a query is open on it, so with one
 connection `redact_query()` keeps redacted chunks in temporary files until
 the query has been read and then writes them in one transaction; give it a
 second connection (`to_con`) to write as it reads.
+
+In Python, `credgate.database.redact_query()` does the same on any database
+SQLAlchemy reaches (with a second connection: `to_connection`):
+
+```python
+import sqlalchemy
+from credgate.database import redact_query
+
+engine = sqlalchemy.create_engine("postgresql+psycopg://writer@db.internal/lending")
+redact_query(engine, "SELECT id, notes FROM loan_notes", "loan_notes_safe")
+```
 
 The vignette `vignette("large-data", package = "credgate")` walks through
 both. Examples: [`arrow_parquet.R`](https://github.com/dwarpal/credgate/blob/main/examples/r/arrow_parquet.R),

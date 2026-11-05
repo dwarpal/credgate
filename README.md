@@ -342,7 +342,7 @@ command line:
 | DuckDB | SQL: `SELECT cg_redact(notes) FROM 'calls.parquet'` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` |
 | Polars | `pl.col("notes").credgate.redact()` | - |
 | Arrow, pandas | Series, arrays, tables, datasets | arrays, tables, datasets |
-| Other databases | - | any DBI database via dbplyr |
+| Other databases | any SQLAlchemy database: `credgate.database.redact_query()` | any DBI database: `redact_query()`, dbplyr |
 | Spark | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) |
 | BigQuery | `credgate.bigquery.pii_inventory()`, `inventory_dataset()` | `bq_pii_inventory()`, `bq_inventory_dataset()` |
 | Whole databases | `credgate.database.inventory_database()` (SQLAlchemy) | `inventory_database()` (DBI) |

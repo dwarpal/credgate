@@ -26,6 +26,11 @@
   rotated or removed a proxy key, hash-chained beside the keys file, as the
   R editor writes it; now in the spec. `audit.own_activity()` lists one
   person's recent requests (never content).
+- **Redacting a query into a table** (`credgate.database.redact_query()`),
+  as R's `redact_query()`: any database SQLAlchemy reaches, in chunks, so
+  the result may be larger than memory; with one connection the chunks wait
+  in temporary files and are written in one transaction, with a second
+  (`to_connection`) each is written as it is read.
 - `Policy.from_dict()` takes `base`, the folder its custom detector files
   are found in; `Policy.detectors` gives the detectors a policy runs.
   `policy_tests.write_policy_tests()` and `test_from_decision()` save a

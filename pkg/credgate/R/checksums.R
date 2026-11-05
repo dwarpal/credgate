@@ -114,6 +114,14 @@ luhn_sum <- function(digits, with_check) {
   total
 }
 
+#' The Luhn check digit for the digits before it
+#'
+#' @inheritParams verhoeff_valid
+#' @return The check digit, as a string, for each value.
+#' @rdname luhn_valid
+#' @export
+#' @examples
+#' luhn_check_digit("411111111111111") # "1"
 luhn_check_digit <- function(x) {
   as.character((10L - luhn_sum(x, with_check = FALSE) %% 10L) %% 10L)
 }
