@@ -39,6 +39,8 @@ body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
 mark { background: var(--warn-soft); color: var(--ink); border-radius: 4px; padding: 0 2px; outline: 1px solid var(--warn); }
 mark.ctx { background: var(--ok-soft); outline-color: var(--ok); }
 mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
+.inv { display: inline-block; font: 600 10px/1.6 ui-monospace, Menlo, monospace; padding: 0 4px; margin: 0 1px; vertical-align: middle;
+  border-radius: 4px; color: var(--bad); background: var(--bad-soft); border: 1px dashed var(--bad); }
 .pipeline { list-style: none; padding: 0; margin: 14px 0 0; counter-reset: step; }
 .pipeline li { position: relative; padding: 10px 12px 10px 44px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
 .pipeline li::before { counter-increment: step; content: counter(step); position: absolute; left: 12px; top: 10px; width: 22px; height: 22px; border-radius: 50%;
@@ -118,6 +120,15 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
   function li(cls, head, desc, extra) {
     return '<li class="' + (cls || "") + '"><div class="h">' + head + '</div><div class="d">' + desc + "</div>" + (extra || "") + "</li>";
   }
+  // Invisible characters, made visible: they are what the example is about.
+  var INVISIBLE = /[\u200b\u200c\u200d\u2060\ufeff\u00ad]/g;
+  var SHORT = {"\u200b": "ZWSP", "\u200c": "ZWNJ", "\u200d": "ZWJ", "\u2060": "WJ", "\ufeff": "BOM", "\u00ad": "SHY"};
+  var show = function (html) {
+    return html.replace(INVISIBLE, function (c) {
+      var code = "U+" + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0");
+      return '<span class="inv" title="An invisible character (' + code + ')">' + SHORT[c] + "</span>";
+    });
+  };
   var cap = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); };
   var article = function (label) { return (/^[AEIOU]/.test(label) ? "an " : "a ") + esc(label); };
   // Where a starting confidence comes from, in words.
@@ -144,7 +155,7 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
     var cand = m || miss;
     var word = m ? (m.context || m.negative) : (miss ? miss.keyword : null);
     var cls = (m && m.context) || (!m && miss && miss.keyword) ? "ctx" : "neg";
-    var html = '<div class="text"><span class="label">Text</span>' + (cand ? marks(e.text, cand.start, cand.end, word, cls) : esc(e.text)) + "</div>";
+    var html = '<div class="text"><span class="label">Text</span>' + show(cand ? marks(e.text, cand.start, cand.end, word, cls) : esc(e.text)) + "</div>";
     if (e.changed) {
       html += '<div class="text mono"><span class="label">What the detectors read (normalised)</span>' + esc(e.normalised) + "</div>";
     }
@@ -152,12 +163,18 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
 
     var steps = "";
     if (e.changed) {
-      steps += li("", "Normalised", "Indic and full-width digits become 0-9, and invisible characters are set aside, so <span class=\"mono\">" + esc(e.text) + "</span> is read as <span class=\"mono\">" + esc(e.normalised) + "</span>. Offsets still point at the original text.");
+      var what = [];
+      if (e.digits) what.push(esc(e.digits) + " digits become 0-9");
+      e.hidden.forEach(function (h) {
+        what.push("an invisible <strong>" + esc(h.name) + "</strong> (" + h.code + ") is removed: it does not show on screen, but would split the value so a pattern no longer matches it whole");
+      });
+      steps += li("", "Normalised", cap(what.join("; ")) + ". So <span class=\"mono\">" + show(esc(e.text)) + "</span> is read as <span class=\"mono\">" + esc(e.normalised) +
+        "</span>; what is reported still points at the original text.");
     }
     if (!cand) {
       steps += li("skip", "No candidate", "Nothing in the text looks like an identifier.");
     } else {
-      steps += li("", "Pattern matched: " + esc(cand.label), "A candidate of the right shape, not inside a longer word or number: <span class=\"mono\">" + esc(cand.value) + "</span>.");
+      steps += li("", "Pattern matched: " + esc(cand.label), "A candidate of the right shape, not inside a longer word or number: <span class=\"mono\">" + show(esc(cand.value)) + "</span>.");
       if (miss && /fails the check/.test(miss.why)) {
         var method = miss.fix ? miss.fix.method : miss.why.replace(/^fails the check: /, "");
         var why = miss.fix

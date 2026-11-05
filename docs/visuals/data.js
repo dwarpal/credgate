@@ -357,6 +357,8 @@ window.CG_DATA = {
     "text": "Aadhaar 2345 6789 0124",
     "normalised": "Aadhaar 2345 6789 0124",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "aadhaar",
@@ -387,6 +389,8 @@ window.CG_DATA = {
     "text": "Noted 2345 6789 0124 on file",
     "normalised": "Noted 2345 6789 0124 on file",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "aadhaar",
@@ -416,6 +420,8 @@ window.CG_DATA = {
     "text": "order no 234567890124",
     "normalised": "order no 234567890124",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "aadhaar",
@@ -446,6 +452,8 @@ window.CG_DATA = {
     "text": "Aadhaar 2345 6789 0125",
     "normalised": "Aadhaar 2345 6789 0125",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [],
     "misses": [
      {
@@ -470,6 +478,8 @@ window.CG_DATA = {
     "text": "आधार २३४५ ६७८९ ०१२४",
     "normalised": "आधार 2345 6789 0124",
     "changed": true,
+    "hidden": [],
+    "digits": "Devanagari",
     "matches": [
      {
       "type": "aadhaar",
@@ -500,6 +510,14 @@ window.CG_DATA = {
     "text": "PAN ABC​PE1234F",
     "normalised": "PAN ABCPE1234F",
     "changed": true,
+    "hidden": [
+     {
+      "index": 7,
+      "code": "U+200B",
+      "name": "zero width space"
+     }
+    ],
+    "digits": null,
     "matches": [
      {
       "type": "pan",
@@ -530,6 +548,8 @@ window.CG_DATA = {
     "text": "mobile 9876543210",
     "normalised": "mobile 9876543210",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "mobile_in",
@@ -568,6 +588,8 @@ window.CG_DATA = {
     "text": "call 9876543210 tomorrow",
     "normalised": "call 9876543210 tomorrow",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "mobile_in",
@@ -605,6 +627,8 @@ window.CG_DATA = {
     "text": "Customer +91 98765 43210",
     "normalised": "Customer +91 98765 43210",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "mobile_in",
@@ -642,6 +666,8 @@ window.CG_DATA = {
     "text": "a/c 123456789012",
     "normalised": "a/c 123456789012",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "bank_account",
@@ -671,6 +697,8 @@ window.CG_DATA = {
     "text": "ref 123456789012",
     "normalised": "ref 123456789012",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [],
     "misses": [
      {
@@ -690,6 +718,8 @@ window.CG_DATA = {
     "text": "voter ID QMF1202883",
     "normalised": "voter ID QMF1202883",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "voter_epic",
@@ -719,6 +749,8 @@ window.CG_DATA = {
     "text": "batch QMF1202883",
     "normalised": "batch QMF1202883",
     "changed": false,
+    "hidden": [],
+    "digits": null,
     "matches": [
      {
       "type": "voter_epic",

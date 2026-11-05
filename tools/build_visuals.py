@@ -223,6 +223,8 @@ def scoring_examples() -> list[dict]:
                 "text": text,
                 "normalised": norm.text,
                 "changed": norm.text != text,
+                "hidden": _hidden(text),
+                "digits": _indic_digits(text),
                 "matches": found,
                 "misses": [
                     {
@@ -285,6 +287,31 @@ def _base_source(spec, det, span, ctx, norm) -> dict:
         "rules": rules,
         "applied": applied,
     }
+
+
+# Characters normalising removes (spec/engine.yaml, normalisation.remove).
+REMOVED = set(engine()["remove"])
+
+
+def _hidden(text: str) -> list[dict]:
+    """The invisible characters in a text, which normalising removes."""
+    import unicodedata
+
+    return [
+        {"index": i, "code": f"U+{ord(c):04X}", "name": unicodedata.name(c, "unknown").lower()}
+        for i, c in enumerate(text)
+        if ord(c) in REMOVED
+    ]
+
+
+def _indic_digits(text: str) -> str | None:
+    """The script of non-ASCII digits in a text (normalising makes them 0-9)."""
+    import unicodedata
+
+    for c in text:
+        if c.isdigit() and not c.isascii():
+            return unicodedata.name(c).split(" DIGIT")[0].title()
+    return None
 
 
 def _keyword(det, text, miss) -> str | None:
