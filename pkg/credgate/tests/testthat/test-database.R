@@ -70,7 +70,7 @@ test_that("DuckDB: sampled in the database", {
 test_that("Postgres: block sampling, row estimates, BIGINT kept whole", {
   skip_if_not_installed("RPostgres")
   skip_if(!nzchar(Sys.getenv("PGHOST")), "no Postgres server (PGHOST)")
-  con <- DBI::dbConnect(RPostgres::Postgres())
+  con <- DBI::dbConnect(postgres())
   withr::defer(DBI::dbDisconnect(con))
   DBI::dbExecute(con, "DROP SCHEMA IF EXISTS cg_inv CASCADE")
   DBI::dbExecute(con, "CREATE SCHEMA cg_inv")

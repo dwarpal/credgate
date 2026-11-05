@@ -81,7 +81,9 @@ proxy's workers - can share one.
 policy <- cg_policy(list(
   policy = "credgate-policy", version = 1L, id = "example", revision = 1L,
   destinations = list(claude = list(tier = "frontier", provider = "anthropic")),
-  rules = list(list(id = "no-ids", action = "redact", when = list(classes = list("identity_strong")))),
+  rules = list(list(
+    id = "no-ids", action = "redact", when = list(classes = list("identity_strong"))
+  )),
   default_action = "redact"
 ))
 path <- tempfile(fileext = ".jsonl")
