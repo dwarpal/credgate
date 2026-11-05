@@ -58,8 +58,8 @@ for (driver in c("RSQLite", "duckdb", "RPostgres")) {
       # A server named by the standard PG* environment variables (the Nix
       # integration build starts one; see flake.nix).
       skip_if(!nzchar(Sys.getenv("PGHOST")), "no Postgres server (set PGHOST)")
-      con <- DBI::dbConnect(RPostgres::Postgres())
-      writer <- DBI::dbConnect(RPostgres::Postgres())
+      con <- DBI::dbConnect(postgres())
+      writer <- DBI::dbConnect(postgres())
       for (table in c("t", "calls", "calls_safe", "empty_safe", "big", "one_con")) {
         DBI::dbExecute(con, paste("DROP TABLE IF EXISTS", table))
       }

@@ -201,7 +201,11 @@ def test_blocked_requests_never_leave(proxy, tmp_path):
     records = credgate.audit_read(tmp_path / "audit.jsonl")
     assert [r["allowed"] for r in records] == [False, False]
     assert credgate.audit_verify(tmp_path / "audit.jsonl").ok
-    assert "4111" not in (tmp_path / "audit.jsonl").read_text()
+    # The card number itself, not "4111" alone: the records' hex hashes can
+    # contain those four characters by chance.
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert "4111 1111" not in audit
+    assert "4111111111111111" not in audit
 
 
 def test_every_request_is_audited_without_values(proxy, tmp_path):

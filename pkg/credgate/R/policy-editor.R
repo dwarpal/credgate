@@ -1306,7 +1306,7 @@ policy_editor_server <- function(path, user = NULL, users = NULL, keys = NULL, a
       }
       a <- a[rev(seq_len(nrow(a))), ]
       shiny::tagList(alert, shiny::tags$ul(class = "cg-diff", lapply(seq_len(nrow(a)), function(i) shiny::tags$li(sprintf(
-        "%s · %s: %s key for %s%s", sub("T", " ", sub("Z$", "", a$time[i])), a$by[i], a$action[i], a$user[i],
+        "%s \u00b7 %s: %s key for %s%s", sub("T", " ", sub("Z$", "", a$time[i])), a$by[i], a$action[i], a$user[i],
         if (is.na(a$expires[i])) "" else paste0(", valid until ", substr(a$expires[i], 1, 10))
       )))))
     })

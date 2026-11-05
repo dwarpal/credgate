@@ -1,0 +1,4 @@
+# Text files are checked out with LF line endings on every platform, so
+# files compared byte for byte (the spec's conformance files) match on
+# Windows too.
+* text=auto eol=lf
