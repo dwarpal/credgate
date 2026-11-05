@@ -521,10 +521,12 @@ in [SECURITY.md](SECURITY.md), rather than in a public issue.
 
 ## Known limits
 
-- In running text, names and addresses are found only next to a cue: an
-  honorific (Shri, Smt, श्रीमती, or "ji" after the name), a relation (S/o,
-  D/o), a field label (`Name:`, `पता:`) or a house/village keyword followed
-  by a PIN code. A deity addressed with "ji" ("Ram ji") is taken as a name.
+- In running text, names are found only next to a cue: an honorific (Shri,
+  Smt, श्रीमती, or "ji" after the name), a relation (S/o, D/o) or a field
+  label (`Name:`, `नाम:`). Addresses are found after a label, after a house
+  or village keyword, or in the usual shape - house number, locality, a
+  known Indian city or district, PIN code. A deity addressed with "ji" ("Ram
+  ji") is taken as a name.
   Where you know a column or value holds names or addresses, say so - a
   column named for them, or `context = "customer name"` - and every value is
   read as one. For names in notes with other cues ("Lakshmi Verma called"),
