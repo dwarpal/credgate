@@ -104,6 +104,30 @@ Conformance compares `type`, `value`, and when given `confidence`,
 (substring). Implementations may expose positions in their own convention
 (R uses 1-based inclusive).
 
+### Explaining a result (near misses)
+
+To explain why something was **not** reported (the policy editor's Try it,
+"Not reported"), implementations can return, besides the matches, the
+candidates that were dropped and why:
+
+- a candidate that fails its check: `fails the check: <check>`, where
+  `<check>` is the detector's checks text without a final ` valid`
+  (`Luhn checksum and card network prefix`), or `validation`;
+- a candidate of a type that needs a keyword, without one: `needs a keyword
+  such as '<word>' within <window> characters`, where `<word>` is the first
+  alternative of the context pattern without regex syntax (`\b`, groups,
+  `?^$\`, and character classes with their quantifier removed);
+- a candidate that lost to a more confident overlapping match: `a more
+  confident match overlaps it`;
+- a match below the minimum confidence: `confidence <c> is below the
+  minimum <m>`, numbers written with up to 7 significant digits (`0.65`,
+  `0.7`).
+
+A candidate that overlaps a reported match is explained by it and not
+listed; each (document, start, end, type) is listed once; the list is
+ordered by document and start. Conformance cases are in
+`conformance/explain.yaml`.
+
 ## Detector fields
 
 | Field | Required | Meaning |
@@ -699,6 +723,61 @@ problem per expectation that does not hold (for example
 `allowed: expected false, got true`, or `pan: expected tokenise, got
 redact`). An invalid file is an error, and runs no test.
 
+### Policy files and change log
+
+A policy saved by a credgate tool (the policy editors in R and Python) is
+written in one fixed layout, so either editor can work on a file the other
+saved, and its change log can be checked by either.
+
+**Saving** validates the policy as the proxy does (an invalid policy is not
+written), raises `revision` by one from the saved file's revision (or from
+the policy's own when there is no file yet), writes the file whole (a
+temporary file, then rename), and appends a record to the change log.
+
+**Layout**, top to bottom, each line ending in `\n`:
+`policy: credgate-policy`, `version: 1`, `id`, `revision`, `description`
+(if not empty), `detectors` (if any, a flow list); a blank line and
+`destinations:` with each endpoint (`  <name>:`, then `tier`, and
+`provider`, `url`, `description` if not empty, and `blocked: true` if
+blocked); a blank line and `min_confidence` if set; a blank line and
+`rules:` with each rule (`  - id:`, `description` if not empty, `when:` with
+`destinations`, `tiers`, `types`, `classes`, `all_of` in that order as flow
+lists, `action`), or `rules: []`; a blank line, `default_action`, and a
+final blank line. A string is written as is when it matches
+`[A-Za-z0-9_][A-Za-z0-9_./:-]*` and is not `true`, `false`, `yes`, `no`,
+`null`, `on` or `off` (in any case), and otherwise as a JSON string (a
+valid YAML double-quoted scalar). Numbers have up to 7 significant digits.
+Comments are not kept.
+
+**Changes** (what the change log records, and what the editors show before
+saving), one line each, in this order:
+
+- `<field>: <old> -> <new>` for `id`, `description`, `default_action` and
+  `min_confidence`;
+- `detectors: <old files> -> <new files>` (comma-separated, or `none`);
+- `endpoint <name> added (<tier>)`, then `endpoint <name> removed`, then
+  `endpoint <name>: <field> <old> -> <new>` for `tier`, `provider`, `url`,
+  `description` and `blocked` (`true`/`false`);
+- `rule <id> added at <position>: <conditions>: <action>`, then `rule <id>
+  removed`, then for rules in both: `rule <id>: conditions <old> -> <new>`,
+  `rule <id>: action <old> -> <new>`, `rule <id>: description changed`;
+- `rule <id> moved from <old position> to <new position>` for each kept
+  rule whose place among the kept rules changed.
+
+Conditions read `when destinations a/b and tiers frontier` (keys in the
+layout order, values joined by `/`), or `always`. Positions count from 1.
+
+**Change log** (`<policy name>.changes.jsonl` beside the policy): one
+compact JSON object per line, with the fields `time` (UTC,
+`YYYY-MM-DDTHH:MM:SSZ`), `user`, `policy` (its id), `from_revision` (`null`
+for a new policy), `revision`, `note` (may be empty), `changes` (a list,
+`["new policy"]` for a new one) and `prev`, in that order. `prev` is the
+lower-case hex SHA-256 of the previous line's UTF-8 bytes (without the
+newline), or 64 zeros for the first. A line whose `prev` does not match
+breaks the chain; readers stop there and report the log as altered.
+
+Conformance cases are in `conformance/policy_write.yaml`.
+
 ## Audit log (`audit`)
 
 Evidence of what was decided, for regulators, internal audit and DPDP
@@ -785,7 +864,7 @@ implementation in `conformance/audit/`.
 ## Proxy keys file (`credgate_proxy_keys`)
 
 Who may use a shared proxy. One JSON file, read by the proxy and written by
-the tools that manage users (the command line now; the editor later), so
+the tools that manage users (the command line and the policy editors), so
 every implementation reads and writes it the same way:
 
 ```json
@@ -827,6 +906,16 @@ every implementation reads and writes it the same way:
   file: it is refused, and a running proxy keeps the users it has.
 
 Conformance cases are in `conformance/proxy_keys.yaml`.
+
+### Access log
+
+Every key made, rotated or removed from the policy editors is recorded in
+an access log beside the keys file (`keys.access.jsonl` for `keys.json`):
+one compact JSON object per line with `time` (UTC), `by` (who did it),
+`action` (`create`, `rotate` or `remove`), `user` (whose key), `expires`
+(when the new key expires; left out for `remove`) and `prev`, in that
+order. `prev` chains the lines as in the policy change log. Keys and their
+hashes are never recorded.
 
 ## Users file (`credgate-users`)
 

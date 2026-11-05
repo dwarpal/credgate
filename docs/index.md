@@ -18,6 +18,7 @@ same queries.
 - **Python** - [get started](python/index.md) and the API reference
 - **R** - [the R package site](https://dwarpal.github.io/credgate/r/), with reference and articles
 - **Guides** - [large data](large-data.md) and the [threat model](threat-model.md)
+- **[R and Python](r-and-python.md)** - the two packages name for name, and where they differ
 - **[Specification](spec.md)** - the rules both implementations follow
 
 </div>

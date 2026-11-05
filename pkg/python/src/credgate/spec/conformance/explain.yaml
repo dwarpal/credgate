@@ -1,0 +1,41 @@
+# Near-miss explanation cases (spec/README.md, "Explaining a result").
+#
+# Each case is a text and a minimum confidence; `matches` are the types
+# reported, `misses` the dropped candidates with their reason, in order.
+#
+# All values are synthetic.
+
+spec_version: 1
+
+cases:
+  - id: failed-checks-keywords-and-threshold
+    text: "Card 4111 1111 1111 1112, a/c number missing 123456789012, PAN ABCPE1234F, call 9876543210"
+    min_confidence: 0.7
+    matches: [bank_account, pan]
+    misses:
+      - {type: aadhaar_vid, value: "4111 1111 1111 1112", why: "fails the check: Verhoeff checksum"}
+      - {type: card, value: "4111 1111 1111 1112", why: "fails the check: Luhn checksum and card network prefix"}
+      - {type: bank_account, value: "9876543210", why: "needs a keyword such as 'a/c' within 40 characters"}
+      - {type: mobile_in, value: "9876543210", why: "confidence 0.65 is below the minimum 0.7"}
+  - id: needs-a-keyword
+    text: "ref 123456789012"
+    min_confidence: 0
+    matches: []
+    misses:
+      - {type: bank_account, value: "123456789012", why: "needs a keyword such as 'a/c' within 40 characters"}
+  - id: inside-a-match-is-not-a-miss
+    text: "GSTIN 27AAPFU0939F1ZV filed"   # the PAN inside the GSTIN is not a miss
+    min_confidence: 0
+    matches: [gstin]
+    misses: []
+  - id: failed-check
+    text: "GSTIN 27ABCPE1234F1Z5 filed"
+    min_confidence: 0
+    matches: []
+    misses:
+      - {type: gstin, value: "27ABCPE1234F1Z5", why: "fails the check: GSTIN state code and check character"}
+  - id: nothing-dropped
+    text: "Customer PAN ABCPE1234F"
+    min_confidence: 0.5
+    matches: [pan]
+    misses: []

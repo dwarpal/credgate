@@ -192,3 +192,46 @@ def _run(policy: Policy, t: Mapping[str, Any]) -> PolicyTestResult:
                 got_out = d.texts[0] if "text" in t else d.texts
                 problems.append(f"output: expected {e['output']!r}, got {got_out!r}")
     return PolicyTestResult(t["id"], not problems, tuple(problems), t.get("description"))
+
+
+def write_policy_tests(
+    tests: list[Mapping[str, Any]], path: str | os.PathLike[str], types: set[str] | None = None
+) -> Path:
+    """Write a tests file (from the policy editor), after checking it as
+    :func:`run_policy_tests` does. ``types``: the detector ids the tests may
+    name (default: those registered)."""
+    from .detectors import _detectors
+
+    data = {"kind": KIND, "version": 1, "tests": [dict(t) for t in tests]}
+    _validate(data, set(types) if types is not None else set(_detectors()))
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=1000), encoding="utf-8"
+    )
+    os.replace(tmp, path)
+    return path
+
+
+def test_from_decision(id: str, text: str, endpoint: str, decision: Any) -> dict[str, Any]:
+    """A test that pins what a policy does with a request now: whether it is
+    allowed, the rules that block it, and the action for each type found
+    (when all matches of a type get the same action)."""
+    actions: dict[str, str] = {}
+    mixed: set[str] = set()
+    for m in decision.matches:
+        t = m.span.type
+        if t in actions and actions[t] != m.action:
+            mixed.add(t)
+        actions.setdefault(t, m.action)
+    for t in mixed:
+        del actions[t]
+    expect: dict[str, Any] = {"allowed": bool(decision.allowed)}
+    if not decision.allowed:
+        expect["blocked_by"] = list(decision.blocked_by)
+    elif actions:
+        expect["actions"] = actions  # in a blocked request every match is blocked
+    return {"id": id, "endpoint": endpoint, "text": text, "expect": expect}
+
+
+test_from_decision.__test__ = False  # type: ignore[attr-defined]  # not a pytest test

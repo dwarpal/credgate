@@ -20,3 +20,7 @@ Spark DataFrames work directly with [`scan_pii`](detection.md) and
 ::: credgate.duckdb
     options:
       show_root_heading: false
+
+## Databases (SQLAlchemy)
+
+::: credgate.database.redact_query

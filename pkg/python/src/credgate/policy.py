@@ -186,10 +186,20 @@ class Policy:
         return policy
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> Policy:
+    def from_dict(
+        cls, data: Mapping[str, Any], base: str | os.PathLike[str] | None = None
+    ) -> Policy:
         """Validate a policy given as a mapping (as read from YAML). Custom
-        detector files it names are found relative to the working directory."""
-        return _parse(data, Path.cwd())
+        detector files it names are found relative to ``base`` (default: the
+        working directory)."""
+        return _parse(data, Path(base) if base is not None else Path.cwd())
+
+    @property
+    def detectors(self) -> list[Any]:
+        """The detectors this policy runs: the registered ones and its own
+        custom detectors."""
+        dets = self._detectors if self._detectors is not None else _reg._detectors()
+        return list(dets.values())
 
     def decide(self, text: str | Sequence[str], destination: str) -> Decision:
         """Decide what happens to each identifier in a request to ``destination``,

@@ -2,9 +2,12 @@
 % Please edit documentation in R/checksums.R
 \name{luhn_valid}
 \alias{luhn_valid}
+\alias{luhn_check_digit}
 \title{Luhn checksum (payment cards)}
 \usage{
 luhn_valid(x)
+
+luhn_check_digit(x)
 }
 \arguments{
 \item{x}{A character vector of digit strings. Spaces and hyphens are
@@ -12,10 +15,15 @@ ignored.}
 }
 \value{
 A logical vector.
+
+The check digit, as a string, for each value.
 }
 \description{
 Luhn checksum (payment cards)
+
+The Luhn check digit for the digits before it
 }
 \examples{
 luhn_valid("4111 1111 1111 1111")
+luhn_check_digit("411111111111111") # "1"
 }

@@ -397,3 +397,58 @@ def audit_prune(
     for file in removable:
         file.unlink()
     return [f.name for f in removable]
+
+
+@dataclass(frozen=True)
+class Activity:
+    """One of a person's proxy requests, from the audit log - never content."""
+
+    time: str
+    endpoint: str
+    allowed: bool
+    blocked_by: str
+    found: str
+
+
+def own_activity(
+    path: str | os.PathLike[str],
+    actor: str,
+    days: int = 7,
+    max: int = 100,
+    now: datetime | None = None,
+) -> list[Activity]:
+    """One person's recent proxy requests, newest first: at most ``max`` from
+    the last ``days`` days. Only the monthly files that can hold them are
+    read. ``found`` counts the identifiers by action ("2 redact, 1
+    tokenise", or "nothing")."""
+    from datetime import timedelta
+
+    path = Path(path)
+    since = (now or datetime.now(UTC)) - timedelta(days=days)
+    month = since.strftime("%Y-%m")
+    files = [p for m, p in _segments(path) if m >= month] + ([path] if path.exists() else [])
+    recs = []
+    for file in files:
+        for line in _lines(file):
+            r = json.loads(line)
+            if r.get("actor") != actor:
+                continue
+            t = datetime.strptime(r["time"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=UTC)
+            if t >= since:
+                recs.append(r)
+    out = []
+    for r in list(reversed(recs))[:max]:
+        counts: dict[str, int] = {}
+        for item in r.get("items") or []:
+            counts[item["action"]] = counts.get(item["action"], 0) + 1
+        found = ", ".join(f"{n} {a}" for a, n in sorted(counts.items())) or "nothing"
+        out.append(
+            Activity(
+                time=r["time"],
+                endpoint=r["destination"]["name"],
+                allowed=bool(r.get("allowed")),
+                blocked_by=", ".join(r.get("blocked_by") or []),
+                found=found,
+            )
+        )
+    return out

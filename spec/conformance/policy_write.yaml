@@ -1,0 +1,33 @@
+# Policy file layout and change cases (spec/README.md, "Policy files and
+# change log"). `layout`: a policy and the exact file a credgate tool writes
+# for it. `diff`: two policies and the changes, in order.
+#
+# Policies are given as JSON (a subset of YAML) so they are read the same
+# everywhere.
+
+spec_version: 1
+
+layout:
+  - policy: {"policy":"credgate-policy","version":1,"id":"conf","revision":1,"description":"Conformance policy","destinations":{"local":{"tier":"local","provider":"ollama","url":"http://localhost:11434/v1"},"claude":{"tier":"frontier","provider":"anthropic","description":"via the gateway"},"copilot":{"tier":"frontier","blocked":true}},"min_confidence":0.5,"rules":[{"id":"card-block","when":{"tiers":["frontier"],"all_of":["card","card_cvv"]},"action":"block"},{"id":"ids-tokenised","description":"RBI","when":{"tiers":["frontier"],"classes":["identity_strong"]},"action":"tokenise"},{"id":"local-ok","when":{"destinations":["local"]},"action":"allow"}],"default_action":"redact"}
+    yaml: "policy: credgate-policy\nversion: 1\nid: conf\nrevision: 1\ndescription: \"Conformance policy\"\n\ndestinations:\n  local:\n    tier: local\n    provider: ollama\n    url: http://localhost:11434/v1\n  claude:\n    tier: frontier\n    provider: anthropic\n    description: \"via the gateway\"\n  copilot:\n    tier: frontier\n    blocked: true\n\nmin_confidence: 0.5\n\nrules:\n  - id: card-block\n    when:\n      tiers: [frontier]\n      all_of: [card, card_cvv]\n    action: block\n  - id: ids-tokenised\n    description: RBI\n    when:\n      tiers: [frontier]\n      classes: [identity_strong]\n    action: tokenise\n  - id: local-ok\n    when:\n      destinations: [local]\n    action: allow\n\ndefault_action: redact\n\n"
+
+diff:
+  - old: {"policy":"credgate-policy","version":1,"id":"conf","revision":1,"description":"Conformance policy","destinations":{"local":{"tier":"local","provider":"ollama","url":"http://localhost:11434/v1"},"claude":{"tier":"frontier","provider":"anthropic","description":"via the gateway"},"copilot":{"tier":"frontier","blocked":true}},"min_confidence":0.5,"rules":[{"id":"card-block","when":{"tiers":["frontier"],"all_of":["card","card_cvv"]},"action":"block"},{"id":"ids-tokenised","description":"RBI","when":{"tiers":["frontier"],"classes":["identity_strong"]},"action":"tokenise"},{"id":"local-ok","when":{"destinations":["local"]},"action":"allow"}],"default_action":"redact"}
+    new: {"policy":"credgate-policy","version":1,"id":"conf","revision":1,"description":"Bank \"default\" policy:\nline two","destinations":{"claude":{"tier":"frontier","provider":"anthropic","description":"via the gateway","url":"https://gw.bank.internal/anthropic"},"copilot":{"tier":"frontier"},"vllm-gpu":{"tier":"internal"}},"min_confidence":0.55,"rules":[{"id":"ids-tokenised","description":"RBI 2026","when":{"tiers":["frontier"],"classes":["identity_strong"]},"action":"redact"},{"id":"card-block","when":{"tiers":["frontier"],"all_of":["card","card_cvv"]},"action":"block"},{"id":"pan-block","when":{"types":["pan","aadhaar"]},"action":"block"}],"default_action":"redact","detectors":["bank-detectors.yaml"]}
+    changes:
+      - "description: Conformance policy -> Bank \"default\" policy:\nline two"
+      - "min_confidence: 0.5 -> 0.55"
+      - "detectors: none -> bank-detectors.yaml"
+      - "endpoint vllm-gpu added (internal)"
+      - "endpoint local removed"
+      - "endpoint claude: url  -> https://gw.bank.internal/anthropic"
+      - "endpoint copilot: blocked true -> false"
+      - "rule pan-block added at 3: when types pan/aadhaar: block"
+      - "rule local-ok removed"
+      - "rule ids-tokenised: action tokenise -> redact"
+      - "rule ids-tokenised: description changed"
+      - "rule ids-tokenised moved from 2 to 1"
+      - "rule card-block moved from 1 to 2"
+  - old: {"policy":"credgate-policy","version":1,"id":"conf","revision":1,"description":"Conformance policy","destinations":{"local":{"tier":"local","provider":"ollama","url":"http://localhost:11434/v1"},"claude":{"tier":"frontier","provider":"anthropic","description":"via the gateway"},"copilot":{"tier":"frontier","blocked":true}},"min_confidence":0.5,"rules":[{"id":"card-block","when":{"tiers":["frontier"],"all_of":["card","card_cvv"]},"action":"block"},{"id":"ids-tokenised","description":"RBI","when":{"tiers":["frontier"],"classes":["identity_strong"]},"action":"tokenise"},{"id":"local-ok","when":{"destinations":["local"]},"action":"allow"}],"default_action":"redact"}
+    new: {"policy":"credgate-policy","version":1,"id":"conf","revision":1,"description":"Conformance policy","destinations":{"local":{"tier":"local","provider":"ollama","url":"http://localhost:11434/v1"},"claude":{"tier":"frontier","provider":"anthropic","description":"via the gateway"},"copilot":{"tier":"frontier","blocked":true}},"min_confidence":0.5,"rules":[{"id":"card-block","when":{"tiers":["frontier"],"all_of":["card","card_cvv"]},"action":"block"},{"id":"ids-tokenised","description":"RBI","when":{"tiers":["frontier"],"classes":["identity_strong"]},"action":"tokenise"},{"id":"local-ok","when":{"destinations":["local"]},"action":"allow"}],"default_action":"redact"}
+    changes: []

@@ -28,6 +28,13 @@
           };
         };
 
+      # Shiny for Python (the policy editor) without its own test suite, whose
+      # test dependencies (pandas, polars, pyarrow, Playwright) include Arrow,
+      # marked broken on x86_64-darwin; likewise narwhals and shinychat.
+      shinyNoTests = ps:
+        let noTests = p: p.overridePythonAttrs (_: { doCheck = false; nativeCheckInputs = [ ]; });
+        in noTests (ps.shiny.override { narwhals = noTests ps.narwhals; shinychat = noTests ps.shinychat; });
+
       # The Python package, written as a nixpkgs python-modules derivation
       # (pkgs/development/python-modules/credgate). Tests run in checkPhase.
       credgatePy = python3Packages:
@@ -42,7 +49,10 @@
           # Sphinx that no longer supports 3.11. The vault tests skip without it.
           # uvicorn (credgate[server]) on every Python: every proxy test also
           # runs on it.
+          # Shiny for Python (credgate[editor]) on every Python: the policy
+          # editor's tests.
           nativeCheckInputs = [ python3Packages.pytestCheckHook python3Packages.uvicorn python3Packages.httptools ]
+            ++ builtins.filter (p: (builtins.tryEval p.drvPath).success) [ (shinyNoTests python3Packages) ]
             ++ nixpkgs.lib.optional (python3Packages.pythonAtLeast "3.12") python3Packages.pynacl
             # Integrations, where nixpkgs has them prebuilt (3.13+; Arrow and
             # DuckDB are marked broken on x86_64-darwin). Their tests skip
@@ -133,6 +143,8 @@
           ci-deps = pkgs.linkFarmFromDrvs "credgate-ci-deps" (
             (with pkgs.rPackages; [ testthat withr sodium openssl shiny bslib ])
             ++ (with pkgs.python311Packages; [ hatchling regex pyyaml pytest uvicorn httptools ])
+            # Shiny for Python where nixpkgs can build it (not 3.11: Sphinx).
+            ++ builtins.filter (p: (builtins.tryEval p.drvPath).success) [ (shinyNoTests pkgs.python3Packages) ]
           );
 
           docs = pkgs.runCommand "credgate-docs" {
@@ -243,6 +255,12 @@
             done
             diff ${./examples/policies/bank-default.yaml} ${./pkg/credgate/inst/policies/bank-default.yaml} \
               || fail "R inst/policies/bank-default.yaml"
+            for f in editor.css editor.js; do
+              diff ${./pkg/credgate/inst/policy-editor}/$f ${./pkg/python/src/credgate/editor/assets}/$f \
+                || fail "Python editor/assets/$f"
+            done
+            diff ${./examples/policies/bank-default.yaml} ${./pkg/python/src/credgate/editor/assets/bank-default.yaml} \
+              || fail "Python editor/assets/bank-default.yaml"
             touch $out
           '';
 

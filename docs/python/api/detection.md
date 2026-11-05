@@ -2,6 +2,8 @@
 
 ::: credgate.detect_pii
 ::: credgate.preview
+::: credgate.detect.explain_pii
+::: credgate.detect.Miss
 ::: credgate.Span
 ::: credgate.load_detectors
 ::: credgate.scan_pii

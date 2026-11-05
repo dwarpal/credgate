@@ -29,6 +29,7 @@ from .inventory import Inventory, InventoryRow, pii_inventory, read_inventory
 from .normalise import Normalised, normalise
 from .policy import Decision, Destination, Policy, PolicyError, PolicyMatch
 from .policy_tests import PolicyTestResult, run_policy_tests
+from .policy_write import PolicyChange, PolicyChanges, policy_changes, policy_diff, write_policy
 from .redact import Preview, preview, redact
 from .scan import ColumnFinding, ScanReport, scan_pii
 from .synth import synth_indian_pii
@@ -55,6 +56,8 @@ __all__ = [
     "InventoryRow",
     "Normalised",
     "Policy",
+    "PolicyChange",
+    "PolicyChanges",
     "PolicyError",
     "PolicyMatch",
     "PolicyTestResult",
@@ -84,6 +87,8 @@ __all__ = [
     "new_token_key",
     "normalise",
     "pii_inventory",
+    "policy_changes",
+    "policy_diff",
     "preview",
     "read_inventory",
     "redact",
@@ -98,4 +103,5 @@ __all__ = [
     "tokenise",
     "verhoeff_check_digit",
     "verhoeff_valid",
+    "write_policy",
 ]

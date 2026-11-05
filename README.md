@@ -9,7 +9,8 @@ under the DPDP Act 2023 and RBI, SEBI and IRDAI expectations, including
 fully air-gapped setups.
 
 It ships as an R package and a Python package (with a CLI) that read the same
-detection rules, so both languages find exactly the same matches.
+detection rules, so both languages find exactly the same matches. How the
+two compare, name for name: [R and Python](https://dwarpal.github.io/credgate/r-and-python/).
 
 **Documentation:** <https://dwarpal.github.io/credgate/> - the Python API,
 the [R package site](https://dwarpal.github.io/credgate/r/), guides and the
@@ -20,7 +21,7 @@ shared specification.
 > Working today: PII detection,
 > column scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file), policies and the policy editor for InfoSec (R Shiny), the
+> vault file), policies and the policy editor for InfoSec (R and Python), the
 > audit log with monthly rotation and retention, the PII inventory (data
 > frames, Spark, BigQuery, databases), and the proxy: OpenAI, Anthropic and
 > Ollama APIs with streaming, so Claude Code, VS Code Copilot Chat, Open
@@ -197,8 +198,9 @@ decision names the policy revision and the rule behind each action, ready
 for the audit log. The format is specified in [spec/README.md](spec/README.md#policies-policy).
 
 InfoSec can change a policy in a browser instead of editing YAML:
-`credgate::policy_editor("bank-default.yaml")` (R, needs `shiny` and
-`bslib`). It edits endpoints and rules, tries sample text against the unsaved
+`credgate::policy_editor("bank-default.yaml")` in R (needs `shiny` and
+`bslib`), or `credgate editor --policy bank-default.yaml` in Python
+(`pip install 'credgate[editor]'`) - the same app on the same files. It edits endpoints and rules, tries sample text against the unsaved
 policy, shows what changed, and saves only a valid policy, recording who
 saved it, why and what changed in a hash-chained change log. Policy tests
 kept beside the policy - sample requests and what must happen to them - run
@@ -341,7 +343,7 @@ command line:
 | DuckDB | SQL: `SELECT cg_redact(notes) FROM 'calls.parquet'` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` |
 | Polars | `pl.col("notes").credgate.redact()` | - |
 | Arrow, pandas | Series, arrays, tables, datasets | arrays, tables, datasets |
-| Other databases | - | any DBI database via dbplyr |
+| Other databases | any SQLAlchemy database: `credgate.database.redact_query()` | any DBI database: `redact_query()`, dbplyr |
 | Spark | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) |
 | BigQuery | `credgate.bigquery.pii_inventory()`, `inventory_dataset()` | `bq_pii_inventory()`, `bq_inventory_dataset()` |
 | Whole databases | `credgate.database.inventory_database()` (SQLAlchemy) | `inventory_database()` (DBI) |
@@ -521,10 +523,12 @@ in [SECURITY.md](SECURITY.md), rather than in a public issue.
 
 ## Known limits
 
-- In running text, names and addresses are found only next to a cue: an
-  honorific (Shri, Smt, श्रीमती, or "ji" after the name), a relation (S/o,
-  D/o), a field label (`Name:`, `पता:`) or a house/village keyword followed
-  by a PIN code. A deity addressed with "ji" ("Ram ji") is taken as a name.
+- In running text, names are found only next to a cue: an honorific (Shri,
+  Smt, श्रीमती, or "ji" after the name), a relation (S/o, D/o) or a field
+  label (`Name:`, `नाम:`). Addresses are found after a label, after a house
+  or village keyword, or in the usual shape - house number, locality, a
+  known Indian city or district, PIN code. A deity addressed with "ji" ("Ram
+  ji") is taken as a name.
   Where you know a column or value holds names or addresses, say so - a
   column named for them, or `context = "customer name"` - and every value is
   read as one. For names in notes with other cues ("Lakshmi Verma called"),
@@ -572,4 +576,5 @@ https://github.com/dwarpal/credgate
 
 ## Licence
 
-Apache License 2.0; see [LICENSE](LICENSE).
+Apache License 2.0; see [LICENSE](LICENSE). The licences of every dependency, for
+legal and procurement reviews: [Licences](https://dwarpal.github.io/credgate/licences/).

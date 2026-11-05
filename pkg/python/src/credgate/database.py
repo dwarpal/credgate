@@ -317,3 +317,182 @@ def _write(
 
 def _num(x: float) -> str:
     return f"{x:.6f}".rstrip("0").rstrip(".")
+
+
+def redact_query(
+    connection: Any,
+    query: str,
+    to: str,
+    columns: Sequence[str] | None = None,
+    chunk_size: int = 10000,
+    append: bool = False,
+    to_connection: Any = None,
+    detectors: Sequence[str] | None = None,
+    min_confidence: float = 0.0,
+) -> int:
+    """Redact the result of a database query into a table.
+
+    Runs ``query``, fetches the result ``chunk_size`` rows at a time,
+    redacts the chosen text columns and appends each chunk to the table
+    ``to``, so the result may be larger than memory. Works with any database
+    SQLAlchemy reaches; with DuckDB, ``query`` can read files directly
+    (``"SELECT * FROM 'calls.parquet'"``). The same as R's
+    ``redact_query()``.
+
+    Most databases cannot write on a connection while a query result is open
+    on it, so with one connection the redacted chunks are kept in temporary
+    files (readable by you only) until the query has been read, then written
+    in one transaction. With a second connection (``to_connection``), each
+    chunk is written as it is read. (For SQLite, a second connection to the
+    same file needs WAL mode: ``PRAGMA journal_mode = WAL``.)
+
+    Args:
+        connection: A SQLAlchemy ``Engine`` or ``Connection`` to run the query on.
+        query: SQL query whose result is redacted.
+        to: Name of the table to create (or, with ``append``, add to).
+        columns: Columns to redact; ``None`` redacts every text column.
+        chunk_size: Rows fetched at a time.
+        append: Add to an existing table ``to`` instead of creating it.
+        to_connection: Engine or connection to write ``to`` with; by default
+            ``connection``.
+        detectors: As for :func:`credgate.redact`.
+        min_confidence: As for :func:`credgate.redact`.
+
+    Returns:
+        The number of rows written.
+
+    Raises:
+        ValueError: ``to`` exists and ``append`` is false, or ``columns``
+            names a column the result does not have.
+    """
+    import pickle
+    import tempfile
+    from contextlib import ExitStack
+
+    import sqlalchemy
+
+    from .redact import redact
+
+    if chunk_size < 1:
+        raise ValueError("`chunk_size` must be at least 1.")
+    with ExitStack() as stack:
+
+        def open_(c: Any) -> tuple[Any, bool]:
+            """A connection, and whether it was opened here (then it is
+            committed here) or was the caller's outside a transaction."""
+            if isinstance(c, sqlalchemy.engine.Engine):
+                return stack.enter_context(c.connect()), True
+            return c, not c.in_transaction()
+
+        conn, own = open_(connection)
+        if to_connection is None or to_connection is connection:
+            out, own_out, stream = conn, own, False
+        else:
+            out, own_out = open_(to_connection)
+            stream = True
+        if not append and sqlalchemy.inspect(out).has_table(to):
+            raise ValueError(f"Table `{to}` exists; use `append=True` to add to it.")
+        spill = None if stream else Path(stack.enter_context(tempfile.TemporaryDirectory()))
+        table = None
+        names: list[str] = []
+        redacted: list[str] = []
+        rows = 0
+        chunks = 0
+
+        def write(chunk: list[dict[str, Any]]) -> None:
+            nonlocal table
+            if table is None:
+                table = _target_table(out, to, names, chunk, append)
+            if chunk:
+                out.execute(table.insert(), chunk)
+
+        try:
+            result = conn.execution_options(stream_results=True).execute(sqlalchemy.text(query))
+            names = list(result.keys())
+            while True:
+                fetched = result.fetchmany(chunk_size)
+                first = chunks == 0
+                if first:
+                    redacted = _text_columns(names, fetched) if columns is None else list(columns)
+                    unknown = [c for c in redacted if c not in names]
+                    if unknown:
+                        raise ValueError(f"Unknown column(s): {', '.join(unknown)}")
+                if not fetched and not first:
+                    break
+                chunk = [dict(zip(names, row, strict=True)) for row in fetched]
+                for col in redacted:
+                    values = redact(
+                        [r[col] for r in chunk], detectors=detectors, min_confidence=min_confidence
+                    )
+                    for r, v in zip(chunk, values, strict=True):
+                        if r[col] is not None:
+                            r[col] = v
+                chunks += 1
+                if stream:
+                    write(chunk)
+                else:
+                    assert spill is not None
+                    with open(spill / f"{chunks:09d}.pickle", "wb") as f:
+                        pickle.dump(chunk, f)
+                rows += len(chunk)
+                if len(fetched) < chunk_size:
+                    break
+            result.close()
+            if not stream:
+                assert spill is not None
+                for k in range(1, chunks + 1):
+                    with open(spill / f"{k:09d}.pickle", "rb") as f:
+                        write(pickle.load(f))  # our own temporary file
+            if own_out:
+                out.commit()
+            if own and conn is not out:
+                conn.commit()
+        except BaseException:
+            if own_out:
+                out.rollback()
+            raise
+    return rows
+
+
+def _text_columns(names: list[str], rows: Sequence[Any]) -> list[str]:
+    """Columns whose values (in the first chunk) are text."""
+    out = []
+    for i, name in enumerate(names):
+        values = [r[i] for r in rows if r[i] is not None]
+        if values and all(isinstance(v, str) for v in values):
+            out.append(name)
+    return out
+
+
+def _target_table(
+    conn: Any, to: str, names: list[str], chunk: list[dict[str, Any]], append: bool
+) -> Any:
+    """The table to write to: reflected when appending, otherwise created
+    with column types from the first chunk's values."""
+    import datetime as _dt
+    import decimal
+
+    import sqlalchemy as sa
+
+    meta = sa.MetaData()
+    if append:
+        return sa.Table(to, meta, autoload_with=conn)
+
+    def type_of(name: str) -> Any:
+        value = next((r[name] for r in chunk if r[name] is not None), None)
+        for kind, sql in (
+            (bool, sa.Boolean),
+            (int, sa.BigInteger),
+            (float, sa.Float),
+            (decimal.Decimal, sa.Numeric),
+            (_dt.datetime, sa.DateTime),
+            (_dt.date, sa.Date),
+            (bytes, sa.LargeBinary),
+        ):
+            if isinstance(value, kind):
+                return sql()
+        return sa.Text()
+
+    table = sa.Table(to, meta, *[sa.Column(n, type_of(n)) for n in names])
+    table.create(conn)
+    return table

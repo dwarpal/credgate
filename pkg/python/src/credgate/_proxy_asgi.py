@@ -349,6 +349,7 @@ class UvicornServer:
                 access_log=False,  # the proxy writes its own line, without text
                 log_level="warning",
                 lifespan="on",
+                ws="none",  # the model APIs are plain HTTP; no WebSocket code loaded
             )
         )
         self.server.drain_seconds = config.drain_seconds

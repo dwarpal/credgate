@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+- **Policy editor in Python** (`pip install 'credgate[editor]'`,
+  `credgate editor --policy bank.yaml`, or `credgate.editor.policy_editor()`
+  for an app to run under your own server): the same app as the R package's
+  `policy_editor()`, in Shiny for Python (MIT), on the same files - a
+  policy, its tests and change log saved by one opens in the other.
+  Endpoints, rules, Try it (with what was not reported and why), tests,
+  detectors, changes; with a users file, each role sees only its tabs and
+  changes are refused on the server; everyone manages their own proxy key
+  (My key), admins everyone's (Users), each person sees their own requests
+  (My activity); single sign-on through `--trust-header`, refused unless
+  the editor listens on 127.0.0.1.
+- **Saving policies**: `write_policy()`, `policy_diff()` and
+  `policy_changes()` write the same file layout and hash-chained change log
+  as R's `policy_write()`; the layout, the change lines and the log are now
+  in the spec ("Policy files and change log"), with conformance cases.
+- **Why something was not reported**: `credgate.detect.explain_pii()`
+  returns the matches and the near misses - a failed checksum, a missing
+  keyword the type needs, a confidence below the minimum, a more confident
+  overlapping match - in the spec ("Explaining a result") with
+  conformance cases, identical to R.
+- **Access log** (`proxy_keys.log_access()`, `read_access()`): who made,
+  rotated or removed a proxy key, hash-chained beside the keys file, as the
+  R editor writes it; now in the spec. `audit.own_activity()` lists one
+  person's recent requests (never content).
+- **Redacting a query into a table** (`credgate.database.redact_query()`),
+  as R's `redact_query()`: any database SQLAlchemy reaches, in chunks, so
+  the result may be larger than memory; with one connection the chunks wait
+  in temporary files and are written in one transaction, with a second
+  (`to_connection`) each is written as it is read.
+- The proxy on uvicorn no longer loads uvicorn's WebSocket support, which
+  the model APIs do not use (and which raised deprecation warnings from the
+  `websockets` library).
+- `Policy.from_dict()` takes `base`, the folder its custom detector files
+  are found in; `Policy.detectors` gives the detectors a policy runs.
+  `policy_tests.write_policy_tests()` and `test_from_decision()` save a
+  test from a decision, as the editor's "Save as a test" does.
+
 ## 0.11.0 (2026-11-04)
 
 Managing who may use a shared proxy: each person has their own key that

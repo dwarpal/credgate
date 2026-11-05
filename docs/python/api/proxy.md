@@ -12,4 +12,4 @@ How to run it: the [proxy guide](../../proxy.md).
 ::: credgate.proxy_keys
     options:
       show_root_heading: false
-      members: [add_user, rotate_key, remove_user, list_users, read_keys, KeyEntry]
+      members: [add_user, rotate_key, remove_user, list_users, expire_unused, read_keys, KeyEntry, log_access, read_access, access_path, AccessEntry]

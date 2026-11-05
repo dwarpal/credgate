@@ -22,3 +22,12 @@ echo "licence files synced"
 mkdir -p "$root/pkg/credgate/inst/policies"
 install -m 644 "$root/examples/policies/bank-default.yaml" "$root/pkg/credgate/inst/policies/bank-default.yaml"
 echo "example policy synced"
+# The policy editor's styles and script are shared by the R and Python
+# editors; the Python editor also ships the example policy as its template.
+py_editor="$root/pkg/python/src/credgate/editor/assets"
+mkdir -p "$py_editor"
+for f in editor.css editor.js; do
+  install -m 644 "$root/pkg/credgate/inst/policy-editor/$f" "$py_editor/$f"
+done
+install -m 644 "$root/examples/policies/bank-default.yaml" "$py_editor/bank-default.yaml"
+echo "policy editor assets synced"

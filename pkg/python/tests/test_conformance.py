@@ -470,3 +470,33 @@ def test_users_file(case):
     users = parse_users(case["file"])
     assert {n: users.role_of(n) for n in case["roles"]} == case["roles"]
     assert users.settings == case["settings"]
+
+
+EXPLAIN_SPEC = conformance("explain.yaml")
+
+
+@pytest.mark.parametrize("case", EXPLAIN_SPEC["cases"], ids=lambda c: c["id"])
+def test_explain(case):
+    from credgate.detect import explain_pii
+
+    matches, misses = explain_pii(case["text"], min_confidence=case["min_confidence"])
+    assert [s.type for s in matches] == case["matches"]
+    got = [{"type": m.type, "value": m.value, "why": m.why} for m in misses]
+    assert got == case["misses"]
+
+
+POLICY_WRITE_SPEC = conformance("policy_write.yaml")
+
+
+@pytest.mark.parametrize("case", POLICY_WRITE_SPEC["layout"])
+def test_policy_layout(case):
+    from credgate.policy_write import policy_yaml
+
+    assert policy_yaml(case["policy"]) == case["yaml"]
+
+
+@pytest.mark.parametrize("case", POLICY_WRITE_SPEC["diff"])
+def test_policy_diff(case):
+    from credgate.policy_write import policy_diff
+
+    assert policy_diff(case["old"], case["new"]) == case["changes"]
