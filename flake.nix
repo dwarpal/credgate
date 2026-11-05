@@ -15,7 +15,7 @@
       credgateR = pkgs:
         pkgs.rPackages.buildRPackage {
           name = "credgate";
-          version = "0.1.0.9002";
+          version = "0.1.0.9003";
           src = ./pkg/credgate;
           propagatedBuildInputs = with pkgs.rPackages; [ cli jsonlite rlang stringi yaml ];
           nativeBuildInputs = with pkgs.rPackages; [ cli jsonlite rlang stringi yaml ];
@@ -40,7 +40,7 @@
       credgatePy = python3Packages:
         python3Packages.buildPythonPackage {
           pname = "credgate";
-          version = "0.11.0";
+          version = "0.12.0";
           pyproject = true;
           src = ./pkg/python;
           build-system = [ python3Packages.hatchling ];
