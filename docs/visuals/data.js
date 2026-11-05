@@ -454,7 +454,14 @@ window.CG_DATA = {
       "start": 8,
       "end": 22,
       "value": "2345 6789 0125",
-      "why": "fails the check: Verhoeff checksum"
+      "why": "fails the check: Verhoeff checksum",
+      "fix": {
+       "got": "5",
+       "want": "4",
+       "corrected": "2345 6789 0124",
+       "method": "Verhoeff"
+      },
+      "keyword": "Aadhaar"
      }
     ]
    },
@@ -672,7 +679,9 @@ window.CG_DATA = {
       "start": 4,
       "end": 16,
       "value": "123456789012",
-      "why": "needs a keyword such as 'a/c' within 40 characters"
+      "why": "needs a keyword such as 'a/c' within 40 characters",
+      "fix": null,
+      "keyword": null
      }
     ]
    },

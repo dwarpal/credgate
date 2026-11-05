@@ -232,6 +232,8 @@ def scoring_examples() -> list[dict]:
                         "end": m.end,
                         "value": m.value,
                         "why": m.why,
+                        "fix": _fix(m),
+                        "keyword": _keyword(dets[m.type], text, m),
                     }
                     for m in misses
                 ],
@@ -283,6 +285,28 @@ def _base_source(spec, det, span, ctx, norm) -> dict:
         "rules": rules,
         "applied": applied,
     }
+
+
+def _keyword(det, text, miss) -> str | None:
+    """A context keyword of the detector next to a dropped candidate."""
+    if not det.context:
+        return None
+    rest = text[: miss.start] + " " + text[miss.end :]
+    found = regex.search(det.context, rest, flags=regex.IGNORECASE)
+    return found.group(0) if found else None
+
+
+def _fix(miss) -> dict | None:
+    """For a number that fails its check digit: what the check digit should
+    be, so the visual can show the mistake."""
+    digits = "".join(c for c in miss.value if c.isdigit())
+    checks = {"aadhaar": credgate.verhoeff_check_digit, "card": credgate.luhn_check_digit}
+    if miss.type not in checks or "fails the check" not in miss.why or len(digits) < 2:
+        return None
+    want = checks[miss.type](digits[:-1])
+    corrected = miss.value[: miss.value.rindex(digits[-1])] + want
+    method = {"aadhaar": "Verhoeff", "card": "Luhn"}[miss.type]
+    return {"got": digits[-1], "want": want, "corrected": corrected, "method": method}
 
 
 def _base(det, span, ctx, norm) -> float:

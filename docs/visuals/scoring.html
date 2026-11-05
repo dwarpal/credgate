@@ -118,6 +118,8 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
   function li(cls, head, desc, extra) {
     return '<li class="' + (cls || "") + '"><div class="h">' + head + '</div><div class="d">' + desc + "</div>" + (extra || "") + "</li>";
   }
+  var cap = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); };
+  var article = function (label) { return (/^[AEIOU]/.test(label) ? "an " : "a ") + esc(label); };
   // Where a starting confidence comes from, in words.
   function baseWhy(m) {
     var src = m.base_source, label = esc(m.label);
@@ -140,8 +142,8 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
     var e = S.examples[sel];
     var m = e.matches[0], miss = e.misses[0];
     var cand = m || miss;
-    var word = m ? (m.context || m.negative) : null;
-    var cls = m && m.context ? "ctx" : "neg";
+    var word = m ? (m.context || m.negative) : (miss ? miss.keyword : null);
+    var cls = (m && m.context) || (!m && miss && miss.keyword) ? "ctx" : "neg";
     var html = '<div class="text"><span class="label">Text</span>' + (cand ? marks(e.text, cand.start, cand.end, word, cls) : esc(e.text)) + "</div>";
     if (e.changed) {
       html += '<div class="text mono"><span class="label">What the detectors read (normalised)</span>' + esc(e.normalised) + "</div>";
@@ -157,12 +159,20 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
     } else {
       steps += li("", "Pattern matched: " + esc(cand.label), "A candidate of the right shape, not inside a longer word or number: <span class=\"mono\">" + esc(cand.value) + "</span>.");
       if (miss && /fails the check/.test(miss.why)) {
-        steps += li("fail", "Check failed", esc(miss.why) + ". A mistyped number is not an identifier, so it is dropped here: no score, nothing reported.");
+        var method = miss.fix ? miss.fix.method : miss.why.replace(/^fails the check: /, "");
+        var why = miss.fix
+          ? "The last digit of " + article(miss.label) + " is a check digit, worked out from the others (" + esc(method) + "). For these digits it should be <strong>" +
+            esc(miss.fix.want) + "</strong> (<span class=\"mono\">" + esc(miss.fix.corrected) + "</span>), not <strong>" + esc(miss.fix.got) +
+            "</strong>: so this is a mistyped or made-up number, not a real one."
+          : "It does not pass " + esc(method) + ", so it is not a real one.";
+        why += " It is dropped before it gets any score" +
+          (miss.keyword ? ": even the word '" + esc(miss.keyword) + "' next to it does not bring it back, because the check comes first." : ".");
+        steps += li("fail", "Check failed: " + esc(miss.why.replace(/^fails the check: /, "")), why);
       } else {
         var checks = m ? m.checks : null;
         steps += li(checks ? "" : "skip", checks ? "Check passed" : "No checksum for this type", checks ? esc(checks) + "." : "Some identifiers have no check digit; context matters more for them.");
         if (miss && /needs a keyword/.test(miss.why)) {
-          steps += li("fail", "Keyword required, none found", esc(miss.why) + ". Any 12-digit number could be an account number, so this type is reported only with a word such as 'a/c' or 'account' nearby.");
+          steps += li("fail", "Keyword required, none found", cap(esc(miss.why)) + ". Any 12-digit number could be an account number, so this type is reported only with a word such as 'a/c' or 'account' nearby.");
         } else if (m) {
           var b = m.base, v = b, calc = "";
           steps += li("", "Starting confidence: " + fmt(b), baseWhy(m), bar(b) + '<div class="d" style="margin-top:6px">' +
@@ -190,7 +200,7 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
     var final = score(e);
     var kept = final !== null && final >= minConf;
     steps += li(final === null ? "fail" : "", "Result",
-      final === null ? "Not reported: <em>" + esc(miss ? miss.why : "nothing found") + "</em>. The policy editor's Try it lists it under \"Not reported\"." :
+      final === null ? (miss ? "Not reported. In the policy editor, Try it lists it under \"Not reported\" with the reason: <em>" + esc(miss.why) + "</em>." : "Nothing found.") :
         "The score, rounded to 2 digits, compared with the minimum confidence below.",
       final === null ? "" : '<div class="final"><span class="num">' + fmt(final) + '</span><span class="badge ' + (kept ? "ok" : "bad") + '">' + (kept ? "reported" : "below the minimum, not reported") + "</span></div>");
     $("pipeline").innerHTML = steps;
