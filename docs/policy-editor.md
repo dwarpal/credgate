@@ -1,7 +1,9 @@
 # Policy editor
 
-The policy editor is a small web app (R Shiny) that lets InfoSec change a
-policy without editing YAML by hand. It shows the policy's endpoints and its
+The policy editor is a small web app that lets InfoSec change a policy
+without editing YAML by hand. It comes in both packages - R (Shiny) and
+Python (Shiny for Python) - as the same app on the same files: a policy,
+its tests and change log saved by one can be opened by the other. It shows the policy's endpoints and its
 rules in order. You can try a sample text against any endpoint. It shows what
 changed before you save, and keeps a history of every save: who saved it,
 when, why, and what changed. It has light and dark themes (following the
@@ -15,6 +17,14 @@ runs on air-gapped machines.
 # install.packages(c("shiny", "bslib"))
 credgate::policy_editor("bank-default.yaml", user = "infosec-1")
 ```
+
+```sh
+pip install 'credgate[editor]'
+credgate editor --policy bank-default.yaml --user infosec-1
+```
+
+In Python, `credgate.editor.policy_editor()` returns the app, for running it
+under your own server (it is a standard ASGI app).
 
 ## What it does
 
@@ -223,6 +233,11 @@ credgate::policy_editor("bank.yaml", user = "arjun", users = "users.yaml",
                         keys = "keys.json", audit = "audit.jsonl")
 ```
 
+```sh
+credgate editor --policy bank.yaml --user arjun --users users.yaml \
+  --keys keys.json --audit audit.jsonl
+```
+
 On a server, the signed-in user is used: with single sign-on in front, the
 name comes from the sign-in proxy's header (`trust_header`); see
 [Deployment](deployment.md). Without a users file, everyone is an admin, as
@@ -230,7 +245,17 @@ before.
 
 ## Running it for a team
 
-On Shiny Server or Posit Connect, put this in an `app.R`:
+Run it behind the organisation's single sign-on, listening on `127.0.0.1`
+and trusting the header the sign-in proxy sets; see
+[Deployment](deployment.md). In Python:
+
+```sh
+credgate editor --policy /srv/credgate/policy.yaml --users /srv/credgate/users.yaml \
+  --keys /srv/credgate/keys.json --audit /srv/credgate/audit/audit-proxy1.jsonl \
+  --trust-header X-Auth-Request-User --host 127.0.0.1 --port 3838 --no-browser
+```
+
+On Shiny Server or Posit Connect (R), put this in an `app.R`:
 
 ```r
 credgate::policy_editor("/srv/credgate/bank-default.yaml",

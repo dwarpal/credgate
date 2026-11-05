@@ -329,8 +329,26 @@ credgate proxy serve --policy bank-default.yaml --audit audit.jsonl \
 
 A new policy revision, keys file or users file is picked up without a
 restart, and a revision whose tests fail is refused. InfoSec edits the
-policy in the R package's policy editor. See the
+policy in the policy editor (below). See the
 [proxy guide](https://dwarpal.github.io/credgate/proxy/) and the [deployment guide](https://dwarpal.github.io/credgate/deployment/).
+
+## Policy editor
+
+InfoSec can change a policy in a browser instead of editing YAML:
+
+```sh
+pip install 'credgate[editor]'
+credgate editor --policy bank-default.yaml
+```
+
+It edits endpoints and rules, tries sample text against the unsaved policy,
+runs the policy's tests before every save, and records who saved what and
+why in a hash-chained change log. With a users file it shows each person
+what their role allows (admin, auditor, user) and lets everyone manage their
+own proxy key; behind single sign-on it serves a whole team. The R package
+has the same app, and both work on the same files. See the
+[policy editor guide](https://dwarpal.github.io/credgate/policy-editor/) and the
+[deployment guide](https://dwarpal.github.io/credgate/deployment/).
 
 ## Masked output
 

@@ -323,7 +323,9 @@ It edits endpoints and rules, tries sample text against the unsaved policy,
 runs the policy's tests before every save, and records who saved what and
 why in a hash-chained change log. With a users file it shows each person
 what their role allows (admin, auditor, user) and lets everyone manage their
-own proxy key; behind single sign-on it serves a whole team. See the
+own proxy key; behind single sign-on it serves a whole team. The Python
+package has the same app (`credgate editor`), and both work on the same
+files. See the
 [policy editor guide](https://dwarpal.github.io/credgate/policy-editor/) and the
 [deployment guide](https://dwarpal.github.io/credgate/deployment/).
 

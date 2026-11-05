@@ -1,5 +1,15 @@
 # credgate (development version)
 
+* The policy editor now also comes in the Python package (`credgate
+  editor`), as the same app on the same files. The policy file layout, the
+  change lines and change log of `policy_write()`, the access log and the
+  near-miss explanations behind Try it's "Not reported" are now in the
+  shared spec, with conformance cases that R and Python both pass.
+
+* R CMD check passes on Windows: the keys-file test no longer checks Unix
+  file modes there, and the editor's access log uses an escape for its
+  middle dot (CRAN's non-ASCII check).
+
 * Single sign-on: `policy_editor(..., trust_header = "X-Auth-Request-User")`
   takes the signed-in user from the header a sign-in proxy (OAuth2 Proxy,
   Keycloak, a web server's SSO module) sets, for an app reachable only

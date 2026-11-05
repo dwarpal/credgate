@@ -20,7 +20,7 @@ shared specification.
 > Working today: PII detection,
 > column scanning (`scan_pii()`), redaction (`redact()`, `preview()`),
 > reversible tokenisation (`tokenise()`, `restore()`, with an encrypted
-> vault file), policies and the policy editor for InfoSec (R Shiny), the
+> vault file), policies and the policy editor for InfoSec (R and Python), the
 > audit log with monthly rotation and retention, the PII inventory (data
 > frames, Spark, BigQuery, databases), and the proxy: OpenAI, Anthropic and
 > Ollama APIs with streaming, so Claude Code, VS Code Copilot Chat, Open
@@ -197,8 +197,9 @@ decision names the policy revision and the rule behind each action, ready
 for the audit log. The format is specified in [spec/README.md](spec/README.md#policies-policy).
 
 InfoSec can change a policy in a browser instead of editing YAML:
-`credgate::policy_editor("bank-default.yaml")` (R, needs `shiny` and
-`bslib`). It edits endpoints and rules, tries sample text against the unsaved
+`credgate::policy_editor("bank-default.yaml")` in R (needs `shiny` and
+`bslib`), or `credgate editor --policy bank-default.yaml` in Python
+(`pip install 'credgate[editor]'`) - the same app on the same files. It edits endpoints and rules, tries sample text against the unsaved
 policy, shows what changed, and saves only a valid policy, recording who
 saved it, why and what changed in a hash-chained change log. Policy tests
 kept beside the policy - sample requests and what must happen to them - run

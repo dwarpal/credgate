@@ -38,7 +38,7 @@ payment data localisation (payment data stored only in India), PCI DSS
 | **Token vaults** (token → real value) | memory; `.cgvault` files | whoever holds a vault and its passphrase can re-identify |
 | **Token key** (keyed tokens; `CREDGATE_TOKEN_KEY`) | supplied by the organisation | with the key, tokens can be checked against guessed values |
 | **Vault passphrases** | the user; `CREDGATE_VAULT_PASSPHRASE` | unlock saved vaults |
-| **Policies** | YAML files, edited by hand or in the policy editor (R Shiny), with a change log | decide what may go where |
+| **Policies** | YAML files, edited by hand or in the policy editor (R or Python), with a change log | decide what may go where |
 | **Audit log** | on-premises files (JSON Lines) | the evidence for regulators; must be complete and unaltered |
 | **Model credentials** | environment variables | access to paid or internal models |
 | **credgate itself** | packages, images, source | a compromised release could leak everything |
@@ -169,7 +169,7 @@ Policies are versioned (`revision`) and every audit record names the
 policy revision and rule; loading is strict (unknown fields, endpoints,
 types are errors); the proxy refuses to start with an invalid policy, loads
 it once at start, and reports its revision on `/healthz`, so every instance
-behind a load balancer can be checked. The policy editor (R Shiny) saves
+behind a load balancer can be checked. The policy editor (R or Python) saves
 only a policy that loads with the same strict rules, raises its revision,
 and appends who saved it, when, why and what changed to a hash-chained
 change log next to the policy, so edited or removed entries are detected.

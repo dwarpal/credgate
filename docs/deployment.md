@@ -1,7 +1,7 @@
 # Deployment
 
 How to run credgate for a team: the **proxy** that people's tools talk to,
-and the **app** (the policy editor) where InfoSec manages the policy and
+and the **app** (the policy editor, in R or Python) where InfoSec manages the policy and
 everyone manages their own key - on one server or several. Everything here
 is open source with permissive licences (credgate is Apache-2.0; nginx is
 BSD, OAuth2 Proxy MIT, Keycloak and Caddy Apache-2.0).
@@ -80,6 +80,17 @@ credgate::policy_editor(
 
 Run it with `shiny::runApp()` as above (as a systemd service) rather than
 Shiny Server: the open-source Shiny Server is AGPL-licensed.
+
+Or the same app in Python (`pip install 'credgate[editor]'`; Shiny for
+Python is MIT-licensed and runs on uvicorn):
+
+```sh
+credgate editor --policy /srv/credgate/policy.yaml --users /srv/credgate/users.yaml \
+  --keys /srv/credgate/keys.json --audit /srv/credgate/audit/audit-proxy1.jsonl \
+  --trust-header X-Auth-Request-User --host 127.0.0.1 --port 3838 --no-browser
+```
+
+It refuses `--trust-header` unless it listens on `127.0.0.1`.
 
 **2. Put the sign-in proxy in front.** With nginx and OAuth2 Proxy
 (connected to the bank's identity provider - Azure AD/Entra ID, Okta,
