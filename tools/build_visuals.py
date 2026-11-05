@@ -11,9 +11,10 @@ import tempfile
 from pathlib import Path
 
 import credgate
-from credgate._spec import engine
+import regex
+from credgate._spec import detector_spec, engine
 from credgate.detect import explain_pii
-from credgate.detectors import get_detectors
+from credgate.detectors import expand_fragments, get_detectors
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "visuals" / "data.js"
@@ -177,6 +178,7 @@ EXAMPLES = [
     ("A hidden character", "PAN ABC​PE1234F"),
     ("Mobile with a label", "mobile 9876543210"),
     ("Mobile, no label", "call 9876543210 tomorrow"),
+    ("Mobile written with +91", "Customer +91 98765 43210"),
     ("Account number with 'a/c'", "a/c 123456789012"),
     ("Account number, no keyword", "ref 123456789012"),
     ("Voter ID with 'voter'", "voter ID QMF1202883"),
@@ -186,6 +188,7 @@ EXAMPLES = [
 
 def scoring_examples() -> list[dict]:
     dets = {d.id: d for d in get_detectors(None)}
+    specs = {d["id"]: d for d in detector_spec()["detectors"]}
     out = []
     for title, text in EXAMPLES:
         norm = credgate.normalise(text)
@@ -197,6 +200,7 @@ def scoring_examples() -> list[dict]:
             ctx = next((r[9:-1] for r in reasons if r.startswith("context '")), None)
             neg = next((r[18:-1] for r in reasons if r.startswith("negative context '")), None)
             base = _base(det, s, ctx, norm)
+            source = _base_source(specs[s.type], det, s, ctx, norm)
             found.append(
                 {
                     "type": s.type,
@@ -210,6 +214,7 @@ def scoring_examples() -> list[dict]:
                     "negative": neg,
                     "confidence": s.confidence,
                     "reasons": reasons,
+                    "base_source": source,
                 }
             )
         out.append(
@@ -233,6 +238,51 @@ def scoring_examples() -> list[dict]:
             }
         )
     return out
+
+
+# What the base rules of the detectors in the examples mean, in words (the
+# rules themselves are regular expressions in spec/detectors.yaml).
+RULE_WORDS = {
+    ("mobile_in", 0.85): "written with +91, 91 or a leading 0",
+}
+
+
+def _base_source(spec, det, span, ctx, norm) -> dict:
+    """Where a match's starting confidence comes from, in the spec."""
+    if ctx is None and spec.get("base_without_context") is not None:
+        return {
+            "kind": "without_context",
+            "value": spec["base_without_context"],
+            "with_context": spec["base"],
+        }
+    base = spec["base"]
+    if not isinstance(base, dict):
+        return {"kind": "fixed", "value": base}
+    s, e = span.start, span.end
+    if norm.map is not None:
+        s = norm.map.index(span.start)
+        e = norm.map.index(span.end - 1) + 1
+    matched = norm.text[s:e]
+    rules = []
+    applied = None
+    for r in base["rules"]:
+        hit = applied is None and regex.search(expand_fragments(r["match"]), matched) is not None
+        if hit:
+            applied = r["value"]
+        rules.append(
+            {
+                "value": r["value"],
+                "words": RULE_WORDS.get((spec["id"], r["value"]), r["match"]),
+                "applied": hit,
+            }
+        )
+    return {
+        "kind": "rule",
+        "value": det.base(matched),
+        "default": base["default"],
+        "rules": rules,
+        "applied": applied,
+    }
 
 
 def _base(det, span, ctx, norm) -> float:

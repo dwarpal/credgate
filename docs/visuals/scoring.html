@@ -118,6 +118,22 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
   function li(cls, head, desc, extra) {
     return '<li class="' + (cls || "") + '"><div class="h">' + head + '</div><div class="d">' + desc + "</div>" + (extra || "") + "</li>";
   }
+  // Where a starting confidence comes from, in words.
+  function baseWhy(m) {
+    var src = m.base_source, label = esc(m.label);
+    if (src.kind === "without_context") {
+      return "A " + label + " starts at " + fmt(src.with_context) + " when a keyword is near, but at " + fmt(src.value) +
+        " without one: the shape alone is weak evidence (it could be a product code).";
+    }
+    if (src.kind === "rule") {
+      var rules = src.rules.map(function (r) {
+        return (r.applied ? "<strong>" : "") + fmt(r.value) + " when " + esc(r.words) + (r.applied ? " (this one)</strong>" : "");
+      }).join("; ");
+      return "The starting value for a" + (/^[AEIOU]/.test(m.label) ? "n " : " ") + label + " depends on how it is written: " + rules + "; otherwise " +
+        (src.applied === null ? "<strong>" + fmt(src.default) + " (this one)</strong>" : fmt(src.default)) + ".";
+    }
+    return "Every " + label + " that passes " + (m.checks ? "its check" : "the pattern") + " starts at " + fmt(src.value) + ".";
+  }
   function bar(x, low) { return '<div class="bar' + (low ? " low" : "") + '"><span style="width:' + Math.round(x * 100) + '%"></span></div>'; }
 
   function render() {
@@ -149,7 +165,9 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
           steps += li("fail", "Keyword required, none found", esc(miss.why) + ". Any 12-digit number could be an account number, so this type is reported only with a word such as 'a/c' or 'account' nearby.");
         } else if (m) {
           var b = m.base, v = b, calc = "";
-          steps += li("", "Starting confidence: " + fmt(b), m.context === null && b < 0.5 ? "The shape alone is weak evidence for this type (it could be a product code)." : "How sure the shape and check make us, before looking around it.", bar(b));
+          steps += li("", "Starting confidence: " + fmt(b), baseWhy(m), bar(b) + '<div class="d" style="margin-top:6px">' +
+            "Each type's starting values are set by hand in the shared spec (<span class=\"mono\">spec/detectors.yaml</span>), " +
+            "the same in R and Python, and checked against credgate's benchmark corpus. They express how strong the evidence is, not a measured probability.</div>");
           if (m.context) {
             v = b + (1 - b) * S.context_boost;
             var shown = m.negative ? v : m.confidence;  // the score, as credgate rounds it

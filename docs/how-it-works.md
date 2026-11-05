@@ -30,6 +30,15 @@ minimum confidence to see which matches a policy would act on.
 <iframe src="../visuals/scoring.html" title="How credgate scores a match"
         style="width:100%;height:900px;border:0" loading="lazy" class="cg-visual"></iframe>
 
+Each type's starting confidence is set by hand in the shared spec
+(`spec/detectors.yaml`), the same in R and Python, and checked against
+credgate's benchmark corpus: a fixed value for most types (an Aadhaar number
+that passes its checksum starts at 0.85), a value that depends on how the
+match is written for some (a mobile number written with +91 starts higher
+than ten bare digits), and a lower value without a keyword for shapes that
+mean little alone (a voter ID format, which could be a product code). It
+expresses how strong the evidence is, not a measured probability.
+
 The rules are in the [specification](spec.md#detection-algorithm): a keyword
 within 40 characters raises a score by 80% of what is left to 1, a negative
 keyword halves it, and the result is rounded to two digits. In the policy

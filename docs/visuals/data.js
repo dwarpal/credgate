@@ -373,7 +373,11 @@ window.CG_DATA = {
        "matched Aadhaar number pattern",
        "Verhoeff checksum valid",
        "context 'Aadhaar'"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -398,7 +402,11 @@ window.CG_DATA = {
       "reasons": [
        "matched Aadhaar number pattern",
        "Verhoeff checksum valid"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -424,7 +432,11 @@ window.CG_DATA = {
        "matched Aadhaar number pattern",
        "Verhoeff checksum valid",
        "negative context 'order'"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -467,7 +479,11 @@ window.CG_DATA = {
        "matched Aadhaar number pattern",
        "Verhoeff checksum valid",
        "context 'आधार'"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -493,7 +509,11 @@ window.CG_DATA = {
        "matched PAN pattern",
        "context 'PAN'",
        "holder type: individual"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -518,7 +538,20 @@ window.CG_DATA = {
       "reasons": [
        "matched Indian mobile number pattern",
        "context 'mob'"
-      ]
+      ],
+      "base_source": {
+       "kind": "rule",
+       "value": 0.65,
+       "default": 0.65,
+       "rules": [
+        {
+         "value": 0.85,
+         "words": "written with +91, 91 or a leading 0",
+         "applied": false
+        }
+       ],
+       "applied": null
+      }
      }
     ],
     "misses": []
@@ -542,7 +575,57 @@ window.CG_DATA = {
       "confidence": 0.65,
       "reasons": [
        "matched Indian mobile number pattern"
-      ]
+      ],
+      "base_source": {
+       "kind": "rule",
+       "value": 0.65,
+       "default": 0.65,
+       "rules": [
+        {
+         "value": 0.85,
+         "words": "written with +91, 91 or a leading 0",
+         "applied": false
+        }
+       ],
+       "applied": null
+      }
+     }
+    ],
+    "misses": []
+   },
+   {
+    "title": "Mobile written with +91",
+    "text": "Customer +91 98765 43210",
+    "normalised": "Customer +91 98765 43210",
+    "changed": false,
+    "matches": [
+     {
+      "type": "mobile_in",
+      "label": "Indian mobile number",
+      "start": 9,
+      "end": 24,
+      "value": "+91 98765 43210",
+      "checks": null,
+      "base": 0.85,
+      "context": null,
+      "negative": null,
+      "confidence": 0.85,
+      "reasons": [
+       "matched Indian mobile number pattern"
+      ],
+      "base_source": {
+       "kind": "rule",
+       "value": 0.85,
+       "default": 0.65,
+       "rules": [
+        {
+         "value": 0.85,
+         "words": "written with +91, 91 or a leading 0",
+         "applied": true
+        }
+       ],
+       "applied": 0.85
+      }
      }
     ],
     "misses": []
@@ -567,7 +650,11 @@ window.CG_DATA = {
       "reasons": [
        "matched Bank account number pattern",
        "context 'a/c'"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -609,7 +696,11 @@ window.CG_DATA = {
       "reasons": [
        "matched Voter ID (EPIC) pattern",
        "context 'voter'"
-      ]
+      ],
+      "base_source": {
+       "kind": "fixed",
+       "value": 0.85
+      }
      }
     ],
     "misses": []
@@ -633,7 +724,12 @@ window.CG_DATA = {
       "confidence": 0.3,
       "reasons": [
        "matched Voter ID (EPIC) pattern"
-      ]
+      ],
+      "base_source": {
+       "kind": "without_context",
+       "value": 0.3,
+       "with_context": 0.85
+      }
      }
     ],
     "misses": []
