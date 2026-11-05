@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How credgate scores a match</title>
+<style>
+:root {
+  --bg: #ffffff; --panel: #f6f8fa; --ink: #14212b; --muted: #5b6b78; --line: #dde3ea;
+  --brand: #0e5a6b; --brand-soft: #e3f0f2;
+  --ok: #1d7a46; --ok-soft: #e5f4ea; --warn: #9a5b00; --warn-soft: #fdf0d9;
+  --bad: #b42318; --bad-soft: #fde8e6; --info: #1f5fa8; --info-soft: #e5eefa;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg: #0f1419; --panel: #172029; --ink: #e6edf3; --muted: #95a3b0; --line: #2b3843;
+    --brand: #5fb8c9; --brand-soft: #173a43;
+    --ok: #6fd39a; --ok-soft: #173426; --warn: #f0b75c; --warn-soft: #3a2c14;
+    --bad: #f58b80; --bad-soft: #3d1c19; --info: #84b4ef; --info-soft: #1a2c44;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+.layout { display: grid; grid-template-columns: 230px 1fr; gap: 16px; }
+@media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+.examples { display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 720px) { .examples { flex-direction: row; flex-wrap: wrap; } }
+.examples button { font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); display: flex; justify-content: space-between; gap: 8px; }
+.examples button[aria-pressed="true"] { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.examples button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.examples .sc { font-variant-numeric: tabular-nums; color: var(--muted); }
+.examples .sc.out { text-decoration: line-through; }
+.text { font-size: 20px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow-wrap: anywhere; }
+.text .label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
+.text + .text { margin-top: 8px; }
+mark { background: var(--warn-soft); color: var(--ink); border-radius: 4px; padding: 0 2px; outline: 1px solid var(--warn); }
+mark.ctx { background: var(--ok-soft); outline-color: var(--ok); }
+mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
+.inv { display: inline-block; font: 600 10px/1.6 ui-monospace, Menlo, monospace; padding: 0 4px; margin: 0 1px; vertical-align: middle;
+  border-radius: 4px; color: var(--bad); background: var(--bad-soft); border: 1px dashed var(--bad); }
+.pipeline { list-style: none; padding: 0; margin: 14px 0 0; counter-reset: step; }
+.pipeline li { position: relative; padding: 10px 12px 10px 44px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.pipeline li::before { counter-increment: step; content: counter(step); position: absolute; left: 12px; top: 10px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.pipeline li.fail { border-color: var(--bad); background: var(--bad-soft); }
+.pipeline li.fail::before { background: var(--bad); color: var(--bg); }
+.pipeline li.skip { opacity: .45; }
+.pipeline .h { font-weight: 650; }
+.pipeline .d { color: var(--muted); font-size: 13.5px; }
+.calc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; margin-top: 4px; }
+.bar { position: relative; height: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; margin-top: 6px; overflow: hidden; }
+.bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--brand); border-radius: 999px; transition: width .5s ease; }
+.bar.low > span { background: var(--muted); }
+.final { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.final .num { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 13px; font-weight: 650; }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.threshold { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.threshold label { font-weight: 650; }
+.threshold input { width: 100%; accent-color: var(--brand); }
+.axis { position: relative; height: 150px; margin: 6px 4px 0; }
+.axis .line { position: absolute; left: 0; right: 0; top: 70px; height: 2px; background: var(--line); }
+.axis .tick { position: absolute; top: 76px; font-size: 11px; color: var(--muted); transform: translateX(-50%); }
+.axis .min { position: absolute; top: 0; bottom: 30px; width: 2px; background: var(--bad); }
+.axis .min span { position: absolute; top: -2px; left: 4px; font-size: 11px; color: var(--bad); white-space: nowrap; }
+.axis .pt { position: absolute; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid var(--bg); cursor: pointer; background: var(--brand); }
+.axis .pt.out { background: var(--muted); opacity: .55; }
+.axis .pt.sel { box-shadow: 0 0 0 3px var(--brand-soft), 0 0 0 5px var(--brand); }
+.summary { color: var(--muted); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="examples" role="group" aria-label="Examples" id="examples"></div>
+  <div>
+    <div id="texts"></div>
+    <ol class="pipeline" id="pipeline"></ol>
+    <div class="threshold">
+      <label for="min">Minimum confidence: <span id="minv" class="mono"></span></label>
+      <input id="min" type="range" min="0" max="1" step="0.05" value="0.5">
+      <div class="summary" id="summary"></div>
+      <div class="axis" id="axis" aria-hidden="true"></div>
+    </div>
+  </div>
+</div>
+<script src="data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var S = window.CG_DATA.scoring;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]; }); };
+  var fmt = function (x) { return (Math.round(x * 100) / 100).toFixed(2); };
+  // A computed value before credgate rounds the score to 2 digits.
+  var exact = function (x) { return String(+x.toFixed(4)); };
+  var sel = 0;
+  var minConf = 0.5;
+
+  // The score of an example: its match's confidence, or null (not reported at any minimum).
+  function score(e) { return e.matches.length ? e.matches[0].confidence : null; }
+
+  // Mark the candidate, and a keyword next to it, in a text.
+  function marks(text, start, end, word, cls) {
+    var html = esc(text.slice(0, start)) + "<mark>" + esc(text.slice(start, end)) + "</mark>" + esc(text.slice(end));
+    if (word) {
+      var i = text.toLowerCase().indexOf(word.toLowerCase());
+      if (i >= 0 && (i + word.length <= start || i >= end)) {
+        var before = i < start;
+        var a = esc(text.slice(0, i)), w = '<mark class="' + cls + '">' + esc(text.slice(i, i + word.length)) + "</mark>";
+        if (before) html = a + w + esc(text.slice(i + word.length, start)) + "<mark>" + esc(text.slice(start, end)) + "</mark>" + esc(text.slice(end));
+        else html = esc(text.slice(0, start)) + "<mark>" + esc(text.slice(start, end)) + "</mark>" + esc(text.slice(end, i)) + w + esc(text.slice(i + word.length));
+      }
+    }
+    return html;
+  }
+  function li(cls, head, desc, extra) {
+    return '<li class="' + (cls || "") + '"><div class="h">' + head + '</div><div class="d">' + desc + "</div>" + (extra || "") + "</li>";
+  }
+  // Invisible characters, made visible: they are what the example is about.
+  var INVISIBLE = /[\u200b\u200c\u200d\u2060\ufeff\u00ad]/g;
+  var SHORT = {"\u200b": "ZWSP", "\u200c": "ZWNJ", "\u200d": "ZWJ", "\u2060": "WJ", "\ufeff": "BOM", "\u00ad": "SHY"};
+  var show = function (html) {
+    return html.replace(INVISIBLE, function (c) {
+      var code = "U+" + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0");
+      return '<span class="inv" title="An invisible character (' + code + ')">' + SHORT[c] + "</span>";
+    });
+  };
+  var cap = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); };
+  var article = function (label) { return (/^[AEIOU]/.test(label) ? "an " : "a ") + esc(label); };
+  // Where a starting confidence comes from, in words.
+  function baseWhy(m) {
+    var src = m.base_source, label = esc(m.label);
+    if (src.kind === "without_context") {
+      return "A " + label + " starts at " + fmt(src.with_context) + " when a keyword is near, but at " + fmt(src.value) +
+        " without one: the shape alone is weak evidence (it could be a product code).";
+    }
+    if (src.kind === "rule") {
+      var rules = src.rules.map(function (r) {
+        return (r.applied ? "<strong>" : "") + fmt(r.value) + " when " + esc(r.words) + (r.applied ? " (this one)</strong>" : "");
+      }).join("; ");
+      return "The starting value for a" + (/^[AEIOU]/.test(m.label) ? "n " : " ") + label + " depends on how it is written: " + rules + "; otherwise " +
+        (src.applied === null ? "<strong>" + fmt(src.default) + " (this one)</strong>" : fmt(src.default)) + ".";
+    }
+    return "Every " + label + " that passes " + (m.checks ? "its check" : "the pattern") + " starts at " + fmt(src.value) + ".";
+  }
+  function bar(x, low) { return '<div class="bar' + (low ? " low" : "") + '"><span style="width:' + Math.round(x * 100) + '%"></span></div>'; }
+
+  function render() {
+    var e = S.examples[sel];
+    var m = e.matches[0], miss = e.misses[0];
+    var cand = m || miss;
+    var word = m ? (m.context || m.negative) : (miss ? miss.keyword : null);
+    var cls = (m && m.context) || (!m && miss && miss.keyword) ? "ctx" : "neg";
+    var html = '<div class="text"><span class="label">Text</span>' + show(cand ? marks(e.text, cand.start, cand.end, word, cls) : esc(e.text)) + "</div>";
+    if (e.changed) {
+      html += '<div class="text mono"><span class="label">What the detectors read (normalised)</span>' + esc(e.normalised) + "</div>";
+    }
+    $("texts").innerHTML = html;
+
+    var steps = "";
+    if (e.changed) {
+      var what = [];
+      if (e.digits) what.push(esc(e.digits) + " digits become 0-9");
+      e.hidden.forEach(function (h) {
+        what.push("an invisible <strong>" + esc(h.name) + "</strong> (" + h.code + ") is removed: it does not show on screen, but would split the value so a pattern no longer matches it whole");
+      });
+      steps += li("", "Normalised", cap(what.join("; ")) + ". So <span class=\"mono\">" + show(esc(e.text)) + "</span> is read as <span class=\"mono\">" + esc(e.normalised) +
+        "</span>; what is reported still points at the original text.");
+    }
+    if (!cand) {
+      steps += li("skip", "No candidate", "Nothing in the text looks like an identifier.");
+    } else {
+      steps += li("", "Pattern matched: " + esc(cand.label), "A candidate of the right shape, not inside a longer word or number: <span class=\"mono\">" + show(esc(cand.value)) + "</span>.");
+      if (miss && /fails the check/.test(miss.why)) {
+        var method = miss.fix ? miss.fix.method : miss.why.replace(/^fails the check: /, "");
+        var why = miss.fix
+          ? "The last digit of " + article(miss.label) + " is a check digit, worked out from the others (" + esc(method) + "). For these digits it should be <strong>" +
+            esc(miss.fix.want) + "</strong> (<span class=\"mono\">" + esc(miss.fix.corrected) + "</span>), not <strong>" + esc(miss.fix.got) +
+            "</strong>: so this is a mistyped or made-up number, not a real one."
+          : "It does not pass " + esc(method) + ", so it is not a real one.";
+        why += " It is dropped before it gets any score" +
+          (miss.keyword ? ": even the word '" + esc(miss.keyword) + "' next to it does not bring it back, because the check comes first." : ".");
+        steps += li("fail", "Check failed: " + esc(miss.why.replace(/^fails the check: /, "")), why);
+      } else {
+        var checks = m ? m.checks : null;
+        steps += li(checks ? "" : "skip", checks ? "Check passed" : "No checksum for this type", checks ? esc(checks) + "." : "Some identifiers have no check digit; context matters more for them.");
+        if (miss && /needs a keyword/.test(miss.why)) {
+          steps += li("fail", "Keyword required, none found", cap(esc(miss.why)) + ". Any 12-digit number could be an account number, so this type is reported only with a word such as 'a/c' or 'account' nearby.");
+        } else if (m) {
+          var b = m.base, v = b, calc = "";
+          steps += li("", "Starting confidence: " + fmt(b), baseWhy(m), bar(b) + '<div class="d" style="margin-top:6px">' +
+            "Each type's starting values are set by hand in the shared spec (<span class=\"mono\">spec/detectors.yaml</span>), " +
+            "the same in R and Python, and checked against credgate's benchmark corpus. They express how strong the evidence is, not a measured probability.</div>");
+          if (m.context) {
+            v = b + (1 - b) * S.context_boost;
+            var shown = m.negative ? v : m.confidence;  // the score, as credgate rounds it
+            calc = '<div class="calc">' + fmt(b) + " + (1 - " + fmt(b) + ") &times; " + S.context_boost + " = " + exact(v) + "</div>";
+            steps += li("", "Keyword nearby: '" + esc(m.context) + "' &rarr; " + fmt(shown), "A word that names this identifier within " + S.window + " characters closes most of the gap to 1.", calc + bar(v) +
+              '<div class="d" style="margin-top:6px">Why ' + S.context_boost + ": the score moves " + Math.round(S.context_boost * 100) +
+              "% of the way to 1, so a keyword never makes a match certain, and weak evidence gains more than strong. Like the starting values, it is set by hand in the spec and checked against credgate's benchmark corpus.</div>");
+          } else {
+            steps += li("skip", "No keyword nearby", "Nothing within " + S.window + " characters names this identifier, so the score stays where it is.");
+          }
+          if (m.negative) {
+            var v2 = v * S.negative_factor;
+            steps += li("", "Negative word: '" + esc(m.negative) + "' &rarr; " + fmt(m.confidence), "A word that suggests something else (an order or reference number) halves the score.",
+              '<div class="calc">' + exact(v) + " &times; " + S.negative_factor + " = " + exact(v2) + "</div>" + bar(m.confidence, true) +
+              '<div class="d" style="margin-top:6px">Why ' + S.negative_factor + ": a contrary word halves the confidence, enough to take an unlabelled number below the usual minimum of 0.5. Set by hand in the spec, like the boost.</div>");
+          }
+        }
+      }
+    }
+    var final = score(e);
+    var kept = final !== null && final >= minConf;
+    steps += li(final === null ? "fail" : "", "Result",
+      final === null ? (miss ? "Not reported. In the policy editor, Try it lists it under \"Not reported\" with the reason: <em>" + esc(miss.why) + "</em>." : "Nothing found.") :
+        "The score, rounded to 2 digits, compared with the minimum confidence below.",
+      final === null ? "" : '<div class="final"><span class="num">' + fmt(final) + '</span><span class="badge ' + (kept ? "ok" : "bad") + '">' + (kept ? "reported" : "below the minimum, not reported") + "</span></div>");
+    $("pipeline").innerHTML = steps;
+    renderAxis();
+    Array.prototype.forEach.call($("examples").children, function (c, j) {
+      c.setAttribute("aria-pressed", j === sel ? "true" : "false");
+      var s = score(S.examples[j]);
+      c.lastChild.className = "sc" + (s === null || s < minConf ? " out" : "");
+    });
+  }
+
+  function renderAxis() {
+    var ax = $("axis"), html = '<div class="line"></div>';
+    for (var t = 0; t <= 10; t += 2) html += '<div class="tick" style="left:' + t * 10 + '%">' + (t / 10).toFixed(1) + "</div>";
+    html += '<div class="min" style="left:' + minConf * 100 + '%"><span>minimum ' + fmt(minConf) + "</span></div>";
+    // Spread points with the same score vertically so they stay visible.
+    var seen = {};
+    S.examples.forEach(function (e, i) {
+      var s = score(e);
+      if (s === null) return;
+      var k = fmt(s); seen[k] = (seen[k] || 0) + 1;
+      var y = 70 - (seen[k] - 1) * 16 + (seen[k] > 1 ? 0 : 0);
+      html += '<div class="pt' + (s < minConf ? " out" : "") + (i === sel ? " sel" : "") + '" data-i="' + i + '" title="' + esc(e.title) + ": " + k + '" style="left:' + s * 100 + "%;top:" + y + 'px"></div>';
+    });
+    ax.innerHTML = html;
+    Array.prototype.forEach.call(ax.querySelectorAll(".pt"), function (p) { p.onclick = function () { sel = +p.dataset.i; render(); }; });
+    var reported = S.examples.filter(function (e) { var s = score(e); return s !== null && s >= minConf; }).length;
+    var never = S.examples.filter(function (e) { return score(e) === null; }).length;
+    $("summary").textContent = "At this minimum, " + reported + " of " + S.examples.length + " examples are reported; " + never +
+      " never are (a failed check or a missing keyword). Each dot is an example: drag the slider to see which fall below the line.";
+    $("minv").textContent = fmt(minConf);
+  }
+
+  S.examples.forEach(function (e, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    var s = score(e);
+    b.innerHTML = "<span>" + esc(e.title) + '</span><span class="sc">' + (s === null ? "-" : fmt(s)) + "</span>";
+    b.onclick = function () { sel = i; render(); };
+    $("examples").appendChild(b);
+  });
+  $("min").oninput = function () { minConf = +this.value; render(); };
+  render();
+})();
+</script>
+<script>
+// Tell an embedding page (the docs) how tall this is, so its frame fits.
+(function () {
+  if (window.parent === window) return;
+  var send = function () { window.parent.postMessage({ cgHeight: document.body.getBoundingClientRect().height, cgName: document.title }, "*"); };
+  // Kept on window: an observer nothing refers to may be discarded.
+  window.cgResize = new ResizeObserver(send);
+  window.cgResize.observe(document.body);
+  window.cgMutate = new MutationObserver(send);
+  window.cgMutate.observe(document.body, { childList: true, subtree: true });
+  send();
+})();
+</script>
+</body>
+</html>

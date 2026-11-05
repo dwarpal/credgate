@@ -38,6 +38,7 @@ nav:
       - "API: proxy": python/api/proxy.md
       - "API: evaluation and test data": python/api/evaluation.md
   - R: https://dwarpal.github.io/credgate/r/
+  - How it works: how-it-works.md
   - Guides:
       - Proxy: proxy.md
       - Policy editor: policy-editor.md
