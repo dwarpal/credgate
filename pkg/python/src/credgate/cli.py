@@ -212,6 +212,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     uset.add_argument("value", type=int)
     uset.add_argument("--file", required=True, help="users file")
 
+    ed = sub.add_parser(
+        "editor", help="run the policy editor in the browser (needs credgate[editor])"
+    )
+    ed.add_argument("--policy", required=True, help="policy file (YAML; created if missing)")
+    ed.add_argument("--user", help="who is editing (with --users, who is signed in)")
+    ed.add_argument("--users", help="users file: who may use the editor, in which role")
+    ed.add_argument("--keys", help="the proxy's keys file, for My key and Users")
+    ed.add_argument("--audit", help="the proxy's audit log, for My activity")
+    ed.add_argument(
+        "--trust-header",
+        help="request header with the signed-in user, set by a sign-in proxy in front "
+        "(e.g. X-Auth-Request-User); only with --host 127.0.0.1",
+    )
+    ed.add_argument("--host", default="127.0.0.1", help="address to listen on (default 127.0.0.1)")
+    ed.add_argument("--port", type=int, default=8000, help="port (default 8000)")
+    ed.add_argument("--no-browser", action="store_true", help="do not open a browser")
+
     dl = sub.add_parser(
         "detectors", help="list the registered detectors (and check custom detector files)"
     )
@@ -242,6 +259,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _policy_test(args)
     if args.command == "users":
         return _users(args)
+    if args.command == "editor":
+        return _editor(args)
     if args.command in ("redact", "preview"):
         return _redact(args)
     return _detect(args)
@@ -263,6 +282,36 @@ def _policy_test(args: argparse.Namespace) -> int:
     failed = sum(not r.passed for r in results)
     print(f"{len(results) - failed} passed, {failed} failed")
     return 1 if failed else 0
+
+
+def _editor(args: argparse.Namespace) -> int:
+    try:
+        import shiny
+
+        from .editor import policy_editor
+    except ImportError:
+        print(
+            "credgate: the policy editor needs Shiny for Python: pip install 'credgate[editor]'",
+            file=sys.stderr,
+        )
+        return 2
+    if args.trust_header and args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            "credgate: --trust-header needs --host 127.0.0.1: anyone reaching the editor "
+            "directly could send the header themselves.",
+            file=sys.stderr,
+        )
+        return 2
+    app = policy_editor(
+        args.policy,
+        user=args.user,
+        users=args.users,
+        keys=args.keys,
+        audit=args.audit,
+        trust_header=args.trust_header,
+    )
+    shiny.run_app(app, host=args.host, port=args.port, launch_browser=not args.no_browser)
+    return 0
 
 
 def _users(args: argparse.Namespace) -> int:

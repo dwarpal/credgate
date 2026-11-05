@@ -486,3 +486,29 @@ for (case in proxy_keys_spec$files) {
                      case$users[sort(names(case$users))])
   })
 }
+
+for (case in conformance("explain.yaml")$cases) {
+  test_that(paste("explain:", case$id), {
+    x <- credgate:::explain_pii(case$text, min_confidence = case$min_confidence)
+    expect_identical(x$matches$type, as.character(unlist(case$matches)))
+    want <- case$misses
+    expect_identical(nrow(x$misses), length(want))
+    for (i in seq_along(want)) {
+      expect_identical(x$misses$type[i], want[[i]]$type)
+      expect_identical(x$misses$value[i], want[[i]]$value)
+      expect_identical(x$misses$why[i], want[[i]]$why)
+    }
+  })
+}
+
+policy_write_spec <- conformance("policy_write.yaml")
+test_that("policy files are written in the spec's layout", {
+  for (case in policy_write_spec$layout) {
+    expect_identical(paste0(paste(credgate:::policy_yaml(case$policy), collapse = "\n"), "\n"), case$yaml)
+  }
+})
+test_that("policy changes are listed as the spec says", {
+  for (case in policy_write_spec$diff) {
+    expect_identical(policy_diff(case$old, case$new), as.character(unlist(case$changes)))
+  }
+})

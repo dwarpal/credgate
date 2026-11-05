@@ -1,7 +1,11 @@
-// Clicking an endpoint row or a rule picks it in the matching select box.
+// Clicking an endpoint row or a rule picks it in the matching select box
+// (a selectize box in R, a plain select in Python).
 $(document).on("click", "[data-pick]", function () {
   var target = document.getElementById($(this).data("target"));
-  if (target && target.selectize) target.selectize.setValue($(this).attr("data-pick"));
+  var value = $(this).attr("data-pick");
+  if (!target) return;
+  if (target.selectize) target.selectize.setValue(value);
+  else $(target).val(value).trigger("change");
 });
 
 // Copy a new proxy key. The clipboard API needs HTTPS (or localhost); over

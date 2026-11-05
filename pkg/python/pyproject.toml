@@ -52,6 +52,8 @@ server = [
   "httptools>=0.6; sys_platform != 'win32'",
   "uvloop>=0.19; sys_platform != 'win32'",
 ]
+# The policy editor (Shiny for Python, MIT; its dependencies MIT, BSD or Apache-2.0).
+editor = ["shiny>=1.5"]
 # Not in `all`: PySpark is a 400 MB download, and Spark users already have it.
 spark = ["pyspark>=3.4"]
 all = ["credgate[vault,arrow,polars,duckdb,bigquery,database]"]

@@ -51,6 +51,28 @@ class Span:
         return d
 
 
+@dataclass(frozen=True)
+class Miss:
+    """A candidate that looked like an identifier but was not reported, and
+    why: a failed check, a keyword the type needs, a confidence below the
+    minimum, or a more confident overlapping match. Offsets as in
+    :class:`Span`."""
+
+    doc: int
+    start: int
+    end: int
+    type: str
+    data_class: str
+    value: str
+    why: str
+
+    def __repr__(self) -> str:
+        return (
+            f"Miss(doc={self.doc}, start={self.start}, end={self.end}, type={self.type!r}, "
+            f"value={mask_value(self.value, self.data_class)!r}, why={self.why!r})"
+        )
+
+
 def detect_pii(
     text: str | Sequence[str | None] | Any,
     detectors: Sequence[str] | None = None,
@@ -96,16 +118,32 @@ def _detect_with(
     contexts: Sequence[str],
     min_confidence: float = 0.0,
     window: int | None = None,
+    misses: list[Miss] | None = None,
 ) -> list[Span]:
-    """Detection with the given detectors (registered or not)."""
+    """Detection with the given detectors (registered or not). With
+    ``misses`` (a list), candidates that were dropped are added to it, with
+    the reason, for explaining a result (see :func:`explain_pii`)."""
     if window is None:
         window = engine()["scoring"]["context_window"]
     norms = [normalise(t) for t in docs]
     joined = _join(norms)
     spans: list[Span] = []
     for det in dets:
-        spans.extend(_run_detector(det, docs, norms, contexts, window, joined))
+        spans.extend(_run_detector(det, docs, norms, contexts, window, joined, misses))
+    candidates = spans
     spans = _resolve_overlaps(spans)
+    if misses is not None:
+        kept = {(s.doc, s.start, s.type) for s in spans}
+        misses.extend(
+            _miss(c, "a more confident match overlaps it")
+            for c in candidates
+            if (c.doc, c.start, c.type) not in kept
+        )
+        misses.extend(
+            _miss(s, f"confidence {_num(s.confidence)} is below the minimum {_num(min_confidence)}")
+            for s in spans
+            if s.confidence < min_confidence
+        )
     spans = [s for s in spans if s.confidence >= min_confidence]
     spans.sort(key=lambda s: (s.doc, s.start))
     return spans
@@ -161,6 +199,7 @@ def _run_detector(
     contexts: list[str],
     window: int,
     joined: tuple[str, list[int]] | None = None,
+    misses: list[Miss] | None = None,
 ) -> list[Span]:
     patterns, context_re, negative_re, column_re, column_patterns = det._compiled
     scoring = engine()["scoring"]
@@ -171,6 +210,9 @@ def _run_detector(
         ntext = norm.text
         matched = ntext[s:e]
         if det.validate is not None and not det.validate(matched):
+            if misses is not None:
+                check = det.checks.removesuffix(" valid") if det.checks else "validation"
+                misses.append(_miss_at(det, docs, norms, doc, s, e, f"fails the check: {check}"))
             continue
 
         before = ntext[max(0, s - window) : s]
@@ -178,6 +220,10 @@ def _run_detector(
         ctx_hit = label or _nearest_keyword(context_re, before, after, contexts[doc])
         neg_hit = _nearest_keyword(negative_re, before, after, contexts[doc])
         if det.context_required and ctx_hit is None:
+            if misses is not None:
+                keyword = _example_keyword(det.context)
+                why = f"needs a keyword such as '{keyword}' within {window} characters"
+                misses.append(_miss_at(det, docs, norms, doc, s, e, why))
             continue
         # The stronger cue wins: one before the match (where labels
         # go) beats one after it; on the same side, the nearer wins.
@@ -229,6 +275,71 @@ def _run_detector(
     # Document, then pattern, then position order, as when searching each
     # document separately (ties in overlap resolution keep this order).
     return [span for _, _, span in sorted(out, key=lambda t: (t[0], t[1]))]
+
+
+def _miss(span: Span, why: str) -> Miss:
+    return Miss(span.doc, span.start, span.end, span.type, span.data_class, span.value, why)
+
+
+def _miss_at(
+    det: Detector, docs: list[str], norms: list[Normalised], doc: int, s: int, e: int, why: str
+) -> Miss:
+    norm = norms[doc]
+    start, end = (s, e) if norm.map is None else (norm.map[s], norm.map[e - 1] + 1)
+    return Miss(doc, start, end, det.id, det.data_class, docs[doc][start:end], why)
+
+
+def _num(x: float) -> str:
+    """A number as R's format() shows it (7 significant digits)."""
+    return f"{x:.7g}"
+
+
+_KEYWORD_SYNTAX = regex.compile(r"\\b|\(\?[:!=<]*|[()?^$\\]")
+_KEYWORD_CLASS = regex.compile(r"\[[^]]*\][*+?]?")
+
+
+def _example_keyword(pattern: str | None) -> str:
+    """A readable keyword from a context pattern, for messages: its first
+    alternative, without regex syntax."""
+    first = (pattern or "").split("|")[0]
+    return _KEYWORD_CLASS.sub("", _KEYWORD_SYNTAX.sub("", first))
+
+
+def explain_pii(
+    text: str | Sequence[str | None] | Any,
+    min_confidence: float = 0.0,
+    detectors: Sequence[Detector] | None = None,
+) -> tuple[list[Span], list[Miss]]:
+    """The matches of :func:`detect_pii`, and the near misses: candidates
+    that looked like an identifier but were dropped - a failed checksum, a
+    missing keyword the type needs, a confidence below the minimum, or a more
+    confident overlapping match. Used by the policy editor's Try it.
+
+    Args:
+        text: As for :func:`detect_pii`.
+        min_confidence: Drop matches scoring below this value.
+        detectors: Detector objects to run (a policy's own, say); ``None``
+            runs all registered ones.
+
+    Returns:
+        ``(matches, misses)``; a candidate inside a reported match is
+        explained by it and not listed as a miss.
+    """
+    docs = texts(text)[0]
+    dets = list(detectors) if detectors is not None else get_detectors(None)
+    found: list[Miss] = []
+    matches = _detect_with(dets, docs, [""] * len(docs), min_confidence, None, found)
+    out: list[Miss] = []
+    seen: set[tuple[int, int, int, str]] = set()
+    for m in found:
+        key = (m.doc, m.start, m.end, m.type)
+        inside = any(s.doc == m.doc and s.start < m.end and s.end > m.start for s in matches)
+        if inside or key in seen:
+            continue
+        seen.add(key)
+        out.append(m)
+    out.sort(key=lambda m: (m.doc, m.start))
+    return matches, out
 
 
 def _candidates(

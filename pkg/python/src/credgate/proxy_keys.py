@@ -210,3 +210,74 @@ def expire_unused(
     if expired:
         _write(path, users)
     return sorted(expired)
+
+
+@dataclass(frozen=True)
+class AccessEntry:
+    """One change to who may use the proxy: a key made, rotated or removed."""
+
+    time: str
+    by: str
+    action: str
+    user: str
+    expires: str | None = None
+
+
+def access_path(keys: str | os.PathLike[str]) -> Path:
+    """The access log kept beside a keys file (``keys.access.jsonl`` for
+    ``keys.json``)."""
+    p = Path(keys)
+    stem = p.name.removesuffix(".json")
+    return p.with_name(f"{stem}.access.jsonl")
+
+
+def log_access(
+    keys: str | os.PathLike[str], by: str, action: str, user: str, expires: str | None = None
+) -> None:
+    """Record a key change in the access log beside the keys file: when, by
+    whom, what (``create``, ``rotate`` or ``remove``), for whom and until
+    when - never the key. Hash-chained like the audit log."""
+    log = access_path(keys)
+    last = _last_line(log)
+    record: dict[str, Any] = {"time": _iso(_now()), "by": by, "action": action, "user": user}
+    if expires is not None:
+        record["expires"] = expires
+    record["prev"] = hashlib.sha256(last).hexdigest() if last else _GENESIS
+    line = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    with open(log, "ab") as f:
+        f.write(line.encode("utf-8") + b"\n")
+
+
+def read_access(keys: str | os.PathLike[str]) -> tuple[list[AccessEntry], bool]:
+    """The access log beside a keys file, oldest first, and whether its hash
+    chain is unbroken. Reading stops at the first broken entry."""
+    log = access_path(keys)
+    if not log.exists():
+        return [], True
+    prev, out = _GENESIS, []
+    for line in _lines(log):
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            return out, False
+        if not isinstance(rec, dict) or rec.get("prev") != prev:
+            return out, False
+        prev = hashlib.sha256(line).hexdigest()
+        out.append(
+            AccessEntry(rec["time"], rec["by"], rec["action"], rec["user"], rec.get("expires"))
+        )
+    return out, True
+
+
+_GENESIS = "0" * 64
+
+
+def _lines(path: Path) -> list[bytes]:
+    return [ln.removesuffix(b"\r") for ln in path.read_bytes().split(b"\n") if ln.strip(b"\r")]
+
+
+def _last_line(path: Path) -> bytes | None:
+    if not path.exists():
+        return None
+    lines = _lines(path)
+    return lines[-1] if lines else None
