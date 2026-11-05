@@ -576,4 +576,5 @@ https://github.com/dwarpal/credgate
 
 ## Licence
 
-Apache License 2.0; see [LICENSE](LICENSE).
+Apache License 2.0; see [LICENSE](LICENSE). The licences of every dependency, for
+legal and procurement reviews: [Licences](https://dwarpal.github.io/credgate/licences/).
