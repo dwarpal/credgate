@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 (2026-11-05)
+
+The policy editor in Python: the same app as the R package's, on the same
+files, so Python-only teams can run the InfoSec UI without R. R and Python
+now match function for function (see "R and Python" in the docs), and the
+formats both editors write are in the spec. New docs pages list the two
+packages name for name, and every dependency's licence.
 
 - **Policy editor in Python** (`pip install 'credgate[editor]'`,
   `credgate editor --policy bank.yaml`, or `credgate.editor.policy_editor()`
