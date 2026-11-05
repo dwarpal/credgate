@@ -16,8 +16,8 @@ from credgate.policy_tests import test_from_decision, write_policy_tests
 from credgate.policy_write import changes_path, policy_changes, read_policy, write_policy
 from credgate.proxy_keys import access_path, add_user, log_access, read_access
 
-BANK = Path(__file__).resolve().parents[3] / "examples" / "policies" / "bank-default.yaml"
-pytestmark = pytest.mark.skipif(not BANK.exists(), reason="repository examples not available")
+# The example bank policy, as shipped with the package (the editor's template).
+BANK = Path(credgate.__file__).parent / "editor" / "assets" / "bank-default.yaml"
 
 
 def test_save_raises_the_revision_and_logs_the_change(tmp_path):
