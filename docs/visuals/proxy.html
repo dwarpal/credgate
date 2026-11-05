@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>credgate proxy, step by step</title>
+<style>
+:root {
+  --bg: #ffffff; --panel: #f6f8fa; --ink: #14212b; --muted: #5b6b78; --line: #dde3ea;
+  --brand: #0e5a6b; --brand-soft: #e3f0f2;
+  --ok: #1d7a46; --ok-soft: #e5f4ea; --warn: #9a5b00; --warn-soft: #fdf0d9;
+  --info: #1f5fa8; --info-soft: #e5eefa; --bad: #b42318; --bad-soft: #fde8e6;
+  --violet: #6941c6; --violet-soft: #efe9fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg: #0f1419; --panel: #172029; --ink: #e6edf3; --muted: #95a3b0; --line: #2b3843;
+    --brand: #5fb8c9; --brand-soft: #173a43;
+    --ok: #6fd39a; --ok-soft: #173426; --warn: #f0b75c; --warn-soft: #3a2c14;
+    --info: #84b4ef; --info-soft: #1a2c44; --bad: #f58b80; --bad-soft: #3d1c19;
+    --violet: #b9a2f2; --violet-soft: #2c2347;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+.scenarios { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.scenarios button, .controls button {
+  font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.scenarios button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--bg); }
+.scenarios button:focus-visible, .controls button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* the route */
+.route { display: grid; grid-template-columns: 1fr auto 1.25fr auto 1fr; align-items: center; gap: 6px; margin-bottom: 14px; }
+.node { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); min-height: 74px; transition: border-color .25s, box-shadow .25s; }
+.node .t { font-weight: 650; font-size: 14px; }
+.node .s { color: var(--muted); font-size: 12px; }
+.node.on { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.node.stop { border-color: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+.node.dim { opacity: .45; }
+.steps-in-proxy { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.steps-in-proxy span { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.steps-in-proxy span.on { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.arrow { position: relative; width: 44px; height: 24px; }
+.arrow svg { width: 44px; height: 24px; display: block; color: var(--muted); }
+.arrow.on svg { color: var(--brand); }
+.arrow .dot { position: absolute; top: 7px; left: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); opacity: 0; }
+.arrow.flow-right .dot { animation: right .9s ease-in-out infinite; }
+.arrow.flow-left .dot { animation: left .9s ease-in-out infinite; }
+@keyframes right { 0% { left: 0; opacity: 0 } 20% { opacity: 1 } 80% { opacity: 1 } 100% { left: 34px; opacity: 0 } }
+@keyframes left { 0% { left: 34px; opacity: 0 } 20% { opacity: 1 } 80% { opacity: 1 } 100% { left: 0; opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .arrow .dot { animation: none !important; opacity: 1; left: 17px; } }
+
+/* the stage */
+.stage { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--bg); }
+.stage h3 { margin: 0 0 4px; font-size: 16px; }
+.stage .where { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.stage p.note { color: var(--muted); margin: 6px 0 12px; }
+.box { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 12px; overflow-wrap: anywhere; }
+.box.http { white-space: pre-wrap; }
+mark { border-radius: 4px; padding: 0 2px; background: var(--warn-soft); color: var(--ink); }
+mark.redact { background: var(--info-soft); outline: 1px solid var(--info); }
+mark.tokenise { background: var(--violet-soft); outline: 1px solid var(--violet); }
+mark.block { background: var(--bad-soft); outline: 1px solid var(--bad); }
+mark.allow { background: var(--ok-soft); outline: 1px solid var(--ok); }
+mark.restored { background: var(--ok-soft); outline: 1px solid var(--ok); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 10px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.badge { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.badge.redact { background: var(--info-soft); color: var(--info); }
+.badge.tokenise { background: var(--violet-soft); color: var(--violet); }
+.badge.block, .badge.bad { background: var(--bad-soft); color: var(--bad); }
+.badge.allow, .badge.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-weight: 600; }
+.verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict.bad { background: var(--bad-soft); color: var(--bad); }
+pre.json { margin: 0; white-space: pre-wrap; font-size: 12.5px; }
+.controls { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.controls .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+.controls button.primary { background: var(--brand); border-color: var(--brand); color: var(--bg); }
+.controls button:disabled { opacity: .45; cursor: default; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+@media (max-width: 680px) {
+  .route { grid-template-columns: 1fr; }
+  .arrow { transform: rotate(90deg); margin: 0 auto; }
+}
+</style>
+</head>
+<body>
+<div class="scenarios" role="group" aria-label="Scenario" id="scenarios"></div>
+
+<div class="route" aria-hidden="true">
+  <div class="node" id="n-user"><div class="t">Analyst's tool</div><div class="s" id="n-user-s">Claude Code, with their own key</div></div>
+  <div class="arrow" id="a1"><svg viewBox="0 0 44 24"><path d="M2 12h36m-7-6 7 6-7 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dot"></span></div>
+  <div class="node" id="n-proxy"><div class="t">credgate proxy</div><div class="s">on the bank's network</div>
+    <div class="steps-in-proxy"><span id="p-key">key</span><span id="p-detect">detect</span><span id="p-policy">policy</span><span id="p-rewrite">rewrite</span><span id="p-restore">restore</span><span id="p-audit">audit</span></div></div>
+  <div class="arrow" id="a2"><svg viewBox="0 0 44 24"><path d="M2 12h36m-7-6 7 6-7 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dot"></span></div>
+  <div class="node" id="n-model"><div class="t" id="n-model-t">Claude</div><div class="s" id="n-model-s">through the bank's gateway</div></div>
+</div>
+
+<div class="stage" aria-live="polite">
+  <div class="where" id="where"></div>
+  <h3 id="title"></h3>
+  <p class="note" id="note"></p>
+  <div id="body"></div>
+</div>
+
+<div class="controls">
+  <button id="prev" type="button">&larr; Back</button>
+  <button id="next" type="button" class="primary">Next &rarr;</button>
+  <button id="play" type="button">Play</button>
+  <span class="count" id="count"></span>
+</div>
+<div class="legend">
+  <span><mark class="redact">redacted</mark> replaced by a label</span>
+  <span><mark class="tokenise">tokenised</mark> replaced by a token, put back in the answer</span>
+  <span><mark class="block">blocked</mark> stops the request</span>
+  <span><mark class="allow">allowed</mark> sent as is</span>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var D = window.CG_DATA.proxy;
+  var policy = D.policy;
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]; }); };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Text with spans highlighted, each in the colour of its action (or neutral).
+  function marked(text, matches, useAction) {
+    var out = "", at = 0;
+    matches.slice().sort(function (a, b) { return a.start - b.start; }).forEach(function (m) {
+      if (m.start < at) return;
+      out += esc(text.slice(at, m.start));
+      var cls = useAction ? m.action : "";
+      out += '<mark class="' + cls + '" title="' + esc(m.type + (useAction ? ": " + m.action : "")) + '">' + esc(text.slice(m.start, m.end)) + "</mark>";
+      at = m.end;
+    });
+    return out + esc(text.slice(at));
+  }
+  // Tokens and labels in a rewritten text, highlighted.
+  function placeholders(text, restored) {
+    return esc(text).replace(/\[([A-Z_]+?)(_[a-z0-9]{6,})?\]/g, function (all, type, tok) {
+      return '<mark class="' + (tok ? "tokenise" : "redact") + '">' + all + "</mark>";
+    });
+  }
+  // The answer with the values put back highlighted: the tokens of the
+  // model's answer, in order, replaced by what the proxy restored.
+  function restoredText(s) {
+    var html = "", at = 0, ra = 0, re = /\[[A-Z_]+_[a-z0-9]{6,}\]/g, m;
+    while ((m = re.exec(s.answer)) !== null) {
+      var before = s.answer.slice(at, m.index);
+      html += placeholders(before);
+      ra += before.length;
+      var after = s.answer.slice(re.lastIndex);
+      var end = after ? s.restored.indexOf(after.slice(0, 12), ra) : s.restored.length;
+      html += '<mark class="restored">' + esc(s.restored.slice(ra, end)) + "</mark>";
+      ra = end;
+      at = re.lastIndex;
+    }
+    return html + placeholders(s.answer.slice(at));
+  }
+  function request(s) {
+    return '<div class="box http mono">POST /v1/messages\nAuthorization: Bearer cgk_' + (s.user === "arjun" ? "Vh3k…" : s.user === "ravi" ? "Qm8p…" : "Za1x…") +
+      "\nmodel: " + esc(s.endpoint) + "/…\n\n" + esc(s.text) + "</div>";
+  }
+  function rulesTable(s) {
+    var rows = s.matches.map(function (m) {
+      return "<tr><td><strong>" + esc(m.type) + "</strong><br><span class=\"mono\">" + esc(m.value) + "</span></td><td>" + m.confidence.toFixed(2) +
+        '</td><td><span class="badge ' + m.action + '">' + m.action + "</span></td><td class=\"mono\">" + esc(m.rule) + "</td></tr>";
+    }).join("");
+    return "<table><thead><tr><th>Identifier (masked)</th><th>Confidence</th><th>Action</th><th>Rule that decided</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+  function rulesList(s) {
+    return '<table><thead><tr><th>#</th><th>Rule</th><th>When</th><th>Action</th></tr></thead><tbody>' +
+      policy.rules.map(function (r, i) {
+        var used = s.matches && s.matches.some(function (m) { return m.rule === r.id; });
+        var when = Object.keys(r.when || {}).map(function (k) { return k + ": " + r.when[k].join("/"); }).join("; ");
+        return "<tr" + (used ? ' style="background:var(--brand-soft)"' : "") + "><td>" + (i + 1) + '</td><td class="mono">' + esc(r.id) + "</td><td>" + esc(when) +
+          '</td><td><span class="badge ' + r.action + '">' + r.action + "</span></td></tr>";
+      }).join("") + '<tr><td>-</td><td>otherwise</td><td></td><td><span class="badge redact">' + policy.default_action + "</span></td></tr></tbody></table>";
+  }
+
+  // The stages of each scenario: where the request is, what is shown.
+  function stages(s) {
+    var model = s.tier === "local" ? "the local model" : "Claude";
+    var name = s.user.charAt(0).toUpperCase() + s.user.slice(1);
+    var list = [{
+      at: "user", proxy: null, flow: "a1-right", where: "Analyst's laptop",
+      title: name + "'s tool sends a prompt",
+      note: "Claude Code (or any OpenAI, Anthropic or Ollama client) points at the proxy instead of the provider, with the person's own credgate key.",
+      body: request(s)
+    }];
+    if (s.refused && s.refused.status === 401) {
+      list.push({
+        at: "proxy", proxy: "key", stop: true, where: "credgate proxy - key check",
+        title: "Refused before anything is read",
+        note: "The key is hashed and compared with the keys file; the users file says who still has access. Nothing in the prompt is looked at, and nothing is sent on.",
+        body: '<div class="box mono">HTTP ' + s.refused.status + "  " + esc(s.refused.code) + "\n" + esc(s.refused.message) + '</div><div class="verdict bad">Nothing reaches ' + model + ".</div>"
+      });
+      return list;
+    }
+    list.push({
+      at: "proxy", proxy: "key", where: "credgate proxy - key check",
+      title: "Key accepted: " + s.user + ", active",
+      note: "The key matches a hash in the keys file, has not expired, and " + s.user + " is active in the users file. The proxy never stores keys, only their hashes.",
+      body: '<div class="box">Signed in as <strong>' + esc(s.user) + "</strong> for this request. Endpoint <strong>" + esc(s.endpoint) + "</strong>, tier <strong>" + esc(s.tier) + "</strong>.</div>"
+    });
+    list.push({
+      at: "proxy", proxy: "detect", where: "credgate proxy - detection",
+      title: s.matches.length + " identifiers found",
+      note: "Every message is checked: patterns, checksums and nearby words give each match a confidence. Matches below the policy's minimum are ignored.",
+      body: '<div class="box">' + marked(s.text, s.matches, false) + "</div>" +
+        "<table><thead><tr><th>Type</th><th>Found (masked)</th><th>Confidence</th></tr></thead><tbody>" +
+        s.matches.map(function (m) { return "<tr><td>" + esc(m.type) + '</td><td class="mono">' + esc(m.value) + "</td><td>" + m.confidence.toFixed(2) + "</td></tr>"; }).join("") + "</tbody></table>"
+    });
+    list.push({
+      at: "proxy", proxy: "policy", where: "credgate proxy - policy " + policy.id + ", revision " + policy.revision,
+      title: s.allowed ? "The policy decides each identifier" : "The policy blocks the request",
+      note: "Rules are checked in order for each identifier; the first that matches decides. Any block stops the whole request.",
+      body: '<div class="box">' + marked(s.text, s.matches, true) + "</div>" + rulesTable(s) +
+        '<details style="margin-top:10px"><summary>The rules, in order</summary>' + rulesList(s) + "</details>"
+    });
+    if (!s.allowed) {
+      list.push({
+        at: "proxy", proxy: "audit", stop: true, where: "credgate proxy - refused",
+        title: "Blocked: nothing is sent",
+        note: "The tool gets an error saying why; the audit log records the decision.",
+        body: '<div class="box mono">HTTP 403  ' + esc(s.refused.code) + "\n" + esc(s.refused.message) + '</div><div class="verdict bad">Nothing reaches ' + model + ".</div>" +
+          '<p class="note" style="margin-top:12px">The audit record (no values, no text):</p><div class="box"><pre class="json">' + esc(JSON.stringify(s.audit, null, 1)) + "</pre></div>"
+      });
+      return list;
+    }
+    list.push({
+      at: "proxy", proxy: "rewrite", flow: "a2-right", where: "credgate proxy - rewrite",
+      title: "What " + model + " receives",
+      note: s.tier === "local" ? "The local model runs on the analyst's machine, so the policy lets everything through as it is." :
+        "The PAN becomes a token the proxy can turn back into the value; the name and mobile number become labels and are gone for good.",
+      body: '<div class="box">' + (s.tier === "local" ? marked(s.text, s.matches, true) : placeholders(s.sent)) + "</div>"
+    });
+    list.push({
+      at: "model", proxy: null, flow: "a2-left", where: model,
+      title: model.charAt(0).toUpperCase() + model.slice(1) + " answers",
+      note: s.tier === "local" ? "The answer comes back as the model wrote it." : "Claude only ever saw the token and the labels, so its answer uses them too.",
+      body: '<div class="box">' + placeholders(s.answer) + "</div>"
+    });
+    list.push({
+      at: "proxy", proxy: "restore", flow: "a1-left", where: "credgate proxy - restore",
+      title: "Restored for " + name,
+      note: s.tier === "local" ? "Nothing to restore." : "Tokens are put back into the answer as it streams. The redacted mobile number stays a label: it never left, so there is nothing to put back.",
+      body: '<div class="box">' + (s.tier === "local" ? esc(s.restored) : restoredText(s)) + "</div>" +
+        '<div class="verdict ok">' + (s.tier === "local" ? "Everything stayed on " + name + "'s machine." : name + " sees the real PAN; Claude never did.") + "</div>"
+    });
+    list.push({
+      at: "proxy", proxy: "audit", where: "credgate proxy - audit log",
+      title: "One audit record, without the text",
+      note: "Who, which endpoint, under which policy revision, and for each identifier its type, action and rule. Each record carries the hash of the one before, so an edited record breaks the chain.",
+      body: '<div class="box"><pre class="json">' + esc(JSON.stringify(s.audit, null, 1)) + "</pre></div>"
+    });
+    return list;
+  }
+
+  var scenario = 0, step = 0, timer = null, current = [];
+  function render() {
+    var s = D.scenarios[scenario];
+    current = stages(s);
+    var st = current[step];
+    ["n-user", "n-proxy", "n-model"].forEach(function (id) { $(id).className = "node"; });
+    var node = $("n-" + st.at);
+    node.className = "node " + (st.stop ? "stop" : "on");
+    if (s.tier === "local") { $("n-model-t").textContent = "Local model"; $("n-model-s").textContent = "Ollama on the analyst's machine"; }
+    else { $("n-model-t").textContent = "Claude"; $("n-model-s").textContent = "through the bank's gateway"; }
+    if (s.refused && (s.refused.status === 401 || s.refused.status === 403)) $("n-model").className = "node dim";
+    ["key", "detect", "policy", "rewrite", "restore", "audit"].forEach(function (p) { $("p-" + p).className = st.proxy === p ? "on" : ""; });
+    ["a1", "a2"].forEach(function (a) { $(a).className = "arrow"; });
+    if (st.flow) { var f = st.flow.split("-"); $(f[0]).className = "arrow on flow-" + f[1]; }
+    $("where").textContent = st.where;
+    $("title").textContent = st.title;
+    $("note").textContent = st.note;
+    $("body").innerHTML = st.body;
+    $("prev").disabled = step === 0;
+    $("next").disabled = step === current.length - 1;
+    $("count").textContent = "Step " + (step + 1) + " of " + current.length;
+  }
+  function stop() { if (timer) { clearInterval(timer); timer = null; $("play").textContent = "Play"; } }
+  D.scenarios.forEach(function (s, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.textContent = s.title;
+    b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.onclick = function () {
+      stop(); scenario = i; step = 0;
+      Array.prototype.forEach.call($("scenarios").children, function (c, j) { c.setAttribute("aria-pressed", j === i ? "true" : "false"); });
+      render();
+    };
+    $("scenarios").appendChild(b);
+  });
+  $("prev").onclick = function () { stop(); if (step > 0) { step--; render(); } };
+  $("next").onclick = function () { stop(); if (step < current.length - 1) { step++; render(); } };
+  $("play").onclick = function () {
+    if (timer) return stop();
+    if (step === current.length - 1) step = 0;
+    render();
+    $("play").textContent = "Pause";
+    timer = setInterval(function () {
+      if (step < current.length - 1) { step++; render(); } else stop();
+    }, 3200);
+  };
+  // ?scenario=<id>&step=<n>&still: open at a scenario and step, without the
+  // controls (used to make the GIF in the README).
+  var q = new URLSearchParams(location.search);
+  if (q.get("scenario")) {
+    D.scenarios.forEach(function (s, i) { if (s.id === q.get("scenario")) $("scenarios").children[i].click(); });
+  }
+  if (q.get("step")) step = Math.max(0, Math.min(stages(D.scenarios[scenario]).length - 1, (+q.get("step") || 1) - 1));
+  if (q.get("theme") === "light") document.documentElement.classList.add("light");
+  if (q.has("still")) {
+    document.querySelector(".controls").style.display = "none";
+    document.querySelector(".legend").style.display = "none";
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") $("next").click();
+    if (e.key === "ArrowLeft") $("prev").click();
+  });
+  render();
+})();
+</script>
+<script>
+// Tell an embedding page (the docs) how tall this is, so its frame fits.
+(function () {
+  if (window.parent === window) return;
+  var send = function () { window.parent.postMessage({ cgHeight: document.body.getBoundingClientRect().height, cgName: document.title }, "*"); };
+  // Kept on window: an observer nothing refers to may be discarded.
+  window.cgResize = new ResizeObserver(send);
+  window.cgResize.observe(document.body);
+  window.cgMutate = new MutationObserver(send);
+  window.cgMutate.observe(document.body, { childList: true, subtree: true });
+  send();
+})();
+</script>
+</body>
+</html>

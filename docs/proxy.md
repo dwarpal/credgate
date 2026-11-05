@@ -7,6 +7,10 @@ leave, and every decision is written to the audit log. Tokenised values are
 put back into the answer, so people see the real values while the model
 never did.
 
+[![A request through the proxy: the key is checked, identifiers are found, the policy decides, Claude receives tokens and labels, and the answer is restored](images/proxy-walkthrough-light.gif)](how-it-works.md)
+
+*Step through it yourself, with other scenarios: [How it works](how-it-works.md).*
+
 ```
 Claude Code / Copilot Chat / Positron / Jupyter / scripts ──► credgate proxy ──► Ollama · vLLM · SGLang · Claude · gateway
                                            policy: allow / redact / tokenise / block

@@ -214,6 +214,16 @@ in the editor before every save and with `credgate policy test` in CI. See
 
 ## Proxy
 
+<p align="center">
+  <a href="https://dwarpal.github.io/credgate/how-it-works/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/images/proxy-walkthrough-dark.gif">
+      <img src="docs/images/proxy-walkthrough-light.gif" alt="A request through the credgate proxy: the key is checked, identifiers are found, the policy decides each one, Claude receives tokens and labels, and the answer is restored" width="760">
+    </picture>
+  </a>
+  <br><sub>One request, step by step. Interactive, with more scenarios and how a match is scored: <a href="https://dwarpal.github.io/credgate/how-it-works/">How it works</a>.</sub>
+</p>
+
 The proxy puts the policy between people's tools and the model endpoints:
 tools talk to it as to an OpenAI-compatible, Anthropic or Ollama server
 (Claude Code, VS Code Copilot Chat with its own models, Open WebUI, the SDKs),
