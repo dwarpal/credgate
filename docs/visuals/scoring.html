@@ -172,14 +172,17 @@ mark.neg { background: var(--bad-soft); outline-color: var(--bad); }
             v = b + (1 - b) * S.context_boost;
             var shown = m.negative ? v : m.confidence;  // the score, as credgate rounds it
             calc = '<div class="calc">' + fmt(b) + " + (1 - " + fmt(b) + ") &times; " + S.context_boost + " = " + exact(v) + "</div>";
-            steps += li("", "Keyword nearby: '" + esc(m.context) + "' &rarr; " + fmt(shown), "A word that names this identifier within " + S.window + " characters closes most of the gap to 1.", calc + bar(v));
+            steps += li("", "Keyword nearby: '" + esc(m.context) + "' &rarr; " + fmt(shown), "A word that names this identifier within " + S.window + " characters closes most of the gap to 1.", calc + bar(v) +
+              '<div class="d" style="margin-top:6px">Why ' + S.context_boost + ": the score moves " + Math.round(S.context_boost * 100) +
+              "% of the way to 1, so a keyword never makes a match certain, and weak evidence gains more than strong. Like the starting values, it is set by hand in the spec and checked against credgate's benchmark corpus.</div>");
           } else {
             steps += li("skip", "No keyword nearby", "Nothing within " + S.window + " characters names this identifier, so the score stays where it is.");
           }
           if (m.negative) {
             var v2 = v * S.negative_factor;
             steps += li("", "Negative word: '" + esc(m.negative) + "' &rarr; " + fmt(m.confidence), "A word that suggests something else (an order or reference number) halves the score.",
-              '<div class="calc">' + exact(v) + " &times; " + S.negative_factor + " = " + exact(v2) + "</div>" + bar(m.confidence, true));
+              '<div class="calc">' + exact(v) + " &times; " + S.negative_factor + " = " + exact(v2) + "</div>" + bar(m.confidence, true) +
+              '<div class="d" style="margin-top:6px">Why ' + S.negative_factor + ": a contrary word halves the confidence, enough to take an unlabelled number below the usual minimum of 0.5. Set by hand in the spec, like the boost.</div>");
           }
         }
       }
