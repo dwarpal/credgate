@@ -1,0 +1,390 @@
+# Features in detail
+
+Everything credgate does, with examples in R, Python and on the command
+line. For a first look, start with the [README](https://github.com/dwarpal/credgate#readme)
+or [How it works](how-it-works.md).
+
+## Use it with local LLMs (Ollama, vLLM)
+
+Redact before the prompt reaches the model, whether it runs on Ollama, vLLM
+or any OpenAI-compatible server - the model only ever sees placeholders
+such as `[PAN]` and `[PERSON_NAME]`.
+
+**Python**
+
+```python
+import credgate, ollama
+
+note = "Customer name: Priya Nair. PAN ABCPN1234K, mobile +91 98765 43210, wants the EMI date moved."
+print(credgate.preview(note, min_confidence=0.5))   # what will be masked, and why
+safe = credgate.redact(note, min_confidence=0.5)    # "Customer name: [PERSON_NAME]. PAN [PAN], mobile [MOBILE_IN], ..."
+reply = ollama.chat(model="gemma3:1b", messages=[{"role": "user", "content": f"Summarise: {safe}"}])
+```
+
+With **vLLM** (or Ollama's `/v1`, LM Studio, any OpenAI-compatible server):
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+client.chat.completions.create(model="<served model>",
+                               messages=[{"role": "user", "content": credgate.redact(note, min_confidence=0.5)}])
+```
+
+**R** (with [ellmer](https://ellmer.tidyverse.org))
+
+```r
+library(credgate); library(ellmer)
+
+note <- "Customer name: Priya Nair. PAN ABCPN1234K, mobile +91 98765 43210, wants the EMI date moved."
+safe <- redact(note, min_confidence = 0.5)
+chat_ollama(model = "gemma3:1b")$chat(paste("Summarise:", safe))
+# vLLM: chat_vllm(base_url = "http://localhost:8000/v1", model = "<served model>")
+```
+
+**Shell**: `credgate redact notes.txt | ollama run gemma3:1b "Summarise:"`
+
+**Need the real values in the answer?** Tokenise instead of redacting: the
+model sees `[PAN_1]`, `[PERSON_NAME_1]`, and `restore()` puts the values back
+into its reply.
+
+```python
+vault = credgate.Vault()
+safe = credgate.tokenise(note, vault, min_confidence=0.5)   # "Customer name: [PERSON_NAME_1]. PAN [PAN_1], ..."
+reply = ollama.chat(model="gemma3:1b", messages=[{"role": "user", "content": f"Draft a reply to: {safe}"}])
+print(credgate.restore(reply.message.content, vault))      # real name and PAN back in the draft
+```
+
+In R: `vault <- cg_vault(); safe <- tokenise(note, vault); restore(answer, vault)`.
+
+Runnable examples (call notes, ticket classification, RAG ingestion, data
+frames, shell pipelines) are in [`examples/`](https://github.com/dwarpal/credgate/tree/main/examples/); the R vignette
+[Using credgate with local LLMs](https://github.com/dwarpal/credgate/blob/main/pkg/credgate/vignettes/local-llms.Rmd)
+walks through the workflow and why it matters even when the model is local
+(shared GPU servers, logs, RAG indexes, DPDP data minimisation).
+
+> **Check the preview.** Names are found next to an honorific, relation or
+> field label (`Shri`, `S/o`, `Name:`, `नाम:`); a name in running text
+> without such a cue ("Customer Priya Nair called") is not detected yet.
+> Save the vault (`vault.save(path)`, R `vault_save()`) to restore tokens in
+> a later session; it is encrypted with a passphrase. The
+> [proxy](https://github.com/dwarpal/credgate/blob/main/proxy.md) tokenises and restores for you, for every request.
+
+## What it detects
+
+| Category | Identifiers |
+|---|---|
+| Government ID | Aadhaar (Verhoeff checksum), masked Aadhaar, Aadhaar Virtual ID, PAN (with holder type), voter ID (EPIC), passport, driving licence, CKYC number (KIN), ration card number, NREGA job card number |
+| Financial | GSTIN (mod-36 check character), payment cards (Luhn + network prefix), card expiry dates, card verification codes (CVV/CVC; always masked in full), UPI IDs, IFSC, bank account numbers |
+| Contact | +91 mobile numbers, email addresses, PIN codes |
+| Health | ABHA number, ABHA address |
+| Personal | Names and postal addresses in Latin and Indic scripts (rule-based, see limits below); every value of a column named for names or addresses (`customer_name`, `nominee`, `नाम`, `permanent_address`, `पता`) |
+
+Every match comes with a confidence score and the reasons for it (checksum
+passed, nearby keyword such as "Aadhaar" or "आधार", negative context such as
+"order no"). Detection also works through Indic digits (`५४२२ २९३७ ११८२`),
+fullwidth characters and zero-width characters hidden inside identifiers.
+
+Add your own formats - account numbers, customer ids, or names found from
+the words around them - in a YAML file that R, Python, the command line,
+policies and the proxy all load: see [custom detectors](custom-detectors.md).
+
+## Quick start
+
+**R**
+
+```r
+library(credgate)
+
+x <- detect_pii("Name: Priya Nair; PAN: ABCPN1234K; UPI: priya.n@oksbi")
+x
+#> 3 PII matches (values masked; use `x$value` to see them):
+#>  doc start end        type         value confidence
+#>    1     7  16 person_name    XXXXX XXXX       0.80
+#>    1    24  33         pan    XXXXXX234K       0.97
+#>    1    41  53      upi_id XXXXX.X@Xksbi       0.99
+```
+
+**Python**
+
+```python
+import credgate
+
+for span in credgate.detect_pii("आधार: ५४२२ २९३७ ११८२, मोबाइल 9468451273"):
+    print(span)
+# Span(doc=0, start=6, end=20, type='aadhaar', value='XXXX XXXX ११८२', confidence=0.97)
+# Span(doc=0, start=29, end=39, type='mobile_in', value='XXXXXX1273', confidence=0.93)
+```
+
+**Scanning a table** (R `scan_pii(df)`, Python `credgate.scan_pii(df)`)
+reports which columns hold PII without sending anything anywhere:
+
+```text
+Scanned 2 columns; PII found in 2: cust_pan and notes
+   column      type rate matched whole confidence      example
+ cust_pan       pan 100%  3 of 3     3       0.97   XXXXXX234F
+    notes   aadhaar  33%  1 of 3     0       0.97 XXXXXXXX1182
+```
+
+**Command line**
+
+```sh
+credgate detect notes.txt                      # masked report
+credgate detect --lines --json customers.csv   # one JSON object per match
+credgate scan customers.csv                    # which columns hold PII
+credgate redact notes.txt > notes.redacted.txt  # replace PII with [PAN] etc.
+credgate preview notes.txt                     # what would be redacted, and why
+git diff --cached | credgate detect --fail     # non-zero exit if PII is found
+```
+
+Values are masked whenever results are printed; the real values are only
+available programmatically (`x$value`, `span.value`) or with `--reveal`.
+
+## Policies
+
+A policy says, per destination, what happens to each kind of identifier:
+let it through, redact it, tokenise it, or block the whole request. It is a
+YAML file owned by InfoSec and compliance, and the same file works in R and
+Python. It is also the register of model endpoints: each has a tier -
+`local` (the analyst's machine), `internal` (open models the organisation
+runs, such as vLLM or SGLang) or `frontier` (Claude, OpenAI, Gemini, also
+through the organisation's own gateway) - a provider and URL, and can be
+`blocked`; an endpoint that is not listed receives nothing. Rules can target
+tiers or particular endpoints. See
+[`examples/policies/bank-default.yaml`](https://github.com/dwarpal/credgate/blob/main/examples/policies/bank-default.yaml):
+in-house models may see customer data (but not government IDs on the shared
+GPU server), frontier models may not, a card number with its CVV and expiry
+is never sent to a frontier model, card verification codes never leave, and
+Copilot is blocked.
+
+```python
+policy = credgate.Policy.load("bank-default.yaml")
+decision = policy.apply(messages, "claude")   # destination named in the policy
+if decision.allowed:
+    send(decision.texts)
+else:
+    print(decision.blocked_by)                # e.g. ('card-with-cvv-and-expiry',)
+```
+
+In R: `policy_apply(cg_policy("bank-default.yaml"), messages, "claude")`.
+Everything is checked when the policy is loaded - an unknown field, tier,
+action or identifier type is an error, never a silent "allow" - and every
+decision names the policy revision and the rule behind each action, ready
+for the audit log. The format is specified in [spec/README.md](spec.md#policies-policy).
+
+InfoSec can change a policy in a browser instead of editing YAML:
+`credgate::policy_editor("bank-default.yaml")` in R (needs `shiny` and
+`bslib`), or `credgate editor --policy bank-default.yaml` in Python
+(`pip install 'credgate[editor]'`) - the same app on the same files. It edits endpoints and rules, tries sample text against the unsaved
+policy, shows what changed, and saves only a valid policy, recording who
+saved it, why and what changed in a hash-chained change log. Policy tests
+kept beside the policy - sample requests and what must happen to them - run
+in the editor before every save and with `credgate policy test` in CI. See
+[docs/policy-editor.md](policy-editor.md).
+
+<p align="center">
+  <img src="images/policy-editor/endpoints.png" alt="The credgate policy editor: endpoints by tier" width="49%">
+  <img src="images/policy-editor/try-blocked.png" alt="Try it: a card with its CVV and expiry is blocked for a frontier model" width="49%">
+</p>
+
+## Audit log
+
+Every policy decision can be recorded in an append-only audit log: who sent
+which kinds of data to which endpoint, under which policy revision and rule,
+allowed or blocked - never the text or the values. Each record holds the
+hash of the one before, so editing, deleting, inserting or reordering
+records is detected; keep copies of the latest hash (the head) elsewhere to
+detect records removed from the end. With an audit key, identifiers are
+recorded as keyed hashes, so an investigator with the key can check whether
+a given PAN went to a given model; card verification codes are never
+recorded in any form.
+
+```python
+log = credgate.AuditLog("audit.jsonl")             # key from CREDGATE_AUDIT_KEY, if set
+policy.apply(messages, "claude", audit=log)       # recorded, allowed or blocked
+credgate.audit_verify("audit.jsonl")              # intact? and the head hash
+```
+
+In R: `log <- cg_audit_log("audit.jsonl")`, `policy_apply(..., audit = log)`,
+`audit_verify()`, `audit_read()`. R and Python write and verify the same
+files.
+
+Logs can **rotate monthly** (`AuditLog(path, rotate=True)`,
+`cg_audit_log(path, rotate = TRUE)`): each month's records go to their own
+file, and the chain runs on across files, so a deleted or altered month is
+detected like an edited line. **Retention**: `audit_prune(path, keep_years =
+5)` removes months past the retention period (at least 1 year) - only the
+oldest, and never from a log that fails verification - and records what it
+removed so the rest still verifies. The proxy rotates monthly and keeps 5
+years by default.
+
+## PII inventory
+
+Discovery at scale starts with an inventory: which tables and columns hold
+which kinds of personal data. `pii_inventory()` scans a table with the
+`scan_pii()` rules and records every column - also those where nothing was
+found, so the inventory shows what was covered - with the source, table,
+sample size and when it was scanned. It never records values, not even
+masked ones. Inventories of many tables are combined and saved as a CSV
+file that R and Python write identically.
+
+```python
+inv = credgate.pii_inventory(customers, source="crm", table="customers")
+inv += credgate.pii_inventory(calls, source="crm", table="calls")
+inv.write("inventory.csv")                       # credgate.read_inventory() reads it back
+```
+
+In R: `pii_inventory(customers, source = "crm", table = "customers")`,
+combined with `rbind()`, saved with `write_inventory()` and read with
+`read_inventory()`.
+
+Spark tables work the same way, from PySpark and sparklyr: the table is
+sampled inside the cluster and only the sample reaches the driver, so
+Hadoop and Hive data can be inventoried where it lives.
+
+```python
+df = spark.table("crm.customers")
+inv = credgate.pii_inventory(df, source="hive", table="crm.customers")
+```
+
+```r
+customers <- dplyr::tbl(sc, "customers")              # sc from sparklyr::spark_connect()
+inv <- pii_inventory(customers, source = "hive", table = "crm.customers")
+```
+
+BigQuery tables are sampled by BigQuery itself, and only the sample is
+downloaded. Only the columns credgate can scan are read, and a dry run
+checks every query's cost first: anything estimated above `max_bytes`
+(default 1 GB) is refused before it runs.
+
+```python
+from credgate import bigquery as cgbq
+inv = cgbq.inventory_dataset(client, "my-project.crm")     # every table in a dataset
+```
+
+In R, with bigrquery: `bq_pii_inventory("my-project.crm.customers")`,
+`bq_inventory_dataset("my-project.crm")`, `bq_scan_pii()`. A script to
+check it against real BigQuery, in the free sandbox, is in
+[`examples/bigquery/`](https://github.com/dwarpal/credgate/tree/main/examples/bigquery/).
+
+Whole databases - Postgres, DuckDB, SQLite, MySQL, IBM Db2 and others - are
+inventoried table by table through a connection (SQLAlchemy in Python, DBI
+in R). Each table is sampled by the database where it can (`TABLESAMPLE`,
+or a reservoir sample in DuckDB); otherwise its first rows are read, and the
+inventory says so. With an inventory file, an interrupted scan continues
+where it stopped, and later runs rescan only tables that changed.
+
+```python
+from credgate.database import inventory_database
+inv = inventory_database(engine, source="postgres:crm", path="inventory.csv")
+```
+
+```r
+inv <- inventory_database(con, source = "postgres:crm", path = "inventory.csv")
+```
+
+## Large data
+
+credgate works on tables too big for memory, in both languages and on the
+command line:
+
+| | Python | R |
+|---|---|---|
+| Parquet | `credgate.arrow.redact_parquet()` | `redact_parquet()` |
+| DuckDB | SQL: `SELECT cg_redact(notes) FROM 'calls.parquet'` | `redact_query()`, `scan_pii(dplyr::tbl(con, ...))` |
+| Polars | `pl.col("notes").credgate.redact()` | - |
+| Arrow, pandas | Series, arrays, tables, datasets | arrays, tables, datasets |
+| Other databases | any SQLAlchemy database: `credgate.database.redact_query()` | any DBI database: `redact_query()`, dbplyr |
+| Spark | `scan_pii(df)`, `pii_inventory(df, ...)` | `scan_pii(tbl)`, `pii_inventory(tbl, ...)` (sparklyr) |
+| BigQuery | `credgate.bigquery.pii_inventory()`, `inventory_dataset()` | `bq_pii_inventory()`, `bq_inventory_dataset()` |
+| Whole databases | `credgate.database.inventory_database()` (SQLAlchemy) | `inventory_database()` (DBI) |
+
+```sh
+credgate scan calls.parquet
+credgate redact --parquet calls.parquet --column notes -o calls_safe.parquet
+```
+
+`scan_pii()` reads big tables one column at a time and gives the same report
+as in memory. The [large-data guide](large-data.md) explains the
+approach with Python, R and command-line examples; runnable versions are in
+[`examples/`](https://github.com/dwarpal/credgate/blob/main/examples/README.md#large-data-parquet-polars-duckdb-arrow), and
+the R vignette `vignette("large-data", package = "credgate")` walks through
+it. Throughput is measured in [benchmark/README.md](https://github.com/dwarpal/credgate/blob/main/benchmark/README.md#throughput).
+
+## Masked output
+
+Wherever credgate *shows* a detected value (printed matches, `preview()`,
+`scan_pii()` examples, the command line), it masks it:
+
+| Value | Shown as |
+|---|---|
+| Identifiers (Aadhaar, PAN, mobile, account, card, ...) | last 4 characters kept: `XXXX XXXX 1182`, `XXXXXX234F` |
+| Names and addresses | masked in full: `XXXXX XXX` |
+
+Keeping the last 4 characters lets you check which value matched, and stays
+within the display limits of UIDAI's masked Aadhaar and PCI DSS (cards). If
+your policy allows no part of a value to be shown, mask everything:
+
+```r
+options(credgate.mask = "full")   # R
+```
+
+```python
+credgate.set_mask("full")         # Python
+```
+
+or the environment variable `CREDGATE_MASK=full` for both, and the command
+line.
+
+Masking changes only what is displayed; detection and `redact()`
+(`[AADHAAR]`, `[PERSON_NAME]`) are unaffected.
+
+## Known limits
+
+- In running text, names are found only next to a cue: an honorific (Shri,
+  Smt, श्रीमती, or "ji" after the name), a relation (S/o, D/o) or a field
+  label (`Name:`, `नाम:`). Addresses are found after a label, after a house
+  or village keyword, or in the usual shape - house number, locality, a
+  known Indian city or district, PIN code. A deity addressed with "ji" ("Ram
+  ji") is taken as a name.
+  Where you know a column or value holds names or addresses, say so - a
+  column named for them, or `context = "customer name"` - and every value is
+  read as one. For names in notes with other cues ("Lakshmi Verma called"),
+  load the example custom detector `examples/detectors/names-by-cue.yaml`
+  ([custom detectors](custom-detectors.md)).
+- CKYC numbers are found only next to a cue ("CKYC", "KIN"), since any
+  14-digit number could be one. Ration card numbers have no national format
+  and NREGA job card numbers vary by state: those detectors follow the
+  published structure and the labels people use, and should be checked
+  against samples of your own data.
+- A voter ID format (3 letters, 7 digits) without a nearby cue such as
+  "voter" or "EPIC" is reported with low confidence (0.3): it could equally
+  be a product code.
+- A random number can pass a checksum by chance, so a bare 12-digit number is
+  reported as a possible Aadhaar with lower confidence; use the confidence
+  and reasons to decide.
+- The mapping to DPDP, RBI, SEBI and IRDAI obligations (planned for policies)
+  is informational, not legal advice.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| [`spec/`](https://github.com/dwarpal/credgate/tree/main/spec/) | The shared detection spec: every detector, engine parameters and the conformance cases both packages must pass. A compliance reviewer reads and approves these rules once, for every language. |
+| [`pkg/credgate/`](https://github.com/dwarpal/credgate/tree/main/pkg/credgate/) | R package |
+| [`pkg/python/`](https://github.com/dwarpal/credgate/tree/main/pkg/python/) | Python package and `credgate` CLI |
+| [`benchmark/`](https://github.com/dwarpal/credgate/tree/main/benchmark/) | Synthetic labelled corpus, generator and accuracy report |
+| [`flake.nix`](https://github.com/dwarpal/credgate/blob/main/flake.nix) | Nix packages, sandboxed test checks and dev shell |
+| [`DESIGN.md`](https://github.com/dwarpal/credgate/blob/main/DESIGN.md) | Architecture, roadmap and design decisions |
+| [`tools/sync-spec.sh`](https://github.com/dwarpal/credgate/blob/main/tools/sync-spec.sh) | Copies `spec/` into both packages after an edit |
+
+## Development
+
+```sh
+nix develop                 # R, Python, ruff, test tools
+nix flake check             # R tests, Python tests (3.11/3.13/3.14), ruff, spec sync
+```
+
+After editing anything in `spec/`, run `tools/sync-spec.sh` and add a
+conformance case in `spec/conformance/detect.yaml`; both test suites run
+those cases. All test data is synthetic (`synth_indian_pii()`); never commit
+real personal data.

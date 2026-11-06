@@ -1,6 +1,66 @@
-# Design: governance-first R assistant for regulated Indian environments
+# Design and roadmap
 
-Status: draft v0.1 (2026-10-31). Scope: whole architecture in brief, phase 1 in detail.
+What credgate is building next, and the decisions behind how it is built.
+The roadmap comes first and is kept current; the rest is a record of design
+decisions, dated, kept so the reasoning stays visible. Ideas and objections
+are welcome in [Discussions](https://github.com/dwarpal/credgate/discussions).
+
+## Roadmap (November 2026)
+
+**Built** (Python 0.12.0, R development version 0.1.0.9003): detection of
+Indian identifiers with checksums, in Latin and Indic scripts; redaction and
+reversible tokens with encrypted vaults; column scans and PII inventories
+for data frames, Parquet, DuckDB, Spark, BigQuery and databases; policies
+with tests; a hash-chained audit log with rotation and retention; the proxy
+for the OpenAI, Anthropic and Ollama APIs (Claude Code, Copilot Chat, Ollama
+clients) with streaming, per-person keys that expire, and reloads that
+refuse a policy whose tests fail; the policy editor in R and Python, with
+roles, single sign-on and each person's own key and activity.
+
+**Next**
+
+- **Feedback from first users.** credgate is alpha: what matters most now is
+  teams trying it on their own (synthetic) data and telling us what breaks
+  or is missing.
+- **CRAN** acceptance of the R package (under review), then credgate in
+  nixpkgs, R and Python together.
+- **More Indian languages** for context words and labels
+  ([#70](https://github.com/dwarpal/credgate/issues/70),
+  [#71](https://github.com/dwarpal/credgate/issues/71)) and **vehicle
+  registration numbers** ([#72](https://github.com/dwarpal/credgate/issues/72)).
+- **Real data in the editor's Try it**: masked by default, use recorded, and
+  real values replaced by synthetic ones in tests saved from it.
+
+**Open problem: names written without a cue.** credgate finds names after a
+title, label or relation ("Smt.", "Name:", "S/o"), not in running text
+("Delivery to Sandeep Pillai"), which is why it trails NER-based tools on
+one public benchmark. A useful name list has to come from somewhere, and its
+licence and coverage (whose names are on it?) are decisions for each
+organisation, so for now organisations add their own lists as custom
+detectors. Ideas welcome.
+
+**Later**
+
+- The proxy: the Gemini API; a container image built with Nix.
+- A read-only proxy activity panel, and a safe-context helper for data
+  frames (structure and a redacted sample, ready for any tool).
+- Change proposals in the editor (today teams send requests to InfoSec
+  through their own channels).
+- More public benchmarks (AI4Privacy, PII Arena, presidio-research), IBM
+  Db2 tested end to end, an integration with LLM observability tools such as
+  Langfuse.
+
+**Beta** needs a written stability promise for the policy and audit
+formats and the main functions, at least one real pilot, CRAN acceptance and
+better name detection.
+
+**Not planned:** a chat assistant of our own (see "Decision: no chat
+assistant" below). credgate is the gate, not the room: any tool can go
+through the proxy.
+
+---
+
+# Decision record
 
 ## 1. Packaging decision: two packages, one repo
 
@@ -12,16 +72,6 @@ Status: draft v0.1 (2026-10-31). Scope: whole architecture in brief, phase 1 in 
 Layout: a monorepo with `pkg/<core>/` and `pkg/<assistant>/`, shared CI, released separately (this matches "each phase released on its own").
 
 **Decided:** the core is `credgate` (in `pkg/credgate/`); the assistant takes a name from the same family later.
-
-### Name ideas (all currently free on CRAN, checked 2026-10-31)
-
-| Core (gatekeeper) | Assistant (helper) | Note |
-|---|---|---|
-| **`dwarpal`** (द्वारपाल, "gatekeeper") | **`sahayak`** (सहायक, "assistant") | My pick: a matched pair, short, and Indian without being cute |
-| `credgate` | `sahayak` | Use this if CredGate is your proxy project's brand, so the R core sits in the same family |
-| `pehredar` ("watchman") | `saathi` ("companion") | |
-
-Avoid `kavach`. It's free on CRAN, but Indian Railways and several government security products already use it.
 
 ## 2. Module structure
 
@@ -317,8 +367,9 @@ are built in dependency order, so nothing is built twice or retrofitted
    Code, VS Code Copilot Chat, Ollama clients), and an optional production
    server (uvicorn, `credgate[server]`). Still to do: the Gemini API, a
    Nix-built image.
-8. **Shiny apps**: the policy editor for InfoSec and compliance is done (R
-   Shiny). The chat assistant is **dropped** (2026-11-02; see "Decision: no
+8. **Shiny apps**: the policy editor for InfoSec and compliance is done, in
+   R (Shiny) and, since 0.12, Python (Shiny for Python), with roles, single
+   sign-on and self-service proxy keys. The chat assistant is **dropped** (2026-11-02; see "Decision: no
    chat assistant" below).
 9. **Candidates after name detection**: a read-only proxy activity panel
    (each request: endpoint, what was found, what the policy did, audited),
@@ -364,8 +415,3 @@ repository) and a review of DPDP, RBI, CERT-In and PCI DSS obligations.
 | 6 | Audit and compliance | Done (spec, "Audit log"): hash-chained records of decisions, keyed identifier hashes, no raw PII; monthly rotation and retention | DPDP-oriented reports (HTML/CSV) |
 | 7 | Security | Masked output by default, no PII in logs, SHA-pinned CI actions, C-locale tests | Threat model; property-based fuzzing (Unicode, invisible characters, long inputs, regex blow-up); adversarial cases |
 | 8 | Project maturity | Tagged releases, CI on Linux and macOS, Nix sandbox tests | API stability and compatibility policy; integration and corpus-driven regression tests; 1.0 after items 4-6 |
-
-## 7. Open questions for you
-1. Package names: `dwarpal` + `sahayak`, or the `credgate` family? What is the proxy project called, and should the policy YAML and audit schema be *shared* with it (one format for both)?
-2. Should phase 1 include `surrogate` mode, or ship with `redact`/`tokenise` only?
-3. Minimum R version: I suggest R ≥ 4.3 for S7 and native pipe. Do your target bank environments run older R?
