@@ -143,7 +143,9 @@ author; the method and per-type results are in
 
 credgate is **alpha**: the main path is built and tested, but formats and
 APIs may still change, and we are looking for the first teams to use it.
-Feedback is the most useful thing you can give us:
+What comes next, and why things are built as they are:
+[design and roadmap](DESIGN.md). Feedback is the most useful thing you can
+give us:
 
 - **Something missed or wrongly flagged?** Open a
   [detection problem](https://github.com/dwarpal/credgate/issues/new?template=detection.yml)
