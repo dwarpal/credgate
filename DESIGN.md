@@ -46,9 +46,8 @@ detectors. Ideas welcome.
   frames (structure and a redacted sample, ready for any tool).
 - Change proposals in the editor (today teams send requests to InfoSec
   through their own channels).
-- More public benchmarks (AI4Privacy, PII Arena, presidio-research), IBM
-  Db2 tested end to end, an integration with LLM observability tools such as
-  Langfuse.
+- More public benchmarks (AI4Privacy, PII Arena, presidio-research), and
+  an integration with LLM observability tools such as Langfuse.
 
 **Beta** needs a written stability promise for the policy and audit
 formats and the main functions, at least one real pilot, CRAN acceptance and
