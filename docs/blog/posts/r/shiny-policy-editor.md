@@ -8,7 +8,7 @@ categories:
   - R
   - Policy editor
 slug: shiny-policy-editor
-draft: true
+draft: false
 description: A Shiny app that lets InfoSec decide which language models may see which personal data, test the decision before saving it, and keep a tamper-evident record of every change - without editing YAML.
 ---
 

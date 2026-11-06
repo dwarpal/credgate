@@ -8,7 +8,7 @@ categories:
   - R
   - Detection
 slug: redacting-indian-pii-in-r
-draft: true
+draft: false
 description: Find Aadhaar, PAN, mobile numbers and other Indian personal data in R text and data frames, and redact or tokenise it before a prompt reaches a language model - with ellmer, Ollama or any provider.
 ---
 
