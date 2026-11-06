@@ -74,6 +74,23 @@ plugins:
       categories:
         - categories
       abstract_chars_count: 400
+  # The R posts alone, in full, for R-bloggers and R Weekly (they take only
+  # R content, and the whole post): blog/feed_rss_created_r.xml.
+  - rss:
+      match_path: "blog/posts/r/.*"
+      date_from_meta:
+        as_creation: date.created
+      use_git: false
+      categories:
+        - categories
+      abstract_chars_count: -1
+      feed_title: "credgate - R posts"
+      feed_description: "Posts about the credgate R package: detecting and protecting Indian personal data in R."
+      feeds_filenames:
+        json_created: feed_json_created_r.json
+        json_updated: feed_json_updated_r.json
+        rss_created: feed_rss_created_r.xml
+        rss_updated: feed_rss_updated_r.xml
   - mkdocstrings:
       handlers:
         python:
