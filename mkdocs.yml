@@ -2,7 +2,7 @@
 # the R package's pkgdown site under r/. Built with Nix (`nix build .#docs`)
 # and published to GitHub Pages by .github/workflows/docs.yml.
 site_name: credgate
-site_description: Governance-first PII detection for LLM requests, with Indian identifiers built in
+site_description: Keep Aadhaar, PAN and other Indian personal data out of LLM prompts - detection, a policy proxy for Claude Code, Copilot and Ollama, and an audit log. R and Python.
 site_url: https://dwarpal.github.io/credgate/
 repo_url: https://github.com/dwarpal/credgate
 repo_name: dwarpal/credgate
