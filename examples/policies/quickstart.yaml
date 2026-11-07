@@ -1,0 +1,69 @@
+# A policy to try the credgate proxy with, using real public endpoints:
+#
+#   curl -O https://raw.githubusercontent.com/dwarpal/credgate/main/examples/policies/quickstart.yaml
+#   credgate proxy serve --policy quickstart.yaml --audit audit.jsonl --default-endpoint claude
+#   ANTHROPIC_BASE_URL=http://127.0.0.1:8790 claude
+#
+# Identity numbers (PAN, Aadhaar, ...) are tokenised for external models, so
+# the answer shows the real value again; contact, financial and personal
+# details are redacted; a card with its CVV and expiry is blocked. A model on
+# your own machine may see everything. For an organisation's own setup -
+# internal model servers, the bank's gateway - see bank-default.yaml.
+#
+# Use synthetic data while trying it.
+
+policy: credgate-policy
+version: 1
+id: quickstart
+revision: 1
+description: >
+  For trying the proxy: external models get tokens and labels instead of
+  personal data; a model on your own machine may see everything.
+
+destinations:
+  claude:
+    tier: frontier
+    provider: anthropic
+    url: https://api.anthropic.com/v1
+    description: Anthropic's API (Claude Code, the Anthropic SDK)
+  openai:
+    tier: frontier
+    provider: openai
+    url: https://api.openai.com/v1
+    description: OpenAI's API (the OpenAI SDK and compatible tools)
+  ollama-local:
+    tier: local
+    provider: ollama
+    url: http://localhost:11434/v1
+    description: Ollama on your own machine
+
+min_confidence: 0.5
+
+rules:
+  # A card number with its CVV and expiry never reaches an external model.
+  - id: card-with-cvv-and-expiry
+    when: {tiers: [frontier], all_of: [card, card_cvv, card_expiry]}
+    action: block
+
+  # Card verification codes are never needed by a model, wherever it runs.
+  - id: cvv-never-leaves
+    when: {types: [card_cvv]}
+    action: redact
+
+  # Identity numbers become tokens; the proxy puts the values back into the
+  # answer, so you see them and the external model never does.
+  - id: ids-tokenised-for-external-models
+    when: {tiers: [frontier], classes: [identity_strong]}
+    action: tokenise
+
+  # Everything else personal is replaced by a label such as [MOBILE_IN].
+  - id: personal-data-redacted-for-external-models
+    when: {tiers: [frontier], classes: [financial, health, contact, personal, quasi]}
+    action: redact
+
+  # A model on your own machine may see everything.
+  - id: local-model-ok
+    when: {tiers: [local]}
+    action: allow
+
+default_action: redact

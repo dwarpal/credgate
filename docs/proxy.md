@@ -33,8 +33,11 @@ library.
 
 ## Set up the endpoints
 
-The endpoints are the destinations of the [policy](https://github.com/dwarpal/credgate/blob/main/examples/policies/bank-default.yaml),
-each with its tier and its base URL:
+The endpoints are the destinations of the policy, each with its tier and its
+base URL. [`quickstart.yaml`](https://github.com/dwarpal/credgate/blob/main/examples/policies/quickstart.yaml)
+uses the public APIs (Anthropic, OpenAI, a local Ollama), for trying the
+proxy; [`bank-default.yaml`](https://github.com/dwarpal/credgate/blob/main/examples/policies/bank-default.yaml)
+shows an organisation's own setup, with internal model servers and a gateway:
 
 ```yaml
 destinations:
@@ -61,19 +64,24 @@ client's credgate key.
 ## Run it
 
 **On each analyst's machine** (localhost mode): the proxy listens on
-`127.0.0.1` only, and requests are recorded as the operating-system user.
+`127.0.0.1` only, and requests are recorded as the operating-system user. To
+try it, download the quickstart policy (and, optionally, its tests):
 
 ```sh
-credgate proxy serve --policy bank-default.yaml --audit audit.jsonl
+curl -O https://raw.githubusercontent.com/dwarpal/credgate/main/examples/policies/quickstart.yaml
+curl -O https://raw.githubusercontent.com/dwarpal/credgate/main/examples/policies/quickstart.tests.yaml
+credgate proxy serve --policy quickstart.yaml --audit audit.jsonl
 ```
 
 **For a team** (shared mode): the proxy listens on a network address and
 every client needs its own key; requests are recorded by user name. The proxy
-refuses to start on a network address without a keys file.
+refuses to start on a network address without a keys file. Here and below,
+`policy.yaml` is your organisation's policy - for example adapted from
+`bank-default.yaml`.
 
 ```sh
 credgate proxy add-user priya --keys keys.json      # prints Priya's key, once
-credgate proxy serve --policy bank-default.yaml --audit audit.jsonl \
+credgate proxy serve --policy policy.yaml --audit audit.jsonl \
   --host 0.0.0.0 --keys keys.json --certfile proxy.pem --keyfile proxy.key
 ```
 
@@ -140,7 +148,7 @@ production, so run shared proxies on uvicorn:
 
 ```sh
 pip install 'credgate[server]'
-credgate proxy serve --server uvicorn --workers 4 --policy bank-default.yaml \
+credgate proxy serve --server uvicorn --workers 4 --policy policy.yaml \
   --audit /var/log/credgate/audit.jsonl --host 0.0.0.0 --keys keys.json \
   --certfile proxy.pem --keyfile proxy.key
 ```
@@ -186,7 +194,8 @@ Claude Code asks for its own model names (`claude-sonnet-...`), without an
 endpoint, so start the proxy with a default endpoint for them:
 
 ```sh
-credgate proxy serve --policy bank-default.yaml --audit audit.jsonl --default-endpoint claude
+curl -O https://raw.githubusercontent.com/dwarpal/credgate/main/examples/policies/quickstart.yaml
+credgate proxy serve --policy quickstart.yaml --audit audit.jsonl --default-endpoint claude
 ANTHROPIC_BASE_URL=http://127.0.0.1:8790 claude
 ```
 

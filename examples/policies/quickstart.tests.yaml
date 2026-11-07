@@ -1,0 +1,25 @@
+# Tests for quickstart.yaml: what the policy must keep doing. Run them with
+#   credgate policy test --policy quickstart.yaml
+# and start the proxy with --require-tests to refuse a revision that breaks one.
+kind: credgate-policy-tests
+version: 1
+tests:
+  - id: card-blocked-for-claude
+    description: A card with its CVV and expiry never reaches an external model
+    endpoint: claude
+    text: Card 4111 1111 1111 1111, CVV 123, expiry 08/29
+    expect:
+      allowed: false
+      blocked_by: [card-with-cvv-and-expiry]
+  - id: pan-tokenised-mobile-redacted-for-claude
+    endpoint: claude
+    text: Customer PAN ABCPE1234F, mobile 9876543210
+    expect:
+      allowed: true
+      actions: {pan: tokenise, mobile_in: redact}
+  - id: local-model-sees-everything
+    endpoint: ollama-local
+    text: Customer PAN ABCPE1234F, mobile 9876543210
+    expect:
+      allowed: true
+      actions: {pan: allow, mobile_in: allow}

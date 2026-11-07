@@ -47,9 +47,16 @@ text.
 
 ```sh
 pip install credgate
-credgate proxy serve --policy bank-default.yaml --audit audit.jsonl --default-endpoint claude
+curl -O https://raw.githubusercontent.com/dwarpal/credgate/main/examples/policies/quickstart.yaml
+credgate proxy serve --policy quickstart.yaml --audit audit.jsonl --default-endpoint claude
 ANTHROPIC_BASE_URL=http://127.0.0.1:8790 claude
 ```
+
+[`quickstart.yaml`](examples/policies/quickstart.yaml) tokenises identity
+numbers for Claude and OpenAI, redacts contact and personal details, blocks a
+card sent with its CVV, and lets a model on your own machine see everything.
+For an organisation's own setup - internal model servers, a gateway - start
+from [`bank-default.yaml`](examples/policies/bank-default.yaml).
 
 Run it on each analyst's machine, or as a shared server where each person
 has their own key that expires. See the [proxy guide](https://dwarpal.github.io/credgate/proxy/)

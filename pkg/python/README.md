@@ -313,9 +313,15 @@ tokenised or blocked, recorded in the audit log, and tokenised values are
 put back into the answer as it streams.
 
 ```sh
-credgate proxy serve --policy bank-default.yaml --audit audit.jsonl
+curl -O https://raw.githubusercontent.com/dwarpal/credgate/main/examples/policies/quickstart.yaml
+credgate proxy serve --policy quickstart.yaml --audit audit.jsonl --default-endpoint claude
 ANTHROPIC_BASE_URL=http://127.0.0.1:8790 claude          # Claude Code through it
 ```
+
+`quickstart.yaml` tokenises identity numbers for Claude and OpenAI, redacts
+contact and personal details, and blocks a card sent with its CVV; for an
+organisation's own setup, start from
+[`bank-default.yaml`](https://github.com/dwarpal/credgate/blob/main/examples/policies/bank-default.yaml).
 
 As a shared server, each person has their own key that expires, and a users
 file says who still has access:
@@ -323,8 +329,8 @@ file says who still has access:
 ```sh
 credgate proxy add-user priya --keys keys.json --days 90   # the key is shown once
 credgate users add priya --role admin --file users.yaml
-credgate proxy serve --policy bank-default.yaml --audit audit.jsonl \
-  --keys keys.json --users users.yaml --watch 10 --host 0.0.0.0
+credgate proxy serve --policy policy.yaml --audit audit.jsonl \
+  --keys keys.json --users users.yaml --watch 10 --host 0.0.0.0   # your organisation's policy
 ```
 
 A new policy revision, keys file or users file is picked up without a
